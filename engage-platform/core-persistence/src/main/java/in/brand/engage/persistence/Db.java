@@ -1,4 +1,4 @@
-package in.brand.engage.ingest.db;
+package in.brand.engage.persistence;
 
 import jakarta.inject.Singleton;
 import java.sql.Connection;

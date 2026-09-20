@@ -1,6 +1,6 @@
 package in.brand.engage.ingest.inbox;
 
-import in.brand.engage.ingest.db.Db;
+import in.brand.engage.persistence.Db;
 import io.micronaut.scheduling.annotation.Scheduled;
 import jakarta.inject.Singleton;
 import java.util.List;

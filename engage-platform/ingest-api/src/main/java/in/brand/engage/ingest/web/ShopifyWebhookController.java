@@ -2,8 +2,8 @@ package in.brand.engage.ingest.web;
 
 import in.brand.engage.core.shopify.ShopifyWebhookVerifier;
 import in.brand.engage.ingest.config.EngageProperties;
-import in.brand.engage.ingest.db.Db;
 import in.brand.engage.ingest.inbox.InboxRepository;
+import in.brand.engage.persistence.Db;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
 import io.micronaut.http.MediaType;

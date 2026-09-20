@@ -1,7 +1,7 @@
 package in.brand.engage.ingest.inbox;
 
 import in.brand.engage.core.privacy.CustomerAllowlist;
-import in.brand.engage.ingest.db.Db;
+import in.brand.engage.persistence.Db;
 import jakarta.inject.Singleton;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;

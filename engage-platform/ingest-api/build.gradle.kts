@@ -7,6 +7,7 @@ dependencies {
     annotationProcessor("io.micronaut.serde:micronaut-serde-processor")
 
     implementation(project(":core-domain"))
+    implementation(project(":core-persistence"))
     implementation("io.micronaut:micronaut-management")          // /health
     implementation("io.micronaut.serde:micronaut-serde-jackson")
     implementation("io.micronaut.sql:micronaut-jdbc-hikari")
