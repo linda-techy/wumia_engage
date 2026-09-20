@@ -1,0 +1,31 @@
+{
+  "id": 6012345678901,
+  "name": "#1042",
+  "email": "Priya.K@Example.com",
+  "contact_email": "Priya.K@Example.com",
+  "phone": null,
+  "created_at": "2026-09-19T15:24:11+05:30",
+  "total_price": "1299.00",
+  "currency": "INR",
+  "financial_status": "paid",
+  "payment_gateway_names": ["Razorpay Secure (UPI, Cards, Wallets, NetBanking)"],
+  "cart_token": "Z2NwLXVzLWVhc3QxOjAxSkY4",
+  "checkout_token": "chk_7f3a9c21b8e44d10",
+  "note_attributes": [
+    { "name": "_engage_wa_optin", "value": "yes" },
+    { "name": "_engage_wa_copy", "value": "wa_v1" },
+    { "name": "_engage_wa_at", "value": "2026-09-19T09:44:10.120Z" }
+  ],
+  "customer": {
+    "id": 7788001122,
+    "email": "Priya.K@Example.com",
+    "phone": null,
+    "first_name": "Priya",
+    "email_marketing_consent": { "state": "subscribed", "opt_in_level": "single_opt_in" }
+  },
+  "shipping_address": { "phone": "+91 98765 43210", "city": "Kochi", "province_code": "KL", "zip": "682024" },
+  "billing_address": { "phone": "9876543210" },
+  "line_items": [
+    { "variant_id": 44581230001, "title": "Linen Kurta", "variant_title": "M", "quantity": 1, "price": "1299.00" }
+  ]
+}

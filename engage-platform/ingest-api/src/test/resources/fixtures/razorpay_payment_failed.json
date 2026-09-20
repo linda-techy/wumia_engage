@@ -1,0 +1,31 @@
+{
+  "entity": "event",
+  "account_id": "acc_TESTACCOUNT01",
+  "event": "payment.failed",
+  "contains": ["payment"],
+  "payload": {
+    "payment": {
+      "entity": {
+        "id": "pay_TESTFAIL0001",
+        "entity": "payment",
+        "amount": 129900,
+        "currency": "INR",
+        "status": "failed",
+        "order_id": "order_TESTORDER001",
+        "method": "upi",
+        "captured": false,
+        "vpa": "priya@okhdfcbank",
+        "email": "Priya.K@Example.com",
+        "contact": "+91 98765 43210",
+        "notes": [],
+        "error_code": "BAD_REQUEST_ERROR",
+        "error_description": "Payment was unsuccessful as you could not complete it in time.",
+        "error_source": "customer",
+        "error_step": "payment_authentication",
+        "error_reason": "payment_timed_out",
+        "created_at": 1789811410
+      }
+    }
+  },
+  "created_at": 1789811413
+}

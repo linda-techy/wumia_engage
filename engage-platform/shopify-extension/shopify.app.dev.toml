@@ -1,0 +1,30 @@
+# wumikaEngage-dev: DEV STORE ONLY (custom distribution to wumika-dev.myshopify.com).
+# Never installed on the live store. Feeds the separate dev instance
+# (config/devstore.env, port 8082, database wumika_admin_devstore).
+#
+# Deploy (only after confirming): npx shopify app deploy --config dev --allow-updates
+
+client_id = "cd26e4e2196dcc7deefa2aa87a544bc1"
+name = "wumikaEngage-dev"
+# No app UI yet. Shopify redirects here after install; it does not need to serve anything.
+application_url = "https://shopify.dev/"
+embedded = false
+
+[access_scopes]
+# Read-only. read_orders covers orders/*, checkouts/* and carts/* webhooks;
+# read_customers covers customers/*.
+scopes = "read_orders,read_customers"
+use_legacy_install_flow = false
+
+[auth]
+redirect_urls = [ ]
+
+[webhooks]
+api_version = "2026-07"
+
+# Signed with THIS app's Client secret = SHOPIFY_API_SECRET in config/devstore.env.
+# Quick tunnels change URL on restart: update uri, then redeploy.
+[[webhooks.subscriptions]]
+topics = ["checkouts/create", "checkouts/update", "orders/create",
+          "carts/create", "carts/update", "customers/create", "customers/update"]
+uri = "https://dont-eating-ian-soonest.trycloudflare.com/webhooks/shopify"

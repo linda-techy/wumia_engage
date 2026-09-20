@@ -1,0 +1,9 @@
+{
+  "id": 7788001122,
+  "email": "Priya.K@Example.com",
+  "phone": "+919876543210",
+  "first_name": "Priya",
+  "tags": "vip, ethnic",
+  "email_marketing_consent": { "state": "unsubscribed", "opt_in_level": "single_opt_in", "consent_updated_at": "2026-09-19T16:00:00+05:30" },
+  "sms_marketing_consent": { "state": "not_subscribed" }
+}

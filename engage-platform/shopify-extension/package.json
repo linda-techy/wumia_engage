@@ -1,0 +1,11 @@
+{
+  "name": "engage-shopify-app",
+  "private": true,
+  "description": "Shopify app config for Engage: webhook subscriptions (Phase 1), theme extension (Phase 2).",
+  "scripts": {
+    "shopify": "shopify"
+  },
+  "devDependencies": {
+    "@shopify/cli": "^3.94.3"
+  }
+}

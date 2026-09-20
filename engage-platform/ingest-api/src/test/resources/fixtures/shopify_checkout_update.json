@@ -1,0 +1,23 @@
+{
+  "id": 35113449013309,
+  "token": "chk_7f3a9c21b8e44d10",
+  "cart_token": "Z2NwLXVzLWVhc3QxOjAxSkY4",
+  "email": "Priya.K@Example.com",
+  "phone": null,
+  "created_at": "2026-09-19T15:15:02+05:30",
+  "updated_at": "2026-09-19T15:19:40+05:30",
+  "completed_at": null,
+  "total_price": "1299.00",
+  "currency": "INR",
+  "abandoned_checkout_url": "https://brand.in/checkouts/cn/Z2NwLXVz/recover?key=abc",
+  "note_attributes": [
+    { "name": "_engage_wa_optin", "value": "yes" },
+    { "name": "_engage_wa_copy", "value": "wa_v1" }
+  ],
+  "customer": null,
+  "shipping_address": { "phone": "9876543210", "city": "Kochi", "province_code": "KL", "zip": "682024" },
+  "billing_address": null,
+  "line_items": [
+    { "variant_id": 44581230001, "title": "Linen Kurta", "variant_title": "M", "quantity": 1, "price": "1299.00" }
+  ]
+}

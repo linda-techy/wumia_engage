@@ -1,0 +1,23 @@
+# Local configuration and credentials — never commit
+config/local.env
+config/devstore.env
+config/*.json
+!config/*.example.json
+*.p12
+*.pem
+*.p8
+
+# Build output
+.gradle/
+build/
+out/
+*.class
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# Node (Shopify extension, Angular)
+node_modules/

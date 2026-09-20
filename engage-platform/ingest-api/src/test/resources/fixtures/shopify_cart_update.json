@@ -1,0 +1,9 @@
+{
+  "id": "Z2NwLXVzLWVhc3QxOjAxSkY4",
+  "token": "Z2NwLXVzLWVhc3QxOjAxSkY4",
+  "updated_at": "2026-09-19T15:10:00+05:30",
+  "line_items": [
+    { "variant_id": 44581230001, "title": "Linen Kurta", "variant_title": "M", "quantity": 1, "price": "1299.00", "line_price": "1299.00" },
+    { "variant_id": 44581230077, "title": "Cotton Palazzo", "variant_title": "L", "quantity": 2, "price": "899.50", "line_price": "1799.00" }
+  ]
+}

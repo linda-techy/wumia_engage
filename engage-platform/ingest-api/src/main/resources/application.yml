@@ -1,0 +1,45 @@
+# Every value comes from environment variables, which `./gradlew :ingest-api:run`
+# loads from config/local.env. Edit that file, not this one.
+micronaut:
+  application:
+    name: engage-ingest
+  server:
+    port: ${INGEST_PORT:8080}
+    # Shopify order payloads with many line items can be large.
+    max-request-size: 2097152
+
+datasources:
+  default:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:engage}
+    username: ${DB_USER:engage_app}
+    password: ${DB_PASSWORD:}
+    driver-class-name: org.postgresql.Driver
+    maximum-pool-size: 10
+    # Fail fast rather than queue: a webhook must be acknowledged within 5s.
+    connection-timeout: 3000
+
+flyway:
+  datasources:
+    default:
+      # true locally; false in production, where migrations run as a job first.
+      enabled: ${FLYWAY_ON_STARTUP:false}
+      locations: classpath:db/migration
+
+engage:
+  shopify:
+    shop-domain: ${SHOPIFY_SHOP_DOMAIN:}
+    api-secret: ${SHOPIFY_API_SECRET:}
+    client-id: ${SHOPIFY_CLIENT_ID:}
+  razorpay:
+    webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:}
+    mode: ${RAZORPAY_MODE:test}
+    match-window-minutes: ${RAZORPAY_MATCH_WINDOW_MINUTES:30}
+  privacy:
+    # Empty = refuse to start (fail closed). * = every customer.
+    customer-allowlist-emails: ${CUSTOMER_ALLOWLIST_EMAILS:}
+
+endpoints:
+  health:
+    enabled: true
+    sensitive: false
+    details-visible: ANONYMOUS
