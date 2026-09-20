@@ -2,10 +2,21 @@ package in.brand.engage.admin.auth;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.JWSHeader;
+import com.nimbusds.jose.crypto.RSASSASigner;
+import com.nimbusds.jwt.JWTClaimsSet;
+import com.nimbusds.jwt.SignedJWT;
 import in.brand.engage.admin.config.AdminProperties;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.KeyFactory;
+import java.security.interfaces.RSAPrivateKey;
+import java.security.spec.PKCS8EncodedKeySpec;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.Base64;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -62,5 +73,31 @@ class TokensTest {
         var jwt = t.issuePurpose(UUID.randomUUID(), "mfa", Map.of(), Duration.ofMillis(1));
         Thread.sleep(50);
         assertThrows(Tokens.InvalidToken.class, () -> t.verifyPurpose(jwt, "mfa"));
+    }
+
+    @Test void rejects_a_token_signed_with_a_different_algorithm(@TempDir Path dir) throws Exception {
+        var t = tokens(dir);
+        var operator = UUID.randomUUID();
+        // Force the keypair into existence, then re-sign equivalent claims with PS256 using
+        // that same private key: RSASSAVerifier alone would happily accept this, so this
+        // pins the explicit RS256 header check rather than the signature check.
+        t.issueAccess(operator, List.of("VIEWER"), UUID.randomUUID(), 1);
+        var body = Files.readString(dir.resolve("jwt.pem"))
+                .replace("-----BEGIN PRIVATE KEY-----", "")
+                .replace("-----END PRIVATE KEY-----", "")
+                .replaceAll("\\s", "");
+        var privateKey = (RSAPrivateKey) KeyFactory.getInstance("RSA")
+                .generatePrivate(new PKCS8EncodedKeySpec(Base64.getDecoder().decode(body)));
+        var claims = new JWTClaimsSet.Builder()
+                .subject(operator.toString())
+                .issuer("engage-admin")
+                .claim("roles", List.of("VIEWER"))
+                .claim("sid", UUID.randomUUID().toString())
+                .claim("ver", 1)
+                .expirationTime(Date.from(Instant.now().plus(Duration.ofMinutes(15))))
+                .build();
+        var jwt = new SignedJWT(new JWSHeader(JWSAlgorithm.PS256), claims);
+        jwt.sign(new RSASSASigner(privateKey));
+        assertThrows(Tokens.InvalidToken.class, () -> t.verify(jwt.serialize()));
     }
 }
