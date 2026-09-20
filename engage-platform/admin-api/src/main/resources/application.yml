@@ -1,0 +1,31 @@
+# Values come from environment variables, loaded from config/local.env by Gradle.
+micronaut:
+  application:
+    name: engage-admin
+  server:
+    port: ${ADMIN_API_PORT:8083}
+
+datasources:
+  default:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:wumika_admin}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:}
+    driver-class-name: org.postgresql.Driver
+    maximum-pool-size: 10
+
+# Flyway never runs here: ingest-api owns migrations. The console reads the
+# schema it is given and fails loudly if it is older than it expects.
+flyway:
+  enabled: false
+
+engage:
+  admin:
+    jwt-key-file: ${ADMIN_JWT_KEY_FILE:config/admin-jwt.pem}
+    mfa-key: ${ADMIN_MFA_KEY:}
+    bootstrap-email: ${ADMIN_BOOTSTRAP_EMAIL:}
+
+endpoints:
+  health:
+    enabled: true
+    sensitive: false
+    details-visible: ANONYMOUS

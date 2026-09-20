@@ -3,6 +3,7 @@ config/local.env
 config/devstore.env
 config/*.json
 !config/*.example.json
+config/admin-jwt.pem
 *.p12
 *.pem
 *.p8
