@@ -11,6 +11,7 @@ dependencies {
     implementation("io.micronaut:micronaut-management")          // /health
     implementation("io.micronaut.serde:micronaut-serde-jackson")
     implementation("io.micronaut.sql:micronaut-jdbc-hikari")
+    implementation("org.bouncycastle:bcprov-jdk18on:1.81")
 
     runtimeOnly("org.postgresql:postgresql")
     runtimeOnly("ch.qos.logback:logback-classic")
