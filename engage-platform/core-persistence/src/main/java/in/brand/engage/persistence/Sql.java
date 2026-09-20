@@ -43,6 +43,7 @@ public final class Sql {
             case UUID u -> ps.setObject(i, u);
             case OffsetDateTime t -> ps.setObject(i, t);
             case String[] arr -> ps.setArray(i, ps.getConnection().createArrayOf("text", arr));
+            case byte[] bytes -> ps.setBytes(i, bytes);
             default -> throw new IllegalArgumentException("unsupported parameter type " + v.getClass());
         }
     }
