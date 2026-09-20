@@ -12,6 +12,7 @@ dependencies {
     implementation("io.micronaut.serde:micronaut-serde-jackson")
     implementation("io.micronaut.sql:micronaut-jdbc-hikari")
     implementation("org.bouncycastle:bcprov-jdk18on:1.81")
+    implementation("com.nimbusds:nimbus-jose-jwt:9.47")
 
     runtimeOnly("org.postgresql:postgresql")
     runtimeOnly("ch.qos.logback:logback-classic")
