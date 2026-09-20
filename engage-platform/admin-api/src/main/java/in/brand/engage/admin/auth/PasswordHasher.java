@@ -59,9 +59,12 @@ public class PasswordHasher {
                 .build();
         var generator = new Argon2BytesGenerator();
         generator.init(params);
-        var bytes = StandardCharsets.UTF_8.encode(CharBuffer.wrap(password));
-        var passwordBytes = new byte[bytes.remaining()];
-        bytes.get(passwordBytes);
+        var encoded = StandardCharsets.UTF_8.encode(CharBuffer.wrap(password));
+        var passwordBytes = new byte[encoded.remaining()];
+        encoded.get(passwordBytes);
+        // Zero the encoder's backing array: a password copy left in the heap
+        // survives this call and can appear in a heap dump.
+        if (encoded.hasArray()) Arrays.fill(encoded.array(), (byte) 0);
         var out = new byte[HASH_BYTES];
         try {
             generator.generateBytes(passwordBytes, out);
