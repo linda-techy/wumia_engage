@@ -4,6 +4,7 @@ import in.brand.engage.persistence.Db;
 import in.brand.engage.persistence.Sql;
 import in.brand.engage.persistence.SqlFiles;
 import jakarta.inject.Singleton;
+import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
@@ -104,11 +105,24 @@ public class OperatorRepository {
     }
 
     public void setPassword(UUID operatorId, String passwordHash) {
-        db.inTx(c -> Sql.update(c, """
+        db.inTx(c -> {
+            setPassword(c, operatorId, passwordHash);
+            return null;
+        });
+    }
+
+    /**
+     * Same statement, on a connection the caller already holds open. Login and
+     * set-password flows must write their audit_log row in the same
+     * transaction as the change; a repository that always opens its own
+     * transaction would force that into two separate commits.
+     */
+    public void setPassword(Connection c, UUID operatorId, String passwordHash) throws SQLException {
+        Sql.update(c, """
                 UPDATE operators
                    SET password_hash = ?, password_changed_at = now(), status = 'active',
                        failed_logins = 0, locked_until = NULL, updated_at = now()
-                 WHERE id = ?""", passwordHash, operatorId));
+                 WHERE id = ?""", passwordHash, operatorId);
     }
 
     /**
@@ -117,15 +131,28 @@ public class OperatorRepository {
      * confirmed with a valid code must not count as MFA being active.
      */
     public void stageMfaSecret(UUID operatorId, byte[] encrypted) {
-        db.inTx(c -> Sql.update(c,
-                "UPDATE operators SET mfa_secret_enc = ?, updated_at = now() WHERE id = ?",
-                encrypted, operatorId));
+        db.inTx(c -> {
+            stageMfaSecret(c, operatorId, encrypted);
+            return null;
+        });
+    }
+
+    public void stageMfaSecret(Connection c, UUID operatorId, byte[] encrypted) throws SQLException {
+        Sql.update(c, "UPDATE operators SET mfa_secret_enc = ?, updated_at = now() WHERE id = ?",
+                encrypted, operatorId);
     }
 
     public void setMfaSecret(UUID operatorId, byte[] encrypted) {
-        db.inTx(c -> Sql.update(c, """
+        db.inTx(c -> {
+            setMfaSecret(c, operatorId, encrypted);
+            return null;
+        });
+    }
+
+    public void setMfaSecret(Connection c, UUID operatorId, byte[] encrypted) throws SQLException {
+        Sql.update(c, """
                 UPDATE operators SET mfa_secret_enc = ?, mfa_enrolled_at = now(), updated_at = now()
-                 WHERE id = ?""", encrypted, operatorId));
+                 WHERE id = ?""", encrypted, operatorId);
     }
 
     public boolean isEmpty() {
@@ -138,14 +165,17 @@ public class OperatorRepository {
     }
 
     public UUID createInvitedOwner(String email, String fullName, String placeholderHash) {
-        return db.inTx(c -> {
-            var id = UUID.randomUUID();
-            Sql.update(c, """
-                    INSERT INTO operators (id, email, full_name, password_hash, status)
-                    VALUES (?, ?, ?, ?, 'invited')""",
-                    id, email.toLowerCase(Locale.ROOT), fullName, placeholderHash);
-            Sql.update(c, "INSERT INTO operator_roles (operator_id, role) VALUES (?, 'OWNER')", id);
-            return id;
-        });
+        return db.inTx(c -> createInvitedOwner(c, email, fullName, placeholderHash));
+    }
+
+    public UUID createInvitedOwner(Connection c, String email, String fullName, String placeholderHash)
+            throws SQLException {
+        var id = UUID.randomUUID();
+        Sql.update(c, """
+                INSERT INTO operators (id, email, full_name, password_hash, status)
+                VALUES (?, ?, ?, ?, 'invited')""",
+                id, email.toLowerCase(Locale.ROOT), fullName, placeholderHash);
+        Sql.update(c, "INSERT INTO operator_roles (operator_id, role) VALUES (?, 'OWNER')", id);
+        return id;
     }
 }

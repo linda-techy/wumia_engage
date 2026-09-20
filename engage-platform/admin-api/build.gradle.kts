@@ -84,6 +84,9 @@ tasks.withType<Test>().configureEach {
         env["ADMIN_MFA_KEY"] = "0123456789abcdef0123456789abcdef"
         env["ADMIN_JWT_KEY_FILE"] = layout.buildDirectory.file("test-admin-jwt.pem").get().asFile.absolutePath
         env["ADMIN_BOOTSTRAP_EMAIL"] = ""
+        // -1 binds to a random free port: tests must not fight the running
+        // admin-api service on 8083 for the fixed port.
+        env["ADMIN_API_PORT"] = "-1"
         environment(env)
     }
     testLogging { events("failed"); exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }

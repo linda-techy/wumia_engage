@@ -39,6 +39,8 @@ class SessionRepositoryTest {
         assertThrows(SessionRepository.AuthFailure.class, () -> sessions.rotate(first.refreshToken()));
         // The legitimate client's token dies with the family: both parties must re-authenticate.
         assertThrows(SessionRepository.AuthFailure.class, () -> sessions.rotate(second.refreshToken()));
+        // A regression that dropped the audit call while leaving revocation intact must fail this.
+        assertEquals(1L, data.countAudit("auth.refresh_reuse"));
     }
 
     @Test void an_unknown_token_is_rejected() {
@@ -59,9 +61,14 @@ class SessionRepositoryTest {
     }
 
     @Test void five_failed_logins_lock_the_account() {
-        for (int i = 0; i < 5; i++) operators.recordFailedLogin(operatorId);
-        var operator = operators.findById(operatorId).orElseThrow();
-        assertNotNull(operator.lockedUntil());
-        assertTrue(operator.lockedUntil().isAfter(java.time.OffsetDateTime.now()));
+        for (int i = 0; i < 4; i++) operators.recordFailedLogin(operatorId);
+        var beforeFifth = operators.findById(operatorId).orElseThrow();
+        assertTrue(beforeFifth.lockedUntil() == null || !beforeFifth.lockedUntil().isAfter(java.time.OffsetDateTime.now()),
+                "4 failures must not lock the account");
+
+        operators.recordFailedLogin(operatorId);
+        var afterFifth = operators.findById(operatorId).orElseThrow();
+        assertNotNull(afterFifth.lockedUntil());
+        assertTrue(afterFifth.lockedUntil().isAfter(java.time.OffsetDateTime.now()));
     }
 }

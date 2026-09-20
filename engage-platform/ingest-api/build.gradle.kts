@@ -90,6 +90,9 @@ tasks.withType<Test>().configureEach {
         env["FLYWAY_ON_STARTUP"] = "true"
         // Tests use synthetic fixtures (priya.k@example.com), never the real allowlist.
         env["CUSTOMER_ALLOWLIST_EMAILS"] = "priya.k@example.com"
+        // -1 binds to a random free port: tests must not fight the running
+        // ingest-api service on 8081 for the fixed port.
+        env["INGEST_PORT"] = "-1"
         environment(env)
     }
     testLogging { events("failed"); exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
