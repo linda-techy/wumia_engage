@@ -15,6 +15,7 @@ java { toolchain { languageVersion = JavaLanguageVersion.of(25) } }
 dependencies {
     api("jakarta.inject:jakarta.inject-api:2.0.1")
     api("jakarta.transaction:jakarta.transaction-api:2.0.1")
+    implementation("org.slf4j:slf4j-api")                // ConsentWriter warnings
     // javax.sql.DataSource ships with the JDK; javax.sql:javax.sql-api:1.0 does not
     // resolve on Maven Central, so no compileOnly dependency is needed for it.
 }

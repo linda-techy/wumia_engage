@@ -13,7 +13,7 @@ The one door exists: `MessageOrchestrator.dispatch()` → `PolicyEngine.decide()
 | ID | Task | Owner | Est. | Depends on |
 |---|---|---|---|---|
 | P3-T01 | Extract `persistence` module | BE1 | 0.5 d | P1 done |
-| P3-T02 | `policy` module: `PolicyEngine`, config snapshot, kill switches, holdouts | BE1 | 3 d | T01, V9 |
+| P3-T02 | `policy` module: `PolicyEngine`, config snapshot, kill switches, holdouts | BE1 | 3 d | T01, V10 |
 | P3-T03 | Template registry as code + lint | BE2 | 1.5 d | T01 |
 | P3-T04 | `channels` module + `FcmAdapter` | BE2 | 2 d | T03 |
 | P3-T05 | `orchestrator` module: `MessageRouter`, `MessageOrchestrator` | BE1 | 2 d | T02, T04 |
@@ -23,7 +23,9 @@ The one door exists: `MessageOrchestrator.dispatch()` → `PolicyEngine.decide()
 
 ---
 
-### ☐ P3-T01 — Extract `persistence`
+### ☑ P3-T01 — Extract `persistence`
+
+> **Done 2026-09-27.** The module already existed as `core-persistence` (package `in.brand.engage.persistence`, extracted with the admin-api work), so the classes moved there rather than into a new `persistence` module. `DeviceRepository` did not exist yet: P2's device SQL lived in `ingest-api`'s `SubscriberService` and was extracted into it, with a `deactivate(deviceId, reason)` for FCM pruning. `./gradlew build`: 95 tests before and after (core-domain 58, admin-api 19, ingest-api 18).
 
 Move `Db`, `Sql`, `SqlFiles`, `IdentityResolver`, `EventWriter`, `ConsentWriter` and `DeviceRepository` from `ingest-api` into a new `persistence` module, package `in.brand.engage.persistence`. `ingest-api` depends on it. No behaviour change.
 
@@ -137,7 +139,7 @@ policy/src/test/java/in/brand/engage/policy/PolicyEngineTest.java
 **Done when:** all tests above pass and `PolicyEngineTest` runs in under 30 seconds.
 
 **Claude Code prompt**
-> P3-T02. Add V9 as specified. Build the `policy` module: `PolicyEngine.decide()` in the order given by `docs/04-backend-micronaut.md`, with the consent step from `docs/technical/phase-3-policy-and-push-sending.md` §1. Kill switches read uncached. `decide()` has no side effects except the holdout assignment row. Write every listed test first, against Postgres. Money is `long` paise; quiet hours are evaluated in IST.
+> P3-T02. Add V10 as specified. Build the `policy` module: `PolicyEngine.decide()` in the order given by `docs/04-backend-micronaut.md`, with the consent step from `docs/technical/phase-3-policy-and-push-sending.md` §1. Kill switches read uncached. `decide()` has no side effects except the holdout assignment row. Write every listed test first, against Postgres. Money is `long` paise; quiet hours are evaluated in IST.
 
 ---
 

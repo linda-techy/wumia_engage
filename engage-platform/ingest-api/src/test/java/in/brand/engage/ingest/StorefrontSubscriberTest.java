@@ -50,6 +50,12 @@ class StorefrontSubscriberTest {
             st.execute("""
                 TRUNCATE devices, push_prompt_events, stock_waitlist, consents, events, carts,
                          identity_keys, profiles, identities CASCADE""");
+            // V7 seeds this, but admin-api's tests TRUNCATE operators CASCADE, which
+            // empties consent_copy_versions (created_by references operators).
+            st.execute("""
+                INSERT INTO consent_copy_versions (version, channel, text, purposes, surface)
+                VALUES ('push_v1', 'push', '%s', '{marketing}', 'soft_ask')
+                ON CONFLICT (version) DO NOTHING""".formatted(PUSH_COPY));
             // An allowlisted customer as the customers/update webhook would leave them.
             var id = st.executeQuery("""
                 SELECT resolve_identity('[{"kind":"shopify_customer","value":"7001","verified":true},

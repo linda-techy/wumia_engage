@@ -3,9 +3,10 @@ package in.brand.engage.ingest.push;
 import in.brand.engage.core.privacy.CustomerAllowlist;
 import in.brand.engage.core.shopify.AppProxyVerifier.ProxyContext;
 import in.brand.engage.core.shopify.CartTokens;
-import in.brand.engage.ingest.db.EventWriter;
-import in.brand.engage.ingest.db.IdentityResolver;
-import in.brand.engage.ingest.db.IdentityResolver.Key;
+import in.brand.engage.persistence.DeviceRepository;
+import in.brand.engage.persistence.EventWriter;
+import in.brand.engage.persistence.IdentityResolver;
+import in.brand.engage.persistence.IdentityResolver.Key;
 import in.brand.engage.ingest.push.StorefrontRequests.Cart;
 import in.brand.engage.ingest.push.StorefrontRequests.NotifyMe;
 import in.brand.engage.ingest.push.StorefrontRequests.PromptEvent;
@@ -54,12 +55,15 @@ public class SubscriberService {
 
     private final Db db;
     private final IdentityResolver identities;
+    private final DeviceRepository devices;
     private final EventWriter events;
     private final CustomerAllowlist allowlist;
 
-    public SubscriberService(Db db, IdentityResolver identities, EventWriter events, CustomerAllowlist allowlist) {
+    public SubscriberService(Db db, IdentityResolver identities, DeviceRepository devices, EventWriter events,
+                             CustomerAllowlist allowlist) {
         this.db = db;
         this.identities = identities;
+        this.devices = devices;
         this.events = events;
         this.allowlist = allowlist;
     }
@@ -81,22 +85,8 @@ public class SubscriberService {
             if (r.cartToken() != null) keys.add(Key.session("cart_token", CartTokens.normalise(r.cartToken())));
             var identityId = identities.resolve(c, keys);
 
-            long deviceId;
-            try (var ps = Sql.prepare(c, """
-                    INSERT INTO devices (identity_id, fcm_token, platform, browser, origin, permission_source, consent_copy_ver)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT (fcm_token) DO UPDATE
-                       SET identity_id = EXCLUDED.identity_id, platform = EXCLUDED.platform,
-                           browser = COALESCE(EXCLUDED.browser, devices.browser),
-                           permission_source = EXCLUDED.permission_source,
-                           consent_copy_ver = EXCLUDED.consent_copy_ver,
-                           active = true, deactivated_reason = NULL, last_refreshed_at = now()
-                    RETURNING id""",
-                    identityId, r.token(), r.platform(), r.browser(), origin, r.surface(), r.copyVersion());
-                 var rs = ps.executeQuery()) {
-                rs.next();
-                deviceId = rs.getLong(1);
-            }
+            long deviceId = devices.upsert(c, identityId, r.token(), r.platform(), r.browser(), origin,
+                    r.surface(), r.copyVersion());
 
             // One row per purpose the copy declares, skipped when the same grant
             // under the same copy is already the state in force (re-registering
@@ -140,27 +130,8 @@ public class SubscriberService {
             keys.add(Key.session("fcm_token", r.token()));
             var identityId = identities.resolve(c, keys);
 
-            if (r.previous() != null) {
-                int n = Sql.update(c, """
-                        INSERT INTO devices (identity_id, fcm_token, platform, browser, origin, sw_version,
-                                             permission_source, consent_copy_ver)
-                        SELECT identity_id, ?, platform, browser, origin, sw_version, permission_source, consent_copy_ver
-                          FROM devices WHERE fcm_token = ? AND identity_id = ?
-                        ON CONFLICT (fcm_token) DO UPDATE
-                           SET active = true, deactivated_reason = NULL, last_refreshed_at = now()
-                         WHERE devices.identity_id = EXCLUDED.identity_id""",
-                        r.token(), r.previous(), identityId);
-                if (n > 0) {
-                    Sql.update(c, """
-                            UPDATE devices SET active = false, deactivated_reason = 'rotated'
-                             WHERE fcm_token = ? AND identity_id = ? AND active""", r.previous(), identityId);
-                    return Outcome.STORED;
-                }
-            }
-            int touched = Sql.update(c, """
-                    UPDATE devices SET last_refreshed_at = now()
-                     WHERE fcm_token = ? AND identity_id = ? AND active""", r.token(), identityId);
-            return touched > 0 ? Outcome.STORED : Outcome.FILTERED;
+            if (r.previous() != null && devices.rotate(c, identityId, r.previous(), r.token())) return Outcome.STORED;
+            return devices.touch(c, identityId, r.token()) ? Outcome.STORED : Outcome.FILTERED;
         });
     }
 
@@ -171,9 +142,7 @@ public class SubscriberService {
         return db.inTx(c -> {
             if (!mayStore(c, ctx)) return Outcome.FILTERED;
             var identityId = identities.resolve(c, sessionKeys(ctx, r.anonId()));
-            Sql.update(c, """
-                    UPDATE devices SET active = false, deactivated_reason = 'user_off'
-                     WHERE fcm_token = ? AND identity_id = ? AND active""", r.token(), identityId);
+            devices.deactivate(c, identityId, r.token(), "user_off");
             Sql.update(c, """
                     INSERT INTO consents (identity_id, channel, purpose, state, source, evidence)
                     SELECT identity_id, 'push', purpose, 'withdrawn', 'push_off:in_page',

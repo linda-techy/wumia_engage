@@ -21,8 +21,8 @@ When a task and a design doc disagree, the task wins, because it was written aga
 |---|---|---|---|
 | 0 | [P0 — Prerequisites](P0-prerequisites.md) | 0–1 | ☐ Not started. **Start day 1**: external approvals set the critical path. |
 | 1 | [P1 — Core platform](P1-core-platform.md) | 1–2 | ◐ **Built and verified** (V1–V6, ingest-api). 6 gap tasks remain. |
-| 2 | [P2 — Shopify storefront + FCM push](P2-shopify-storefront-push.md) | 2–4 | ☐ |
-| 3 | [P3 — Policy engine + push sending](P3-policy-and-push.md) | 4–5 | ☐ |
+| 2 | [P2 — Shopify storefront + FCM push](P2-shopify-storefront-push.md) | 2–4 | ◐ T01–T04 built and on the dev store (proxy endpoints, service worker, theme embed, client); T05, T06, T08, T09 open; T07 has `push_v1` only |
+| 3 | [P3 — Policy engine + push sending](P3-policy-and-push.md) | 4–5 | ◐ T01 done |
 | 4 | [P4 — WhatsApp, SMS, orchestrator](P4-whatsapp-sms-orchestrator.md) | 5–7 | ☐ Blocked on Meta verification + DLT |
 | 5 | [P5 — Journeys](P5-journeys.md) | 7–9 | ☐ Blocked on the Razorpay spike (P0-T06) |
 | 6 | [P6 — Admin console + campaigns](P6-admin-console-campaigns.md) | 9–11 | ☐ |
@@ -60,13 +60,14 @@ engage/
 | Version | Phase | Contents |
 |---|---|---|
 | V1–V6 | P1 ✓ | core, admin & config, Shopify & push, orchestrator tables, Razorpay payments, identity functions |
-| V7 | P1 gaps | `shipments`, `shipment_events`, `order_refunds`, `inventory_levels`, `variant_prices`; cancellation and refund columns on `orders` |
-| V8 | P2 | `push_prompt_funnel` view; `devices` staleness view |
-| V9 | P3 | `events.dispatched_at` + claim index; `config_keys.default_value`; kill-switch and push config keys; `config_changed` notify trigger |
-| V10 | P4 | `wa_phone_numbers` + history (quality, tier); WhatsApp config keys |
-| V11 | P5 | journey parameter config keys with defaults; `profile_recompute()` |
-| V12 | P6 | `exports`, `operator_recovery_codes`, `pii_unmask_log` |
-| V13 | P7 | `holdout_lift_weekly`, `spend_by_intent_daily`; `email.daily_cap`; `consent_erasure_proofs` + `erase_identity()` |
+| V7 | P2 ✓ | `push_v1` consent copy registered (took V7 before this table was renumbered; forward-only, so later versions moved up by one) |
+| V8 | P1 gaps | `shipments`, `shipment_events`, `order_refunds`, `inventory_levels`, `variant_prices`; cancellation and refund columns on `orders` |
+| V9 | P2 | `push_prompt_funnel` view; `devices` staleness view |
+| V10 | P3 | `events.dispatched_at` + claim index; `config_keys.default_value`; kill-switch and push config keys; `config_changed` notify trigger |
+| V11 | P4 | `wa_phone_numbers` + history (quality, tier); WhatsApp config keys |
+| V12 | P5 | journey parameter config keys with defaults; `profile_recompute()` |
+| V13 | P6 | `exports`, `operator_recovery_codes`, `pii_unmask_log` |
+| V14 | P7 | `holdout_lift_weekly`, `spend_by_intent_daily`; `email.daily_cap`; `consent_erasure_proofs` + `erase_identity()` |
 
 Migrations are forward-only. Never edit one that has run anywhere but your laptop. Fix forward with the next version.
 
@@ -78,11 +79,11 @@ These were found while checking the plan against the schema that exists. The tas
 |---|---|---|
 | Router is one `@Transactional` method around the provider call (`04-backend`) | Three steps: record → call provider outside any transaction → mark result (P3-T05) | A slow FCM or Meta call must not pin a pool connection |
 | Any permanent provider error adds a suppression (`04-backend`) | Per-code effect on the exception; 131026/131049 never suppress (P4-T02) | A suppression on 131026 is the silent customer loss `CLAUDE.md` §4.1 forbids |
-| Config defaults seeded as `config_versions` rows | `config_keys.default_value` (V9) | `config_versions.changed_by` must be a real operator |
+| Config defaults seeded as `config_versions` rows | `config_keys.default_value` (V10) | `config_versions.changed_by` must be a real operator |
 | Micronaut Data repositories and Testcontainers | Plain JDBC + SQL files; tests on local `engage_test` / CI service container | Matches the Phase 1 code that exists and was verified |
 | Journeys cancel on `checkout_started`, `cart_emptied` | Those events are added to `ShopifyInboxHandler` in P5-T01 | Phase 1 did not emit them |
 
-Every migration block in these files (V7–V13) has been applied in order on PostgreSQL 16 on top of V1–V6, followed by `db/tests/invariants.sql` (still 17/17) and a functional check of the new views and `profile_recompute()`.
+Every migration block in these files (V8–V14) has been applied in order on PostgreSQL 16 on top of V1–V6, followed by `db/tests/invariants.sql` (still 17/17) and a functional check of the new views and `profile_recompute()`.
 
 ---
 

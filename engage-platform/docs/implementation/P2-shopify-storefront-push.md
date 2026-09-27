@@ -20,7 +20,7 @@ Shoppers on Android and desktop grant push through a soft-ask at a high-intent m
 | P2-T06 | Web pixel + pixel ingest endpoint | FE + BE1 | 1.5 d | T01 |
 | P2-T07 | Consent copy registration (interim, before the P6 UI) | BE1 | 0.5 d | T01 |
 | P2-T08 | Token lifecycle job | BE1 | 1 d | T01 |
-| P2-T09 | V8 funnel views + browser test matrix | FE + BE2 | 1.5 d | T04 |
+| P2-T09 | V9 funnel views + browser test matrix | FE + BE2 | 1.5 d | T04 |
 
 **Order:** T07 first (T01 rejects unknown copy versions), then T01 → T02 → T03 → T04. T05, T06 and T08 can run in parallel with T04.
 
@@ -202,7 +202,7 @@ Each row holds the **verbatim** text shown to the shopper and the purposes it co
 
 Nightly, 02:30 IST, one runner via advisory lock:
 - `active AND last_refreshed_at < now() - 180 days AND (last_clicked_at IS NULL OR last_clicked_at < now() - 180 days)` → deactivate, reason `dormant`.
-- Update gauge `engage_push_tokens{state,browser}` from the V8 view.
+- Update gauge `engage_push_tokens{state,browser}` from the V9 view.
 
 Stale (30 days) is a **view**, not a state change: stale tokens stay active for back-in-stock.
 

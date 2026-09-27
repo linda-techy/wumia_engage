@@ -1,6 +1,5 @@
-package in.brand.engage.ingest.db;
+package in.brand.engage.persistence;
 
-import in.brand.engage.persistence.Sql;
 import jakarta.inject.Singleton;
 import java.sql.Connection;
 import java.sql.SQLException;

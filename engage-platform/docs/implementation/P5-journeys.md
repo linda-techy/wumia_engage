@@ -14,7 +14,7 @@ The revenue journeys run through the orchestrator: payment recovery (utility), c
 
 | ID | Task | Owner | Est. | Depends on |
 |---|---|---|---|---|
-| P5-T01 | Journey framework + collisions + V11 | BE1 | 2 d | P4-T07 |
+| P5-T01 | Journey framework + collisions + V12 | BE1 | 2 d | P4-T07 |
 | P5-T02 | `payment_failed` (utility) | BE1 | 1.5 d | T01, ADR-002 |
 | P5-T03 | `checkout_abandon` (marketing) | BE1 | 1.5 d | T01 |
 | P5-T04 | `cart_recovery` (full) | BE2 | 1 d | T01 |
@@ -42,7 +42,7 @@ INSERT INTO config_keys (key, scope, value_type, label, help_text, risk, sort_or
  ('journey.collision.suppress_hours',           'GLOBAL', 'INT','Higher priority suppresses lower for (h)', NULL,'GUARDED',107)
 ON CONFLICT (key) DO NOTHING;
 
-UPDATE config_keys SET default_value = v.val FROM (VALUES      -- default_value added in V9
+UPDATE config_keys SET default_value = v.val FROM (VALUES      -- default_value added in V10
   ('journey.payment_failed.first_delay_minutes', '5'::jsonb),
   ('journey.checkout_abandon.stall_minutes',     '30'),
   ('journey.checkout_abandon.wa_min_cart_paise', '250000'),   -- ₹2,500
