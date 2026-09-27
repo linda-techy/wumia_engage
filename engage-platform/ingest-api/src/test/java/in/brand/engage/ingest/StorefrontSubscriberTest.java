@@ -251,6 +251,11 @@ class StorefrontSubscriberTest {
 
         assertEquals(400, post(signedUri("/prompt-event", null),
                 Map.of("anonId", anon(), "surface", "add_to_cart", "step", "made_up_step")));
+
+        // A failure reason is accepted (and only logged).
+        assertEquals(204, post(signedUri("/prompt-event", null), Map.of("anonId", anon(), "surface", "add_to_cart",
+                "step", "token_failed", "reason", "messaging/token-subscribe-failed <script>")));
+        assertEquals(1, count("SELECT count(*) FROM push_prompt_events WHERE step = 'token_failed'"));
     }
 
     @Test

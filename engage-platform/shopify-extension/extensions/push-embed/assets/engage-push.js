@@ -38,8 +38,9 @@ const post = (path, body) => fetch(`${CFG.proxy}${path}`, {
   body: JSON.stringify({ anonId, ...body })
 });
 
-const track = (surface, step) =>
-  post('/prompt-event', { surface, step, platform: isIOS ? 'IOS_WEB' : 'WEB', browser: browserName() })
+const track = (surface, step, reason) =>
+  post('/prompt-event', { surface, step, platform: isIOS ? 'IOS_WEB' : 'WEB', browser: browserName(),
+                          reason: reason ? String(reason).slice(0, 200) : undefined })
     .catch(() => {});
 
 function browserName() {
@@ -56,13 +57,34 @@ function browserName() {
 let messagingP;
 function messaging() {
   return messagingP ??= (async () => {
+    const f = CFG.firebase || {};
+    const missing = ['apiKey', 'projectId', 'messagingSenderId', 'appId'].filter((k) => !f[k]);
+    if (missing.length || !CFG.vapidKey) {
+      throw new Error('theme-settings-missing:' + missing.concat(CFG.vapidKey ? [] : ['vapidKey']).join(','));
+    }
     const [{ initializeApp }, m] = await Promise.all([
       import(`https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}/firebase-app.js`),
       import(`https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}/firebase-messaging.js`)
     ]);
     if (!(await m.isSupported())) throw new Error('fcm-unsupported');
-    return { m, instance: m.getMessaging(initializeApp(CFG.firebase)) };
-  })();
+    return { m, instance: m.getMessaging(initializeApp(f)) };
+  })().catch((e) => { messagingP = undefined; throw e; });   // a failure must not stick for the page's life
+}
+
+// The worker's scope is /apps/push/, so it never controls storefront pages and
+// navigator.serviceWorker.ready (which waits for a worker controlling THIS
+// page) would never resolve. Wait for this registration's own worker instead;
+// getToken rejects while it is still installing.
+function activated(reg) {
+  const sw = reg.installing || reg.waiting || reg.active;
+  if (!sw || sw.state === 'activated') return Promise.resolve(reg);
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('sw-activation-timeout')), 15000);
+    sw.addEventListener('statechange', () => {
+      if (sw.state === 'activated') { clearTimeout(timer); resolve(reg); }
+      if (sw.state === 'redundant') { clearTimeout(timer); reject(new Error('sw-redundant')); }
+    });
+  });
 }
 
 async function registration() {
@@ -73,8 +95,7 @@ async function registration() {
   const reg = await navigator.serviceWorker.register(`${CFG.proxy}/sw.js?${query}`, {
     scope: `${CFG.proxy}/`, updateViaCache: 'none'
   });
-  await navigator.serviceWorker.ready;   // getToken rejects on an installing worker
-  return reg;
+  return activated(reg);
 }
 
 async function mintToken() {
@@ -132,7 +153,7 @@ async function subscribe(surface) {
     track(surface, 'token_minted');
     return token;
   } catch (e) {
-    track(surface, 'token_failed');
+    track(surface, 'token_failed', e && (e.code || e.message));
     return null;
   }
 }

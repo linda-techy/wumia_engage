@@ -122,6 +122,7 @@ public class StorefrontProxyController {
         verify(request);
         var e = body.validate();
         limit("prompt", e.anonId(), 120, Duration.ofHours(1));
+        if (e.reason() != null) LOG.info("storefront {} on {} ({}): {}", e.step(), e.surface(), e.browser(), e.reason());
         subscribers.promptEvent(e);
         return HttpResponse.noContent();
     }

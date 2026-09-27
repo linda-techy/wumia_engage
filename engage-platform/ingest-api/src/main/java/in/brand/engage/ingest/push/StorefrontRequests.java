@@ -53,11 +53,13 @@ public final class StorefrontRequests {
     }
 
     @Serdeable
-    public record PromptEvent(String anonId, String surface, String step, String platform, String browser) {
+    /** {@code reason}: why a token_failed happened (an error code). Logged, never stored. */
+    public record PromptEvent(String anonId, String surface, String step, String platform, String browser,
+                              String reason) {
         public PromptEvent validate() {
             return new PromptEvent(anon(anonId), oneOf(surface, "surface", PROMPT_SURFACES), oneOf(step, "step", PROMPT_STEPS),
                     platform == null ? null : oneOf(platform, "platform", PLATFORMS),
-                    knownBrowser(browser));
+                    knownBrowser(browser), reason == null ? null : truncate(reason.replaceAll("[^\\w:.,/ -]", "?"), 200));
         }
     }
 
@@ -89,6 +91,10 @@ public final class StorefrontRequests {
     /** Known browser names only; anything else (or nothing) is recorded as unknown. */
     private static String knownBrowser(String v) {
         return v != null && BROWSERS.contains(v) ? v : null;
+    }
+
+    private static String truncate(String v, int max) {
+        return v.length() <= max ? v : v.substring(0, max);
     }
 
     private static String anon(String v) {
