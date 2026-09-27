@@ -26,7 +26,9 @@ Shoppers on Android and desktop grant push through a soft-ask at a high-intent m
 
 ---
 
-### ☐ P2-T01 — Proxy endpoints
+### ☑ P2-T01 — Proxy endpoints
+
+> **Done 2026-09-27.** Built as `StorefrontProxyController` + `SubscriberService` (device SQL since moved to `core-persistence` `DeviceRepository` in P3-T01), tests in `StorefrontSubscriberTest` (12, Postgres). The customer allowlist gates every write; prompt events are identity-less. A real `/apps/push/register` from the dev store created `devices` #1 (Chrome, `add_to_cart`, `push_v1`) with a `push/marketing` grant; a repeat register added no rows.
 
 The App Proxy forwards `https://<store>/apps/push/*` to `https://<ingest>/shopify/proxy/*` with a signature. `AppProxyVerifier` (core-domain) already verifies it and returns `ProxyContext(shop, Optional<loggedInCustomerId>)`.
 
@@ -79,7 +81,9 @@ ingest-api/src/test/java/in/brand/engage/ingest/storefront/StorefrontProxyTest.j
 
 ---
 
-### ☐ P2-T02 — Service worker
+### ☑ P2-T02 — Service worker
+
+> **Done 2026-09-27.** `/shopify/proxy/sw.js` serves `200`, `application/javascript`, `no-cache`, `X-Engage-SW`. The Firebase web config reaches the worker in its registration URL (single source: the theme editor). Firebase pinned to 12.19.0 on both sides. A data-only FCM test message to device #1 showed a notification with the tab closed; impression and click beacons reached `/engagement`.
 
 Browsers only allow a service worker to control paths at or below its own URL. The App Proxy makes `/apps/push/sw.js` a same-origin URL, so the scope is `/apps/push/`. That scope is enough to receive push; the page registers it explicitly and passes the registration to `getToken()`.
 
@@ -100,7 +104,9 @@ ingest-api/src/main/java/in/brand/engage/ingest/storefront/SwBundle.java
 
 ---
 
-### ☐ P2-T03 — Theme app extension
+### ☑ P2-T03 — Theme app extension
+
+> **Done 2026-09-27.** `push-embed` released to wumikaEngage-dev; enabled in the revamp theme with the Firebase web config and VAPID key.
 
 `shopify app generate extension --template theme_app_extension --name push-embed`, then the files in phase-2 §3. The embed block outputs `window.EngageConfig` (VAPID key, Firebase web config, proxy base `/apps/push`, copy versions, soft-ask copy) and loads `engage-push.js` deferred.
 
