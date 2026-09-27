@@ -168,7 +168,10 @@ async function refreshIfDue() {
   try {
     const token = await mintToken();
     const previous = store.get('token');
-    await post('/refresh', { token, previous: previous && previous !== token ? previous : null });
+    const res = await post('/refresh', { token, previous: previous && previous !== token ? previous : null });
+    // 202: the server holds no device for this browser (never registered, or
+    // not storable). Do not record a refresh, so the next ask() registers it.
+    if (res.status !== 200) { store.set('token', ''); return; }
     store.set('token', token);
     store.set('refreshed', String(Date.now()));
   } catch {}
