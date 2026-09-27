@@ -3,6 +3,7 @@
 # and the merchant toggles it in the theme editor (Online Store > Themes >
 # Customize > App embeds > "Engage push").
 api_version = "2026-07"
+uid = "fef0e8e4-9cd3-74b2-cae4-988ddff5b2b8513c0c36"
 
 [[extensions]]
 type = "theme"
