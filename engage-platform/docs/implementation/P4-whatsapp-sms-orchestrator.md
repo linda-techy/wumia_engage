@@ -78,7 +78,7 @@ The router's generic "permanent → suppression" rule from P3-T05 must **not** a
 
 ### ☐ P4-T03 — Template sync + number health
 
-**Migration `V10__whatsapp_numbers.sql`**
+**Migration `V11__whatsapp_numbers.sql`**
 ```sql
 CREATE TABLE wa_phone_numbers (
     phone_number_id TEXT PRIMARY KEY,

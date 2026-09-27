@@ -28,7 +28,7 @@ The revenue journeys run through the orchestrator: payment recovery (utility), c
 
 ### ☐ P5-T01 — Journey framework
 
-**Migration `V11__journey_config.sql`**
+**Migration `V12__journey_config.sql`**
 ```sql
 INSERT INTO config_keys (key, scope, value_type, label, help_text, risk, sort_order) VALUES
  ('journey.payment_failed.first_delay_minutes', 'JOURNEY','INT','Payment failed: first message after (min)',
@@ -42,7 +42,7 @@ INSERT INTO config_keys (key, scope, value_type, label, help_text, risk, sort_or
  ('journey.collision.suppress_hours',           'GLOBAL', 'INT','Higher priority suppresses lower for (h)', NULL,'GUARDED',107)
 ON CONFLICT (key) DO NOTHING;
 
-UPDATE config_keys SET default_value = v.val FROM (VALUES      -- default_value added in V10
+UPDATE config_keys SET default_value = v.val FROM (VALUES      -- default_value added in V8
   ('journey.payment_failed.first_delay_minutes', '5'::jsonb),
   ('journey.checkout_abandon.stall_minutes',     '30'),
   ('journey.checkout_abandon.wa_min_cart_paise', '250000'),   -- ₹2,500

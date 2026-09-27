@@ -57,7 +57,7 @@ core-domain/src/main/java/in/brand/engage/aws/SnsSignatureVerifier.java
 
 ### ☐ P7-T03 — Measurement
 
-**Migration `V13__measurement_and_privacy.sql`** (lift views part)
+**Migration `V14__measurement_and_privacy.sql`** (lift views part)
 ```sql
 -- Net revenue per bucket per IST week, with the bucket size as it stood at the
 -- end of that week. The denominator counts identities with no orders, which is

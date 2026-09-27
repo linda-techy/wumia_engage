@@ -13,7 +13,7 @@ The one door exists: `MessageOrchestrator.dispatch()` → `PolicyEngine.decide()
 | ID | Task | Owner | Est. | Depends on |
 |---|---|---|---|---|
 | P3-T01 | Extract `persistence` module | BE1 | 0.5 d | P1 done |
-| P3-T02 | `policy` module: `PolicyEngine`, config snapshot, kill switches, holdouts | BE1 | 3 d | T01, V10 |
+| P3-T02 | `policy` module: `PolicyEngine`, config snapshot, kill switches, holdouts | BE1 | 3 d | T01, V8 |
 | P3-T03 | Template registry as code + lint | BE2 | 1.5 d | T01 |
 | P3-T04 | `channels` module + `FcmAdapter` | BE2 | 2 d | T03 |
 | P3-T05 | `orchestrator` module: `MessageRouter`, `MessageOrchestrator` | BE1 | 2 d | T02, T04 |
@@ -38,9 +38,20 @@ Move `Db`, `Sql`, `SqlFiles`, `IdentityResolver`, `EventWriter`, `ConsentWriter`
 
 ---
 
-### ☐ P3-T02 — `policy` module
+### ☑ P3-T02 — `policy` module
 
-**Migration `V9__dispatch_and_kill_switches.sql`**
+> **Done 2026-09-27.** The migration is **V8**, not V10: V8 and V9 (P1 gaps, P2 views) had not been built, and Flyway refuses a lower version once a database has a higher one, so this took the next free number and those moved up (README, Migrations). `PolicyEngineTest`: 31 tests in 1.9 s on `wumika_admin_test`; `./gradlew build` 126 tests (95 + 31); `invariants.sql` 17/17 on a fresh V1–V8 database. A mutation check (halt read disabled, quiet-hours boundary made exclusive, LISTEN no longer invalidating) failed exactly the four tests for those rules.
+>
+> Where the build differs from the text below:
+> - **Budget exhaustion defers to the next IST midnight** (`Defer`, `DAILY_BUDGET_EXHAUSTED`) instead of blocking. CLAUDE.md invariant 5 names budget exhaustion as a deferral, and CLAUDE.md wins.
+> - **`holdout.journey_pct`** (JOURNEY, DECIMAL, CRITICAL, default 0) is added in V8: the journey holdout needs a percentage and no key existed. 0 means no holdout runs and nothing is written; P5-T09 sets it per journey.
+> - **The global holdout applies to every marketing send**, not only journey sends: campaigns must not message it either (05-campaigns.md).
+> - **Template cooldown (step 8) is not enforced yet**: the `templates` table has no cooldown; the P3-T03 registry carries it.
+> - `Channel` and `Category` live in `core-domain` (`in.brand.engage.core.messaging`), so `channels` can use them without importing `policy`.
+> - Extra classes beyond the file list: `Template`, `Templates` (uncached lookup, so a pause bites on the next send), `Addresses`, `Usage` (cap counts, spend), `PolicyClock`. SQL: `halts.sql`, `config_snapshot.sql`.
+> - The LISTEN connection is opened with `datasources.default.url/username/password`; with no URL it logs a warning and relies on the 30 s cache expiry.
+
+**Migration `V8__dispatch_and_kill_switches.sql`** (as specified, plus `holdout.journey_pct`)
 ```sql
 -- Event dispatch claims by this column, not by an id cursor: ids are assigned
 -- at INSERT but become visible at COMMIT, so a cursor skips late-committing rows.
@@ -139,7 +150,7 @@ policy/src/test/java/in/brand/engage/policy/PolicyEngineTest.java
 **Done when:** all tests above pass and `PolicyEngineTest` runs in under 30 seconds.
 
 **Claude Code prompt**
-> P3-T02. Add V10 as specified. Build the `policy` module: `PolicyEngine.decide()` in the order given by `docs/04-backend-micronaut.md`, with the consent step from `docs/technical/phase-3-policy-and-push-sending.md` §1. Kill switches read uncached. `decide()` has no side effects except the holdout assignment row. Write every listed test first, against Postgres. Money is `long` paise; quiet hours are evaluated in IST.
+> P3-T02. Add V8 as specified. Build the `policy` module: `PolicyEngine.decide()` in the order given by `docs/04-backend-micronaut.md`, with the consent step from `docs/technical/phase-3-policy-and-push-sending.md` §1. Kill switches read uncached. `decide()` has no side effects except the holdout assignment row. Write every listed test first, against Postgres. Money is `long` paise; quiet hours are evaluated in IST.
 
 ---
 

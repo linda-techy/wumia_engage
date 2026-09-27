@@ -154,7 +154,7 @@ Structure, auth handling and the composer from `06-admin-ui-angular.md`. Signals
 
 ### ☐ P6-T08 — Exports, PII, recovery codes
 
-**Migration `V12__admin_security.sql`**
+**Migration `V13__admin_security.sql`**
 ```sql
 CREATE TABLE operator_recovery_codes (
     operator_id UUID NOT NULL REFERENCES operators(id) ON DELETE CASCADE,

@@ -22,7 +22,7 @@ What exists and has passed against PostgreSQL 16:
 | ID | Task | Owner | Est. | Depends on |
 |---|---|---|---|---|
 | P1-T01 | First real `./gradlew build` | BE1 | 0.5–1 d | P0-T08 helps |
-| P1-T02 | Fulfillments + courier webhook adapter + V8 shipments | BE2 | 2 d | T01, ADR-005 |
+| P1-T02 | Fulfillments + courier webhook adapter + V9 shipments | BE2 | 2 d | T01, ADR-005 |
 | P1-T03 | Inventory webhooks → `variant_restocked` | BE1 | 1.5 d | T01, `SHOPIFY_ADMIN_TOKEN` |
 | P1-T04 | Remaining Shopify topics: cancelled, refunds, paid, products, uninstall | BE1 | 1.5 d | T01 |
 | P1-T05 | Inbox housekeeping + metrics | BE2 | 1 d | T01 |
@@ -62,7 +62,7 @@ scripts/send-test-webhook.sh bad-signature        # HTTP 401, no inbox row
 
 The design (§4) relies on shipping events to drive `order_tracking` (P4) and `ndr_rescue` (P5). Shopify tells us an order shipped. Only the courier tells us *out for delivery*, *delivered* and *NDR*.
 
-**Migration `V7__shipments_and_order_lifecycle.sql`** (also holds the tables T03 and T04 need, so P1 adds one migration)
+**Migration `V9__shipments_and_order_lifecycle.sql`** (also holds the tables T03 and T04 need, so P1 adds one migration)
 ```sql
 CREATE TABLE shipments (
     id               BIGSERIAL PRIMARY KEY,
@@ -145,7 +145,7 @@ ingest-api/src/test/resources/fixtures/courier_*.json                           
 **Done when:** `./gradlew :ingest-api:test` is green including the three orderings, and `SELECT status FROM shipments` shows `delivered` for the reversed-order fixture.
 
 **Claude Code prompt**
-> P1-T02. Add `V7__shipments_and_order_lifecycle.sql` exactly as specified (it includes tables T03/T04 use). Add the courier intake following the existing inbox pattern (`RazorpayWebhookController` → `webhook_inbox` → `InboxHandler`). The aggregator is the one recorded in ADR-005; put its specifics only in its `CourierAdapter` implementation. Parse payloads in SQL files like the existing handlers. Status only moves forward by `status_at`. Test natural, reversed and duplicate orderings.
+> P1-T02. Add `V9__shipments_and_order_lifecycle.sql` exactly as specified (it includes tables T03/T04 use). Add the courier intake following the existing inbox pattern (`RazorpayWebhookController` → `webhook_inbox` → `InboxHandler`). The aggregator is the one recorded in ADR-005; put its specifics only in its `CourierAdapter` implementation. Parse payloads in SQL files like the existing handlers. Status only moves forward by `status_at`. Test natural, reversed and duplicate orderings.
 
 ---
 
@@ -155,7 +155,7 @@ ingest-api/src/test/resources/fixtures/courier_*.json                           
 
 **Steps**
 1. Handler resolves `inventory_item_id → variant_id` with the Admin GraphQL API (`inventoryItem(id) { variant { id product { id } } }`) and caches the mapping in `inventory_state` (V3; one row per inventory item, holding the last **total**).
-2. Upsert the payload's location into `inventory_levels` (V8), guarded by `updated_at` so a late update cannot overwrite a newer one. Sum across locations.
+2. Upsert the payload's location into `inventory_levels` (V9), guarded by `updated_at` so a late update cannot overwrite a newer one. Sum across locations.
 3. When the previous total was ≤ 0 and the new one is > 0, write event `variant_restocked` with `{variant_id, product_id, quantity}`, dedupe key `restock:<variant_id>:<inventory_item_updated_at>`.
 4. When the previous total was > 0 and the new one is ≤ 0, write `variant_sold_out` (P5-T05 cancels back-in-stock runs on it).
 
