@@ -1,0 +1,64 @@
+# Dev deployment on the Wumika server. Lives at /opt/wumika next to .env
+# (copied from .env.example and filled in once, by hand, on the server).
+# CI copies this file and the images there on every push to `dev`.
+
+name: wumika
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # No published port: only the services on this network reach the database.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      retries: 12
+
+  ingest:
+    image: wumika/ingest-api:dev
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      INGEST_PORT: "8081"
+      # ingest-api owns the schema; on dev it migrates on start.
+      FLYWAY_ON_STARTUP: "true"
+      # /health is public through nginx; its details name the JDBC URL.
+      ENDPOINTS_HEALTH_DETAILS_VISIBLE: NEVER
+    ports:
+      - "127.0.0.1:8081:8081"   # nginx terminates TLS in front of this
+    depends_on:
+      db:
+        condition: service_healthy
+
+  admin:
+    image: wumika/admin-api:dev
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      ADMIN_API_PORT: "8083"
+      ADMIN_JWT_KEY_FILE: /keys/admin-jwt.pem
+    volumes:
+      - ./keys:/keys
+    # Localhost only until login and MFA (plan Tasks 7-8) are finished.
+    # Reach it with: ssh -L 8083:127.0.0.1:8083 deploy@<server>
+    ports:
+      - "127.0.0.1:8083:8083"
+    depends_on:
+      db:
+        condition: service_healthy
+      # Restarts until ingest has applied the migrations it expects.
+      ingest:
+        condition: service_started
+
+volumes:
+  pgdata:

@@ -1,0 +1,74 @@
+name: Deploy dev
+
+# Every push to `dev` is tested, built into images and started on the dev server.
+# Repository secrets (Settings -> Secrets and variables -> Actions):
+#   DEPLOY_HOST         server IP or hostname
+#   DEPLOY_SSH_KEY      private key whose public half is in deploy@server authorized_keys
+#   DEPLOY_KNOWN_HOSTS  output of: ssh-keyscan <DEPLOY_HOST>
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: engage-platform
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+      - uses: gradle/actions/setup-gradle@v4
+      # Integration tests skip themselves without config/local.env; unit tests run.
+      - run: sh ./gradlew --no-daemon test
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build images
+        run: |
+          for m in ingest-api admin-api; do
+            docker build --build-arg MODULE=$m -t wumika/$m:dev -t wumika/$m:${GITHUB_SHA::7} .
+          done
+          docker save wumika/ingest-api:dev wumika/admin-api:dev | gzip > images.tar.gz
+
+      - name: SSH key
+        run: |
+          install -d -m 700 ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          echo "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+
+      - name: Ship and start
+        env:
+          TARGET: deploy@${{ secrets.DEPLOY_HOST }}
+        run: |
+          scp images.tar.gz deploy/docker-compose.yml "$TARGET:/opt/wumika/"
+          ssh "$TARGET" 'set -e
+            cd /opt/wumika
+            test -f .env || { echo "/opt/wumika/.env missing: see deploy/.env.example"; exit 1; }
+            gunzip -c images.tar.gz | docker load
+            rm images.tar.gz
+            docker compose up -d --remove-orphans
+            docker image prune -f'
+
+      - name: Health check
+        run: |
+          for i in $(seq 1 30); do
+            curl -fsS https://engage-dev.wumika.com/health && exit 0
+            sleep 5
+          done
+          echo "ingest-api did not become healthy"; exit 1

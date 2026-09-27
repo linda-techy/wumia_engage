@@ -1,0 +1,14 @@
+# Credentials never go into an image; the server passes them in via deploy/.env.
+config/*.env
+config/*.json
+config/*.pem
+*.pem
+*.p12
+*.p8
+
+**/build/
+.gradle/
+**/node_modules/
+shopify-extension/
+docs/
+deploy/
