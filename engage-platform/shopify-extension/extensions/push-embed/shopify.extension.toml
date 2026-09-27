@@ -1,0 +1,10 @@
+# Theme app extension: the storefront push embed (phase-2 §3).
+# Delivered as an app embed block so it survives theme updates and switches,
+# and the merchant toggles it in the theme editor (Online Store > Themes >
+# Customize > App embeds > "Engage push").
+api_version = "2026-07"
+
+[[extensions]]
+type = "theme"
+name = "Engage push"
+handle = "push-embed"

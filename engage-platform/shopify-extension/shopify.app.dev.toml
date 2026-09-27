@@ -19,6 +19,14 @@ use_legacy_install_flow = false
 [auth]
 redirect_urls = [ ]
 
+# Storefront /apps/push/* is forwarded to ingest-api, same-origin, so the
+# service worker registers (phase-2 §1). Shopify signs every proxied request;
+# AppProxyVerifier checks that signature.
+[app_proxy]
+url = "https://engage-dev.wumika.com/shopify/proxy"
+subpath = "push"
+prefix = "apps"
+
 [webhooks]
 api_version = "2026-07"
 
@@ -27,4 +35,4 @@ api_version = "2026-07"
 [[webhooks.subscriptions]]
 topics = ["checkouts/create", "checkouts/update", "orders/create",
           "carts/create", "carts/update", "customers/create", "customers/update"]
-uri = "https://dont-eating-ian-soonest.trycloudflare.com/webhooks/shopify"
+uri = "https://engage-dev.wumika.com/webhooks/shopify"

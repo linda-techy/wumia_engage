@@ -1,0 +1,8 @@
+{
+  "engage": {
+    "notify": {
+      "saved_push": "We'll alert you",
+      "saved_other": "Saved — we will message you"
+    }
+  }
+}

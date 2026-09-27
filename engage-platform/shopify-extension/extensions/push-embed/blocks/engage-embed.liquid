@@ -1,0 +1,54 @@
+{%- comment -%}
+  Engage push — app embed block (phase-2 §3).
+  Everything in EngageConfig is public by design: the Firebase web config is an
+  identifier, not a credential, and the VAPID value is the PUBLIC key. Restrict
+  the Firebase API key by HTTP referrer in Google Cloud. Identity binding uses
+  the App Proxy's signed logged_in_customer_id, never the `loggedIn` flag below.
+{%- endcomment -%}
+<script>
+  window.EngageConfig = {
+    proxy: "/apps/push",
+    vapidKey: {{ block.settings.vapid_key | json }},
+    firebase: {
+      apiKey: {{ block.settings.fb_api_key | json }},
+      projectId: {{ block.settings.fb_project_id | json }},
+      messagingSenderId: {{ block.settings.fb_sender_id | json }},
+      appId: {{ block.settings.fb_app_id | json }}
+    },
+    loggedIn: {{ customer | json | default: 'null' }} != null,
+    waNumber: {{ block.settings.wa_number | json }},
+    copy: {
+      push: {{ block.settings.push_copy | json }},
+      pushVersion: {{ block.settings.push_copy_version | json }},
+      whatsapp: {{ block.settings.wa_copy | json }},
+      whatsappVersion: {{ block.settings.wa_copy_version | json }}
+    }
+  };
+</script>
+<script type="module" src="{{ 'engage-push.js' | asset_url }}" defer></script>
+<link rel="stylesheet" href="{{ 'engage-push.css' | asset_url }}">
+
+{% schema %}
+{
+  "name": "Engage push",
+  "target": "body",
+  "settings": [
+    { "type": "header", "content": "Firebase Cloud Messaging" },
+    { "type": "text", "id": "vapid_key", "label": "FCM Web Push certificate (public key)",
+      "info": "Firebase console > Project settings > Cloud Messaging > Web Push certificates" },
+    { "type": "text", "id": "fb_api_key", "label": "Firebase API key" },
+    { "type": "text", "id": "fb_project_id", "label": "Firebase project id", "default": "wumika-75a48" },
+    { "type": "text", "id": "fb_sender_id", "label": "Firebase messaging sender id" },
+    { "type": "text", "id": "fb_app_id", "label": "Firebase app id" },
+    { "type": "header", "content": "Copy (bump the version whenever you change the wording)" },
+    { "type": "text", "id": "push_copy", "label": "Push soft-ask text",
+      "default": "Get an alert when your size is back or your bag price drops." },
+    { "type": "text", "id": "push_copy_version", "label": "Push copy version", "default": "push_v1" },
+    { "type": "text", "id": "wa_copy", "label": "WhatsApp opt-in text",
+      "default": "Send me order and delivery updates from Wumika on WhatsApp" },
+    { "type": "text", "id": "wa_copy_version", "label": "WhatsApp copy version", "default": "wa_v1" },
+    { "type": "text", "id": "wa_number", "label": "WhatsApp number (E.164, e.g. 9198XXXXXXXX)",
+      "info": "Used for the iOS / in-app-browser fallback link." }
+  ]
+}
+{% endschema %}

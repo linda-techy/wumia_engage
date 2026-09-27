@@ -1,0 +1,74 @@
+/* engage-push.css — soft-ask dialog, in-page toast, WhatsApp fallback bar.
+   Every colour is a custom property so the revamp theme can restyle it:
+     :root { --engage-accent: #111; --engage-radius: 4px; } */
+:root {
+  --engage-bg: #fff;
+  --engage-fg: #1a1a1a;
+  --engage-muted: #5c5c5c;
+  --engage-accent: #1a1a1a;
+  --engage-accent-fg: #fff;
+  --engage-wa: #1f8f4e;
+  --engage-radius: 10px;
+  --engage-shadow: 0 12px 40px rgba(0, 0, 0, .18);
+  --engage-z: 2147483000;
+}
+
+.engage-overlay {
+  position: fixed; inset: 0; z-index: var(--engage-z);
+  display: flex; align-items: flex-end; justify-content: center;
+  padding: 16px; background: rgba(0, 0, 0, .35);
+  animation: engage-fade .15s ease-out;
+}
+@media (min-width: 640px) { .engage-overlay { align-items: center; } }
+
+.engage-card {
+  width: 100%; max-width: 380px; padding: 20px;
+  background: var(--engage-bg); color: var(--engage-fg);
+  border-radius: var(--engage-radius); box-shadow: var(--engage-shadow);
+  font: inherit;
+}
+.engage-card__text { margin: 0 0 16px; line-height: 1.45; font-size: 15px; }
+.engage-card__actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+.engage-btn {
+  min-height: 44px; padding: 0 16px;           /* 44px: comfortable tap target */
+  border: 1px solid currentColor; border-radius: calc(var(--engage-radius) - 4px);
+  background: transparent; color: var(--engage-fg);
+  font: inherit; font-size: 14px; cursor: pointer;
+  display: inline-flex; align-items: center; text-decoration: none;
+}
+.engage-btn--primary { background: var(--engage-accent); border-color: var(--engage-accent); color: var(--engage-accent-fg); }
+.engage-btn:focus-visible { outline: 2px solid var(--engage-accent); outline-offset: 2px; }
+
+.engage-toast {
+  position: fixed; right: 16px; bottom: 16px; left: 16px; z-index: var(--engage-z);
+  max-width: 360px; margin-left: auto;
+  display: flex; gap: 12px; align-items: center; padding: 12px;
+  background: var(--engage-bg); color: var(--engage-fg); text-decoration: none;
+  border-radius: var(--engage-radius); box-shadow: var(--engage-shadow);
+  opacity: 0; transform: translateY(12px); transition: opacity .2s, transform .2s;
+}
+.engage-toast--in { opacity: 1; transform: none; }
+.engage-toast__img { width: 48px; height: 48px; object-fit: cover; border-radius: 6px; flex: none; }
+.engage-toast__body { display: flex; flex-direction: column; gap: 2px; font-size: 14px; min-width: 0; }
+.engage-toast__body span { color: var(--engage-muted); }
+
+.engage-bar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--engage-z);
+  display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: center;
+  padding: 10px 44px 10px 16px;
+  background: var(--engage-bg); color: var(--engage-fg);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, .12); font-size: 14px;
+}
+.engage-bar .engage-btn--primary { background: var(--engage-wa); border-color: var(--engage-wa); }
+.engage-bar__close {
+  position: absolute; top: 50%; right: 8px; transform: translateY(-50%);
+  width: 32px; height: 32px; border: 0; background: none; color: var(--engage-muted);
+  font-size: 22px; line-height: 1; cursor: pointer;
+}
+
+@keyframes engage-fade { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .engage-overlay { animation: none; }
+  .engage-toast { transition: none; }
+}
