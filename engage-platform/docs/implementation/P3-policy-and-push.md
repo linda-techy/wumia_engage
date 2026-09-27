@@ -191,6 +191,7 @@ channels/src/main/java/in/brand/engage/channels/push/FcmTokenPruner.java
 - `DispatchResult.delivered` = number of tokens FCM accepted. Zero accepted is a failure, not a send.
 - `channels` must not import `policy` or `orchestrator`. The adapter receives a `RenderedMessage` and addresses; it has no idea why it is sending.
 - Credentials from `FIREBASE_SERVICE_ACCOUNT_FILE`. A missing file fails startup of the worker, not of ingest.
+  - **Already provisioned (2026-09-27), project `wumika-75a48`, verified with an FCM `validate_only` call:** locally `config/firebase-service-account.json` (git-ignored; `local.env` and `devstore.env` already point at it); on the dev server `/opt/wumika/secrets/firebase-service-account.json` (mode 400, uid 10001 = the container user). The worker's compose service mounts `./secrets:/secrets:ro` and sets `FIREBASE_SERVICE_ACCOUNT_FILE=/secrets/firebase-service-account.json` (add both in P3-T06).
 
 **Tests:** a fake `FirebaseMessaging` returning mixed per-token results → correct devices deactivated with the right reasons; 4,001-byte payload rejected; 1,200 tokens → three calls.
 
