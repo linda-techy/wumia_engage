@@ -120,6 +120,7 @@ async function subscribe(surface) {
     const token = await mintToken();
     const res = await post('/register', {
       token, surface, browser: browserName(),
+      platform: isIOS ? 'IOS_WEB' : 'WEB',   // iOS only reaches here as an installed PWA
       copyVersion: CFG.copy.pushVersion,
       copyText: CFG.copy.push,
       page: location.pathname,
