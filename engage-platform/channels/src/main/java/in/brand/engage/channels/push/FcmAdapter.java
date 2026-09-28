@@ -102,7 +102,7 @@ public class FcmAdapter implements ChannelAdapter {
                     accepted++;
                     continue;
                 }
-                lastError = r.errorCode();
+                lastError = r.errorCode() + (r.message() == null ? "" : " (" + r.message() + ")");
                 long deviceId = chunk.get(i).deviceId();
                 switch (r.errorCode() == null ? "" : r.errorCode()) {
                     case "UNREGISTERED" -> prunes.add(new TokenPrune(deviceId, "unregistered"));

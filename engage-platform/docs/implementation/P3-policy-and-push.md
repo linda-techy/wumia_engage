@@ -197,6 +197,8 @@ vars: [size, product, url, image]
 
 > **Built 2026-09-28; the manual send to a dev device is pending**, so the box stays open. `FcmAdapterTest` (13) and `FcmTokenPrunerTest` (1, Postgres) pass; `./gradlew build` 167 tests. To finish: `FCM_SMOKE_TOKEN=<dev device token> ./gradlew :channels:test --tests '*FcmSmokeTest'` (skipped unless the variable is set). No local database holds a device; the first dev-store subscriber is on the dev server.
 >
+> **2026-09-29 attempt, from the developer PC: blocked by Avast, not by the code.** Avast Web/Mail Shield intercepts HTTPS on that machine, and inside Docker Desktop too. With the JDK's trust store the Firebase token fetch fails PKIX; with `-Djavax.net.ssl.trustStoreType=Windows-ROOT` it authenticates but the send fails "Not in GZIP format", because Avast rewrites Google's compressed responses. The push never reached FCM. Fix on the PC: add Avast Web Shield exceptions for `fcm.googleapis.com` and `oauth2.googleapis.com` (or turn off HTTPS scanning), then rerun the command above with `JAVA_TOOL_OPTIONS=-Djavax.net.ssl.trustStoreType=Windows-ROOT` if Maven downloads still need it. Or run `FcmSmokeTest.main` on a host without interception (the dev server).
+>
 > Where the build differs from the text below:
 > - **`send(RenderedMessage, Addresses)`**, not `send(Decision.Allow, …)`: `Decision` is policy's type and `channels` may not import it. `Addresses` moved from `policy` to `core-domain` so both share it.
 > - **The adapter never writes to the database.** Dead tokens come back as `TokenPrune`s on the result, or on the exception when nothing was accepted, and the router applies them with `FcmTokenPruner` in its post-send transaction (T05 step 3). That keeps the adapter call outside any transaction.
