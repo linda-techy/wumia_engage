@@ -193,7 +193,18 @@ vars: [size, product, url, image]
 
 ---
 
-### ☐ P3-T04 — `channels` + `FcmAdapter`
+### ◐ P3-T04 — `channels` + `FcmAdapter`
+
+> **Built 2026-09-28; the manual send to a dev device is pending**, so the box stays open. `FcmAdapterTest` (13) and `FcmTokenPrunerTest` (1, Postgres) pass; `./gradlew build` 167 tests. To finish: `FCM_SMOKE_TOKEN=<dev device token> ./gradlew :channels:test --tests '*FcmSmokeTest'` (skipped unless the variable is set). No local database holds a device; the first dev-store subscriber is on the dev server.
+>
+> Where the build differs from the text below:
+> - **`send(RenderedMessage, Addresses)`**, not `send(Decision.Allow, …)`: `Decision` is policy's type and `channels` may not import it. `Addresses` moved from `policy` to `core-domain` so both share it.
+> - **The adapter never writes to the database.** Dead tokens come back as `TokenPrune`s on the result, or on the exception when nothing was accepted, and the router applies them with `FcmTokenPruner` in its post-send transaction (T05 step 3). That keeps the adapter call outside any transaction.
+> - **`FcmClient`** wraps the SDK because its `BatchResponse`/`SendResponse` cannot be built outside it; tests fake `FcmClient`. `FirebaseFcmClient` is the real one.
+> - **`ChannelException.Permanent` carries `suppress`.** Payload too large, no live tokens and all tokens dead are permanent but never suppress the customer. Zero accepted with any transient error is `Transient`.
+> - **Web Push `Topic`** allows ≤ 32 URL-safe base64 characters, so a tag like `restock:4471` is sent as a stable 32-character hash of itself.
+> - If a later 500-token chunk fails as a whole after an earlier one was accepted, the result reports what was accepted rather than a failure.
+> - `FcmClientFactory` is excluded in the `test` environment. Making the worker fail at boot on a missing file (not at the first send) is P3-T06: resolve the adapter eagerly there. A relative `FIREBASE_SERVICE_ACCOUNT_FILE` resolves against the working directory, so `:worker:run` should run from the repo root.
 
 **Files**
 ```

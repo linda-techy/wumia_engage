@@ -4,6 +4,7 @@ import static in.brand.engage.core.messaging.Category.MARKETING;
 import static in.brand.engage.core.messaging.Category.SERVICE;
 import static in.brand.engage.core.messaging.Channel.WHATSAPP;
 
+import in.brand.engage.core.messaging.Addresses;
 import in.brand.engage.core.messaging.Channel;
 import in.brand.engage.persistence.Db;
 import jakarta.inject.Singleton;

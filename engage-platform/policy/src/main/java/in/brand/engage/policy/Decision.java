@@ -1,5 +1,6 @@
 package in.brand.engage.policy;
 
+import in.brand.engage.core.messaging.Addresses;
 import in.brand.engage.core.messaging.Category;
 import java.time.Instant;
 import java.util.Map;
