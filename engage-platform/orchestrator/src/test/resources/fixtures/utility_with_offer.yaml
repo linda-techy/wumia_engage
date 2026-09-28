@@ -1,0 +1,8 @@
+# Must FAIL the lint: an offer inside a utility template.
+key: push_order_update_bad_v1
+channel: push
+category: utility
+locales:
+  en: { title: "Your order {{order}} has shipped", body: "Flat ₹200 off your next order!" }
+vars: [order, url]
+samples: { order: "#10421" }

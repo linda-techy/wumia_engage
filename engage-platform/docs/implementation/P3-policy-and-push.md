@@ -154,7 +154,17 @@ policy/src/test/java/in/brand/engage/policy/PolicyEngineTest.java
 
 ---
 
-### ☐ P3-T03 — Templates as code
+### ☑ P3-T03 — Templates as code
+
+> **Done 2026-09-28.** New `orchestrator` module (templates package only; the router is T05). `TemplateLinterTest` includes `a_utility_template_saying_flat_200_off_fails` on `fixtures/utility_with_offer.yaml`, and the registry refuses to load a template that fails the lint. `:orchestrator:test` 24 tests; `./gradlew build` 152 tests.
+>
+> Beyond the text below:
+> - **`samples:`** in each YAML: the longest realistic value of every copy variable. The length rule renders with these; at send time the renderer cuts a longer title/body with "…" so Android never truncates mid-word. Lengths count code points, not UTF-16 units.
+> - **`banned_words.txt` holds regular expressions**, one per line, so `\d{1,3}\s?%\s?off` and `flat\s?₹\d` can be expressed; it covers the 05-campaigns.md markers plus coupon/promo/deal/hurry/buy now/chhoot.
+> - Push `url` and `image` are payload variables: declared but not used in copy is fine for them, and push must declare `url`. Unknown YAML fields fail (a typo like `cooldwon` would otherwise silently drop the cooldown).
+> - **Template cooldown is now enforced by policy (step 8)**: policy defines `TemplateCooldowns`, the registry implements it, and a `@Secondary` no-cooldown default keeps `policy` usable without `orchestrator`. Two policy tests added.
+> - Registry sync upserts key/channel/category and never touches `status`, so an operator's pause survives a deploy. Templates ship on the classpath with a generated `templates/index.txt` (a jar cannot be listed).
+> - Hinglish back-in-stock title is "Size {{size}} aa gaya: {{product}}" (the spec's "wapas aa gaya" leaves too little room for a product name at 40 characters). Cooldowns for the three new templates (price drop and browse abandon 1 day, cart recovery 12 h) are starting values; tune them in the YAML.
 
 **Files**
 ```

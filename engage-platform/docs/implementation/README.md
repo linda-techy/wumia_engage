@@ -22,7 +22,7 @@ When a task and a design doc disagree, the task wins, because it was written aga
 | 0 | [P0 — Prerequisites](P0-prerequisites.md) | 0–1 | ☐ Not started. **Start day 1**: external approvals set the critical path. |
 | 1 | [P1 — Core platform](P1-core-platform.md) | 1–2 | ◐ **Built and verified** (V1–V6, ingest-api). 6 gap tasks remain. |
 | 2 | [P2 — Shopify storefront + FCM push](P2-shopify-storefront-push.md) | 2–4 | ◐ T01–T03 done; first dev-store subscriber and a test push delivered. T04 built (needs JS unit tests + device matrix); T05, T06, T08, T09 open; T07 has `push_v1` only |
-| 3 | [P3 — Policy engine + push sending](P3-policy-and-push.md) | 4–5 | ◐ T01–T02 done (policy engine; migration V8) |
+| 3 | [P3 — Policy engine + push sending](P3-policy-and-push.md) | 4–5 | ◐ T01–T03 done (policy engine, migration V8; templates as code) |
 | 4 | [P4 — WhatsApp, SMS, orchestrator](P4-whatsapp-sms-orchestrator.md) | 5–7 | ☐ Blocked on Meta verification + DLT |
 | 5 | [P5 — Journeys](P5-journeys.md) | 7–9 | ☐ Blocked on the Razorpay spike (P0-T06) |
 | 6 | [P6 — Admin console + campaigns](P6-admin-console-campaigns.md) | 9–11 | ☐ |
@@ -43,13 +43,13 @@ engage/
 ├─ ingest-api/          P1 ✓  webhooks + storefront endpoints (Shopify, Razorpay, Meta, courier, pixel)
 ├─ policy/              P3 ✓  PolicyEngine, ConfigResolver, KillSwitch, Holdouts
 ├─ channels/            P3    ChannelAdapter + FCM (P3), WhatsApp + SMS (P4), SES (P7)
-├─ orchestrator/        P3    MessageOrchestrator, MessageRouter, cascades (P4), CapabilityService (P4)
+├─ orchestrator/        P3 ◐  templates ✓; MessageOrchestrator, MessageRouter, cascades (P4), CapabilityService (P4)
 ├─ journeys/            P5    journey definitions: event → intent
 ├─ worker/              P3    Micronaut app: event dispatch, cascade ticker, campaign executor, jobs
 ├─ admin-api/           P6    Micronaut app: operators, RBAC, config, campaigns, reports
 ├─ admin-ui/            P6    Angular 22
 ├─ shopify-extension/   P2    Shopify CLI app: theme app extension, web pixel, Thank-you extension
-├─ templates/           P3    message templates as code (YAML), linted in CI
+├─ templates/           P3 ✓  message templates as code (YAML), linted in CI
 └─ db/migration/        V1–V6 ✓, then one migration per phase (below)
 ```
 

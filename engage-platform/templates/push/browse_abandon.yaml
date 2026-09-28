@@ -1,0 +1,11 @@
+# 3+ product views, no add-to-cart, 4 h later (phase-3 §4). Push only, ever:
+# intent is too weak to pay for WhatsApp (INDIA-PLAYBOOK.md §3).
+key: push_browse_abandon_v1
+channel: push
+category: marketing
+cooldown: P1D
+locales:
+  en:      { title: "Still thinking about it?", body: "{{product}} is still in stock. Take another look." }
+  hi-Latn: { title: "Abhi bhi soch rahe hain?", body: "{{product}} abhi stock mein hai. Ek baar aur dekhiye." }
+vars: [product, url, image]
+samples: { product: "Floral Anarkali Kurta" }

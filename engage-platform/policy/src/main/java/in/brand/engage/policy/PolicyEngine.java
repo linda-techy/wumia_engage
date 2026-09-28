@@ -30,8 +30,7 @@ import java.util.Map;
  * <p>No side effects except the holdout assignment row, plus a
  * {@code config_snapshots} row when the config cache is refreshed.
  *
- * <p>Not yet enforced: template cooldowns, which need the template registry
- * (P3-T03); {@code HIGHER_PRIORITY_ACTIVE} (P5).
+ * <p>Not yet enforced: {@code HIGHER_PRIORITY_ACTIVE} (P5).
  */
 @Singleton
 public class PolicyEngine {
@@ -40,17 +39,20 @@ public class PolicyEngine {
     private final ConfigResolver config;
     private final KillSwitch killSwitch;
     private final Templates templates;
+    private final TemplateCooldowns cooldowns;
     private final SubjectLoader subjects;
     private final Usage usage;
     private final Holdouts holdouts;
     private final Clock clock;
 
     public PolicyEngine(Db db, ConfigResolver config, KillSwitch killSwitch, Templates templates,
-                        SubjectLoader subjects, Usage usage, Holdouts holdouts, Clock clock) {
+                        TemplateCooldowns cooldowns, SubjectLoader subjects, Usage usage, Holdouts holdouts,
+                        Clock clock) {
         this.db = db;
         this.config = config;
         this.killSwitch = killSwitch;
         this.templates = templates;
+        this.cooldowns = cooldowns;
         this.subjects = subjects;
         this.usage = usage;
         this.holdouts = holdouts;
@@ -130,7 +132,10 @@ public class PolicyEngine {
                 return out.block(BlockReason.FREQUENCY_CAP, Map.of("cap", cap.key(), "max", cap.max(), "used", used));
         }
 
-        // 8. Per-template cooldown: P3-T03 (the template registry carries it).
+        // 8. Per-template cooldown, authored with the copy (templates/*.yaml).
+        var cooldown = cooldowns.cooldown(template.key()).orElse(null);
+        if (cooldown != null && usage.templateSentSince(c, req.identityId(), template, now.minus(cooldown)))
+            return out.block(BlockReason.TEMPLATE_COOLDOWN, Map.of("cooldown", cooldown.toString()));
 
         // 9. Budget guard. Exhaustion is temporary, so it defers to the next IST day.
         long unit = category == SERVICE ? 0

@@ -95,13 +95,18 @@ public class PolicyTestData {
 
     public void send(UUID identityId, Channel channel, Category category, String intentKey,
                      String status, Instant createdAt) {
+        send(identityId, channel, category, "fixture", intentKey, status, createdAt);
+    }
+
+    public void send(UUID identityId, Channel channel, Category category, String templateKey, String intentKey,
+                     String status, Instant createdAt) {
         db.inTx(c -> Sql.update(c, """
                 INSERT INTO sends (identity_id, channel, category, template_key, intent_key,
                                    idempotency_key, status, created_at)
-                VALUES (?, CAST(? AS channel), CAST(? AS msg_category), 'fixture', ?, ?,
+                VALUES (?, CAST(? AS channel), CAST(? AS msg_category), ?, ?, ?,
                         CAST(? AS send_status), ?)""",
-                identityId, channel.dbName(), category.dbName(), intentKey, "test:" + UUID.randomUUID(),
-                status, utc(createdAt)));
+                identityId, channel.dbName(), category.dbName(), templateKey, intentKey,
+                "test:" + UUID.randomUUID(), status, utc(createdAt)));
     }
 
     public void spend(LocalDate day, Channel channel, Category category, long paise) {

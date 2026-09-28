@@ -1,0 +1,11 @@
+# cart_recovery step 1, 45 min after the last cart change (phase-3 §4).
+# Scarcity, not discount, and only with a true stock count.
+key: push_cart_recovery_v1
+channel: push
+category: marketing
+cooldown: PT12H
+locales:
+  en:      { title: "Your {{size}} is still in your bag", body: "{{product}}: only {{left}} left in your size." }
+  hi-Latn: { title: "Aapka {{size}} abhi bhi bag mein hai", body: "{{product}}: aapke size mein sirf {{left}} bache hain." }
+vars: [size, product, left, url, image]
+samples: { size: "XXL", product: "Floral Anarkali Kurta", left: "10" }

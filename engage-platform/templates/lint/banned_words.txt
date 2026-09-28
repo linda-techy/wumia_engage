@@ -1,0 +1,20 @@
+# Promotional language that must not appear in a utility or authentication
+# template (05-campaigns.md §Templates). Meta re-classifies or rejects such a
+# template, and a rejected order-update template breaks the transactional flow.
+#
+# One Java regular expression per line, matched case-insensitively against
+# every locale's rendered title and body. Blank lines and # lines are ignored.
+\b\d{1,3}\s?%\s?(off|discount)
+%\s?off\b
+\bsale\b
+\boffers?\b
+\bdiscount(s|ed)?\b
+\bshop now\b
+\blimited time\b
+\bflat\s?(₹|rs\.?|inr)\s?\d
+\bdeal(s)?\b
+\bcoupon\b
+\bpromo(\s?code)?\b
+\bhurry\b
+\bbuy now\b
+\bchhoot\b

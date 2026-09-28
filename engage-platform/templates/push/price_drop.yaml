@@ -1,0 +1,11 @@
+# A price fell on a variant in an open cart or on a waitlist (phase-3 §4).
+# Real numbers (Paise.toRupeeString), no "sale" framing.
+key: push_price_drop_v1
+channel: push
+category: marketing
+cooldown: P1D
+locales:
+  en:      { title: "Price dropped: {{product}}", body: "Now {{new_price}}, was {{old_price}}. Same piece, lower price." }
+  hi-Latn: { title: "Price kam hua: {{product}}", body: "Ab {{new_price}}, pehle {{old_price}} tha. Wahi piece, kam price." }
+vars: [product, new_price, old_price, url, image]
+samples: { product: "Floral Anarkali Kurta", new_price: "₹12,499", old_price: "₹14,999" }

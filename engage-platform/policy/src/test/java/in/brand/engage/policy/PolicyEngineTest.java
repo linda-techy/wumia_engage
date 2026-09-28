@@ -231,6 +231,27 @@ class PolicyEngineTest {
         assertInstanceOf(Decision.Allow.class, decide(id, PUSH, PUSH_MKT));
     }
 
+    /* ------------------------------- cooldown ------------------------------- */
+
+    @Test void template_cooldown_blocks_a_repeat_of_the_same_template_inside_it() {
+        data.template(TestCooldowns.KEY, PUSH, UTILITY, "active");
+        var id = pushSubscriber();
+        data.send(id, PUSH, UTILITY, TestCooldowns.KEY, "back_in_stock", "sent", hoursAgo(5));
+
+        var block = assertBlocked(BlockReason.TEMPLATE_COOLDOWN, decide(id, PUSH, TestCooldowns.KEY));
+        assertEquals("PT6H", block.detail().get("cooldown"));
+        assertInstanceOf(Decision.Allow.class, decide(id, PUSH, PUSH_UTIL), "another template is not cooled down");
+    }
+
+    @Test void template_cooldown_ignores_older_sends_and_blocked_rows() {
+        data.template(TestCooldowns.KEY, PUSH, UTILITY, "active");
+        var id = pushSubscriber();
+        data.send(id, PUSH, UTILITY, TestCooldowns.KEY, "back_in_stock", "sent", hoursAgo(7));
+        data.send(id, PUSH, UTILITY, TestCooldowns.KEY, "back_in_stock", "blocked", hoursAgo(1));
+
+        assertInstanceOf(Decision.Allow.class, decide(id, PUSH, TestCooldowns.KEY));
+    }
+
     /* -------------------------------- budget -------------------------------- */
 
     @Test void budget_exhausted_defers_to_the_next_ist_day_and_does_not_drop() {
