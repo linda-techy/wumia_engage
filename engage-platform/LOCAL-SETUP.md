@@ -27,6 +27,9 @@ Time: about 30 minutes the first time.
 | `RAZORPAY_MODE` | `test` or `live` | Start with `test` | `test` |
 | `INGEST_PORT` | Service port | 8080 is taken on this machine | `8081` |
 | `PUBLIC_BASE_URL` | Tunnel URL | From the tunnel (§6.1); changes on every quick-tunnel restart | update in `config/local.env` |
+| `FIREBASE_SERVICE_ACCOUNT_FILE` | FCM credentials, for the worker (Phase 3) | Firebase → Project settings → Service accounts → Generate key. Keep it in `config/` (git-ignored); a relative path resolves from the repo root under `:worker:run` | `config/firebase-service-account.json` |
+| `WORKER_PORT` | Worker `/health` port (Phase 3) | Any free port | `8084` |
+| `WORKER_JOBS_ENABLED` | `false` stops the worker's scheduled jobs (event dispatch, cascade tick, sweeper) | Leave `true` | `true` |
 
 Everything else in the file (Firebase, WhatsApp, SMS) stays blank until Phases 2–4.
 
@@ -61,6 +64,8 @@ Avast Web/Mail Shield re-signs HTTPS traffic with its own root certificate. That
 ```powershell
 $env:JAVA_TOOL_OPTIONS="-Djavax.net.ssl.trustStoreType=Windows-ROOT"
 ```
+
+That is enough for Gradle. **It is not enough for sending push from this machine**: Avast also rewrites Google's compressed responses, so FCM calls fail even with the Windows trust store (seen 2026-09-29). Turn Web Shield off, or add exceptions for `fcm.googleapis.com` and `oauth2.googleapis.com`, before running the worker or `FcmSmokeTest` here.
 
 ### A tunnel (to receive real webhooks)
 

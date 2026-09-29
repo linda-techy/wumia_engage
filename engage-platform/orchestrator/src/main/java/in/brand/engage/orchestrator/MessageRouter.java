@@ -57,6 +57,11 @@ public class MessageRouter {
         }
     }
 
+    /** Channels with an adapter. */
+    public java.util.Set<Channel> channels() {
+        return java.util.Set.copyOf(adapters.keySet());
+    }
+
     public SendResult send(SendCommand cmd) {
         var existing = sends.findByKey(cmd.idempotencyKey());
         if (existing.isPresent()) return new SendResult.Duplicate(existing.get().id(), existing.get().status());

@@ -5,5 +5,5 @@ plugins {
 
 rootProject.name = "engage"
 
-// Later phases add: journeys, worker (see docs/implementation/README.md).
-include("core-domain", "core-persistence", "policy", "channels", "orchestrator", "ingest-api", "admin-api")
+// Later phases add: journeys (see docs/implementation/README.md).
+include("core-domain", "core-persistence", "policy", "channels", "orchestrator", "ingest-api", "admin-api", "worker")

@@ -1,0 +1,12 @@
+# build.gradle.kts points DB_NAME at TEST_DB_NAME. Tests migrate it; the worker itself never does.
+flyway:
+  enabled: true
+  datasources:
+    default:
+      enabled: true
+      locations: classpath:db/migration
+
+engage:
+  worker:
+    # Tests drive dispatch and the tick by hand; scheduled jobs would race them.
+    jobs-enabled: false

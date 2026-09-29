@@ -60,5 +60,27 @@ services:
       ingest:
         condition: service_started
 
+  worker:
+    image: wumika/worker:dev
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      WORKER_PORT: "8084"
+      # Mounted read-only below. The file is mode 400, owned by uid 10001 (the
+      # image's user). A missing file stops the worker at boot, not at the first push.
+      FIREBASE_SERVICE_ACCOUNT_FILE: /secrets/firebase-service-account.json
+    volumes:
+      - ./secrets:/secrets:ro
+    # No published port: /health is for the container runtime, and nothing
+    # outside needs to reach the worker.
+    depends_on:
+      db:
+        condition: service_healthy
+      # Restarts until ingest has applied the migrations it expects (V8).
+      ingest:
+        condition: service_started
+
 volumes:
   pgdata:

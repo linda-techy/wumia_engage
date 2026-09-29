@@ -288,7 +288,17 @@ A crash between 1 and 3 leaves a `queued` row. A sweeper marks `queued` rows old
 
 ---
 
-### ☐ P3-T06 — `worker` app + `EventDispatcher`
+### ☑ P3-T06 — `worker` app + `EventDispatcher`
+
+> **Done 2026-09-29.** `EventDispatcherTest` (4): 60 events inserted by three concurrent transactions, interleaved so the first takes the lowest ids and commits last, with two dispatchers racing throughout: each event reached its consumer exactly once. With `FOR UPDATE SKIP LOCKED` removed the same test fails (an event handled twice). `./gradlew build` 192 tests (1 skipped: the FCM smoke test). Boot checks: the worker starts against a V8 database with the real Firebase client (`worker ready: channels [PUSH]`, 4 templates, `/health` UP); with a missing `FIREBASE_SERVICE_ACCOUNT_FILE` it exits at boot naming the variable; against a database without V8 it exits at boot (`ConfigResolver`).
+>
+> Where the build differs from the text below:
+> - **Consumers return intents; they do not call `dispatch()`.** `dispatch()` commits its own transactions and calls the provider at once, so a claim transaction that rolled back afterwards would reclaim the event and re-send a single-step run that had already finished (the live-run dedupe only covers live runs). Instead `EventConsumer.handle(Connection, Event)` returns `MessageIntent`s; the dispatcher creates their runs with `DefaultOrchestrator.enqueue(c, intent)` on the claim's connection, so event, consumer writes and runs commit together, exactly once; steps run with `runIfDue` only after the commit.
+> - **One savepoint per event**, not one transaction per batch: a throwing consumer rolls back only its event, the rest of the batch commits. After 5 failures the event is marked dispatched without consumers and logged at ERROR.
+> - **Scheduled jobs** (`WorkerJobs`, `QueuedSweeper`): event dispatch every 1 s (drains full batches), the cascade `tick` every 5 s, the sweeper every minute. `WORKER_JOBS_ENABLED=false` turns them off; tests drive them by hand.
+> - **`WorkerStartup`** builds the router, and so every channel adapter, at boot; that is what makes a bad credentials file fail the start rather than the first push.
+> - **Deploy:** `deploy/docker-compose.yml` has a `worker` service with `./secrets:/secrets:ro` and `FIREBASE_SERVICE_ACCOUNT_FILE=/secrets/firebase-service-account.json`, no published port; `.github/workflows/deploy-dev.yml` builds and ships `wumika/worker`. **Merging to `dev` starts the worker on the dev server.** With no consumers until P3-T07 it only marks new events dispatched; events it marks are not replayed when T07's consumers arrive.
+> - On Windows, `bin/worker.bat` fails ("The input line is too long"); run `./gradlew :worker:run` or `java -cp "worker/build/install/worker/lib/*" in.brand.engage.worker.Application`. The Docker image uses the Unix script.
 
 **Files**
 ```

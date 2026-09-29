@@ -40,10 +40,10 @@ jobs:
 
       - name: Build images
         run: |
-          for m in ingest-api admin-api; do
+          for m in ingest-api admin-api worker; do
             docker build --build-arg MODULE=$m -t wumika/$m:dev -t wumika/$m:${GITHUB_SHA::7} .
           done
-          docker save wumika/ingest-api:dev wumika/admin-api:dev | gzip > images.tar.gz
+          docker save wumika/ingest-api:dev wumika/admin-api:dev wumika/worker:dev | gzip > images.tar.gz
 
       - name: SSH key
         run: |

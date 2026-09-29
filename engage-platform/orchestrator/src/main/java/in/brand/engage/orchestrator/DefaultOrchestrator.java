@@ -48,33 +48,45 @@ public class DefaultOrchestrator implements MessageOrchestrator {
 
     @Override
     public CascadeRun dispatch(MessageIntent intent) {
-        var def = definitions.find(intent.intentKey())
-                .orElseThrow(() -> new IllegalArgumentException("no cascade definition for intent " + intent.intentKey()));
-        var now = clock.instant();
-        var due = intent.notBefore() == null || !intent.notBefore().isAfter(now) ? now : intent.notBefore();
-
-        var created = db.inTx(c -> {
-            try (var ps = Sql.prepare(c, """
-                    INSERT INTO cascade_runs (intent_key, identity_id, subject_key, priority, vars, next_step_at)
-                    VALUES (?, ?, ?, ?, jsonb_object(CAST(? AS text[]), CAST(? AS text[])), ?)
-                    ON CONFLICT (intent_key, subject_key) WHERE status IN ('active','waiting') DO NOTHING
-                    RETURNING *""",
-                    intent.intentKey(), intent.identityId(), intent.subjectKey(), def.priority().level(),
-                    intent.vars().keySet().toArray(String[]::new),
-                    intent.vars().keySet().stream().map(intent.vars()::get).toArray(String[]::new),
-                    utc(due));
-                 var rs = ps.executeQuery()) {
-                return rs.next() ? Optional.of(run(rs)) : Optional.<CascadeRun>empty();
-            }
-        });
+        var created = db.inTx(c -> enqueue(c, intent));
         if (created.isEmpty()) {
             // One live run per intent and subject: the dedupe guarantee.
             return live(intent.intentKey(), intent.subjectKey()).orElseThrow(() ->
                     new IllegalStateException("live run for " + intent.intentKey() + "/" + intent.subjectKey() + " vanished"));
         }
-        var run = created.get();
-        if (due.isAfter(now)) return run;
-        return claim(run.id()).map(this::runStep).orElse(run);
+        return runIfDue(created.get().id()).orElse(created.get());
+    }
+
+    /**
+     * Creates the run on the caller's connection, inside the caller's
+     * transaction, and sends nothing. The event dispatcher uses this so an
+     * event and the runs it starts commit together, exactly once; it then
+     * calls {@link #runIfDue} after the commit.
+     *
+     * @return the new run, or empty if a live run for this intent and subject exists
+     */
+    public Optional<CascadeRun> enqueue(Connection c, MessageIntent intent) throws SQLException {
+        var def = definitions.find(intent.intentKey())
+                .orElseThrow(() -> new IllegalArgumentException("no cascade definition for intent " + intent.intentKey()));
+        var now = clock.instant();
+        var due = intent.notBefore() == null || !intent.notBefore().isAfter(now) ? now : intent.notBefore();
+        try (var ps = Sql.prepare(c, """
+                INSERT INTO cascade_runs (intent_key, identity_id, subject_key, priority, vars, next_step_at)
+                VALUES (?, ?, ?, ?, jsonb_object(CAST(? AS text[]), CAST(? AS text[])), ?)
+                ON CONFLICT (intent_key, subject_key) WHERE status IN ('active','waiting') DO NOTHING
+                RETURNING *""",
+                intent.intentKey(), intent.identityId(), intent.subjectKey(), def.priority().level(),
+                intent.vars().keySet().toArray(String[]::new),
+                intent.vars().keySet().stream().map(intent.vars()::get).toArray(String[]::new),
+                utc(due));
+             var rs = ps.executeQuery()) {
+            return rs.next() ? Optional.of(run(rs)) : Optional.empty();
+        }
+    }
+
+    /** Runs the run's current step if it is due and nobody else holds it. @return the run afterwards, if it ran */
+    public Optional<CascadeRun> runIfDue(long runId) {
+        return claim(runId).map(this::runStep);
     }
 
     /** Runs every step that has come due. The worker calls this on a schedule (P3-T06). @return steps run */

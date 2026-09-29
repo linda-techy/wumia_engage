@@ -1,0 +1,30 @@
+# Values come from environment variables, loaded from config/local.env by Gradle.
+micronaut:
+  application:
+    name: engage-worker
+  server:
+    # /health only; nothing else is served.
+    port: ${WORKER_PORT:8084}
+
+datasources:
+  default:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:wumika_admin}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:}
+    driver-class-name: org.postgresql.Driver
+    maximum-pool-size: 10
+
+# Flyway never runs here: ingest-api owns migrations.
+flyway:
+  enabled: false
+
+engage:
+  worker:
+    # false stops every scheduled job (event dispatch, cascade tick, sweeper).
+    jobs-enabled: ${WORKER_JOBS_ENABLED:true}
+
+endpoints:
+  health:
+    enabled: true
+    sensitive: false
+    details-visible: NEVER
