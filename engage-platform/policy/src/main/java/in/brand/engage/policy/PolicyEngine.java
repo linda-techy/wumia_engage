@@ -161,7 +161,7 @@ public class PolicyEngine {
                 && inControl(c, req, Holdouts.GLOBAL, snapshot.decimalValue("holdout.global_pct", "*")))
             return out.block(BlockReason.HOLDOUT_GLOBAL);
 
-        return new Decision.Allow(template, category, unit, freeWindow, addresses, snapshot.id());
+        return new Decision.Allow(template, category, unit, freeWindow, addresses, subject.locale(), snapshot.id());
     }
 
     private static Decision reachability(Channel channel, Subject subject, Addresses addresses, Instant now, Out out) {

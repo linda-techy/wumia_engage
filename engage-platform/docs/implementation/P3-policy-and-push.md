@@ -241,7 +241,20 @@ channels/src/main/java/in/brand/engage/channels/push/FcmTokenPruner.java
 
 ---
 
-### ☐ P3-T05 — Router and orchestrator
+### ☑ P3-T05 — Router and orchestrator
+
+> **Done 2026-09-29.** `MessageRouterTest` (12) and `DefaultOrchestratorTest` (9) pass against Postgres with a fake push adapter; `./gradlew build` 188 tests (1 skipped: the FCM smoke test). After the suite, `SELECT status, count(*) FROM sends GROUP BY 1` on `wumika_admin_test` showed blocked 6, deferred 9, queued 2 (the sweeper test's in-flight row, one per run), sent 20, failed 15 (including `lost_in_flight`), clicked 1 (a policy fixture). Mutation check: a deferral taking the real key, and suppressing on every permanent failure, each failed their tests. The one-live-run guarantee is V4's partial unique index; 8 concurrent dispatches return one run.
+>
+> Where the build differs from the text below:
+> - **`DefaultOrchestrator.tick(limit)`** runs steps that came due later: deferrals and delayed intents. Without it a quiet-hours deferral in P3 would never be retried (invariant 5). P3-T06 schedules it next to the sweeper. Steps are claimed with a 5-minute lease so `dispatch` and `tick` never run one twice; the per-step key `run:<id>:step:<n>` backs that up.
+> - **Deferral cap:** a step is rescheduled at most 3 times; the 4th `Defer` skips it (`deferred_limit:<reason>`).
+> - **Run outcomes** in P3 (single step): sent → `exhausted/sent`; blocked → `exhausted/blocked:<reason>`; failed → `failed/failed:<code>`, not retried (retry with backoff is the P4-T06 runner). T08's `onSignal(CLICKED)` should move `exhausted/sent` to `succeeded`.
+> - **A suppression is added only when `ChannelException.Permanent.suppress()` is true** (the provider blamed the recipient), not on every permanent failure: an oversized payload or a render bug must never suppress a customer. Render failures and a template missing from the registry fail the send without calling the provider.
+> - **`MessageIntent.vars` is `Map<String,String>`** (rendered text), not `Map<String,Object>`; it round-trips through `cascade_runs.vars` with `jsonb_object` / `jsonb_each_text`, so no JSON library is needed.
+> - **`Priority`** has the four phase-5 §5 levels (matches `cascade_runs.priority` 1–4), not CLAUDE.md §3.1's three.
+> - **One live run per (intent, subject) across all people** (V4 index). A subject shared by many people must include the identity: T07's `back_in_stock` uses `<variantId>:<identityId>`, or the second waitlisted shopper is deduped away.
+> - `sends.created_at` comes from the injected clock, like the policy's cap windows; `Decision.Allow` now carries the person's `locale` so the router renders Hinglish where set.
+> - The sweeper is `SendRepository.sweepLostInFlight()`; T06's `QueuedSweeper` schedules it.
 
 **Files**
 ```

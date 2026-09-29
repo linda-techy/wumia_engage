@@ -8,6 +8,7 @@ java { toolchain { languageVersion = JavaLanguageVersion.of(25) } }
 
 dependencies {
     api(project(":policy"))
+    api(project(":channels"))
     implementation("org.slf4j:slf4j-api")
     implementation("org.yaml:snakeyaml")                  // templates/*.yaml
 

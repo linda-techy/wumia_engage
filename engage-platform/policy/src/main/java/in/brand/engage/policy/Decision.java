@@ -17,9 +17,10 @@ public sealed interface Decision {
     /**
      * @param unitCostPaise what one send is expected to cost (0 for push and email)
      * @param freeWindow    WhatsApp: the person messaged us within 24 h
+     * @param locale        the person's preferred copy locale ({@code profiles.attrs.locale}); null = default
      */
     record Allow(Template template, Category effectiveCategory, long unitCostPaise,
-                 boolean freeWindow, Addresses addresses, long configSnapshotId) implements Decision {}
+                 boolean freeWindow, Addresses addresses, String locale, long configSnapshotId) implements Decision {}
 
     /** {@code detail} goes into {@code sends.decision}: no PII, no secrets. */
     record Block(BlockReason reason, Map<String, Object> detail, long configSnapshotId) implements Decision {}
