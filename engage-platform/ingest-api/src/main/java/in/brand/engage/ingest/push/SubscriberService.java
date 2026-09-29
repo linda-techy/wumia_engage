@@ -179,9 +179,16 @@ public class SubscriberService {
         return db.inTx(c -> {
             if (!mayStore(c, ctx)) return Outcome.FILTERED;
             var identityId = identities.resolve(c, sessionKeys(ctx, r.anonId()));
+            // Asking again after an alert re-arms it (the variant sold out again), at
+            // the back of the queue. Asking again while still waiting changes
+            // nothing: the shopper keeps their place.
             Sql.update(c, """
                     INSERT INTO stock_waitlist (identity_id, variant_id, product_handle, size_label)
-                    VALUES (?, ?, ?, ?) ON CONFLICT (identity_id, variant_id) DO NOTHING""",
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT (identity_id, variant_id) DO UPDATE
+                       SET notified_at = NULL, created_at = now(),
+                           product_handle = EXCLUDED.product_handle, size_label = EXCLUDED.size_label
+                     WHERE stock_waitlist.notified_at IS NOT NULL""",
                     identityId, r.variantId(), r.productHandle(), r.sizeLabel());
             return Outcome.STORED;
         });

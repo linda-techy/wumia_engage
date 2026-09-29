@@ -271,4 +271,25 @@ class StorefrontSubscriberTest {
         assertEquals("M", one("SELECT size_label FROM stock_waitlist WHERE identity_id = ? AND variant_id = '4455'",
                 allowlistedIdentity));
     }
+
+    @Test
+    void asking_again_after_an_alert_re_arms_it_and_asking_while_waiting_keeps_the_place() throws SQLException {
+        var body = Map.<String, Object>of("anonId", anon(), "variantId", "4456", "productHandle", "linen-shirt", "sizeLabel", "M");
+        assertEquals(200, post(signedUri("/notify-me", ALLOWLISTED_CUSTOMER), body));
+        var joined = one("SELECT created_at FROM stock_waitlist WHERE identity_id = ? AND variant_id = '4456'", allowlistedIdentity);
+
+        assertEquals(200, post(signedUri("/notify-me", ALLOWLISTED_CUSTOMER), body));      // still waiting
+        assertEquals(joined, one("SELECT created_at FROM stock_waitlist WHERE identity_id = ? AND variant_id = '4456'",
+                allowlistedIdentity), "a repeat tap must not move the shopper to the back of the queue");
+
+        try (Connection c = dataSource.getConnection(); var ps = c.prepareStatement(
+                "UPDATE stock_waitlist SET notified_at = now() WHERE identity_id = ? AND variant_id = '4456'")) {
+            ps.setObject(1, allowlistedIdentity);
+            ps.executeUpdate();                                                              // the restock alert went out
+        }
+        assertEquals(200, post(signedUri("/notify-me", ALLOWLISTED_CUSTOMER), body));      // sold out again, asks again
+
+        assertNull(one("SELECT notified_at FROM stock_waitlist WHERE identity_id = ? AND variant_id = '4456'",
+                allowlistedIdentity), "the next restock must reach them again");
+    }
 }
