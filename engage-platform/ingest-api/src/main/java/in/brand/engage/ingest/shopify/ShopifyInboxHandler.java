@@ -16,10 +16,13 @@ import jakarta.inject.Singleton;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Applies Shopify webhooks to the identity graph, checkouts, orders, carts and
@@ -29,18 +32,22 @@ import java.util.UUID;
 @Singleton
 public class ShopifyInboxHandler implements InboxHandler {
 
+    private static final Logger LOG = LoggerFactory.getLogger(ShopifyInboxHandler.class);
+
     private final IdentityResolver identities;
     private final ConsentWriter consents;
     private final EventWriter events;
     private final InventoryHandler inventory;
+    private final PriceHandler prices;
     private final int matchWindowMinutes;
 
     public ShopifyInboxHandler(IdentityResolver identities, ConsentWriter consents, EventWriter events,
-                               InventoryHandler inventory, EngageProperties.Razorpay razorpay) {
+                               InventoryHandler inventory, PriceHandler prices, EngageProperties.Razorpay razorpay) {
         this.identities = identities;
         this.consents = consents;
         this.events = events;
         this.inventory = inventory;
+        this.prices = prices;
         this.matchWindowMinutes = razorpay.matchWindowMinutes() > 0 ? razorpay.matchWindowMinutes() : 30;
     }
 
@@ -58,10 +65,15 @@ public class ShopifyInboxHandler implements InboxHandler {
     public void handle(Connection c, InboxRepository.Item item) throws SQLException {
         switch (item.topic()) {
             case "checkouts/create", "checkouts/update" -> checkout(c, item);
-            case "orders/create" -> order(c, item);
+            case "orders/create" -> order(c, item, true);
+            case "orders/cancelled" -> orderCancelled(c, item);
+            case "orders/paid" -> orderPaid(c, item);
+            case "refunds/create" -> refund(c, item);
             case "carts/create", "carts/update" -> cart(c, item);
             case "customers/create", "customers/update" -> customer(c, item);
             case "inventory_levels/update" -> inventory.handle(c, item);
+            case "products/update" -> prices.handle(c, item);
+            case "app/uninstalled" -> uninstalled(c, item);
             default -> { /* acknowledged; other topics are consumed in later phases */ }
         }
     }
@@ -163,10 +175,19 @@ public class ShopifyInboxHandler implements InboxHandler {
 
     /* ------------------------------ orders ------------------------------ */
 
-    private void order(Connection c, InboxRepository.Item item) throws SQLException {
+    /** What the cancelled/paid handlers need from an order payload they have just upserted. */
+    private record OrderRef(String orderId, UUID identityId, String cartToken, String checkoutToken,
+                            OffsetDateTime cancelledAt, String cancelReason, String financialStatus) {}
+
+    /**
+     * Upserts the order from any order-shaped payload. orders/cancelled and
+     * orders/paid can arrive before orders/create, so they upsert it too; only
+     * orders/create ({@code placed}) emits {@code order_placed}.
+     */
+    private OrderRef order(Connection c, InboxRepository.Item item, boolean placed) throws SQLException {
         try (var ps = Sql.prepare(c, SqlFiles.get("shopify_order.sql"), item.deliveryId());
              var rs = ps.executeQuery()) {
-            if (!rs.next()) return;
+            if (!rs.next()) return null;
             var orderId = rs.getString("order_id");
             var cartToken = CartTokens.normalise(rs.getString("cart_token"));
             var checkoutToken = rs.getString("checkout_token");
@@ -185,14 +206,17 @@ public class ShopifyInboxHandler implements InboxHandler {
             keys.add(Key.session("cart_token", cartToken));
             UUID identityId = identities.resolve(c, keys);
 
+            // refunded_paise: refunds/create can beat the order; fold in any already recorded.
             Sql.update(c, """
                     INSERT INTO orders (id, order_number, identity_id, cart_token, checkout_token, phone, phone_source,
-                                        email, total_paise, financial_status, gateway_names, note_attributes, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?)
+                                        email, total_paise, financial_status, gateway_names, note_attributes, created_at,
+                                        refunded_paise)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?,
+                            COALESCE((SELECT sum(amount_paise) FROM order_refunds WHERE order_id = ?), 0))
                     ON CONFLICT (id) DO NOTHING""",
                     orderId, rs.getString("order_number"), identityId, cartToken, checkoutToken, phone.value(),
                     phone.source(), email, total.value(), rs.getString("financial_status"),
-                    textArray(rs, "gateway_names"), noteAttributes, createdAt);
+                    textArray(rs, "gateway_names"), noteAttributes, createdAt, orderId);
 
             if (checkoutToken != null) {
                 Sql.update(c, """
@@ -226,11 +250,80 @@ public class ShopifyInboxHandler implements InboxHandler {
                 consents.syncShopifyEmailConsent(c, identityId, rs.getString("email_consent_state"),
                         "order:" + orderId, Sql.timestamp(rs, "email_consent_at"));
             }
-            events.write(c, identityId, "order_placed", "shopify", "shopify:" + item.deliveryId(),
-                    Map.of("order_id", orderId, "total_paise", total.value(),
-                           "cart_token", cartToken == null ? "" : cartToken,
-                           "checkout_token", checkoutToken == null ? "" : checkoutToken));
+            if (placed) {
+                events.write(c, identityId, "order_placed", "shopify", "shopify:" + item.deliveryId(),
+                        Map.of("order_id", orderId, "total_paise", total.value(),
+                               "cart_token", cartToken == null ? "" : cartToken,
+                               "checkout_token", checkoutToken == null ? "" : checkoutToken));
+            }
+            return new OrderRef(orderId, identityId, cartToken, checkoutToken, Sql.timestamp(rs, "cancelled_at"),
+                    rs.getString("cancel_reason"), rs.getString("financial_status"));
         }
+    }
+
+    /** orders/cancelled: cancellation is sticky, and emits order_cancelled once per order. */
+    private void orderCancelled(Connection c, InboxRepository.Item item) throws SQLException {
+        var o = order(c, item, false);
+        if (o == null || o.cancelledAt() == null) return;
+        Sql.update(c, """
+                UPDATE orders SET cancelled_at = COALESCE(cancelled_at, ?), cancel_reason = COALESCE(cancel_reason, ?),
+                                  financial_status = COALESCE(?, financial_status)
+                 WHERE id = ?""", o.cancelledAt(), o.cancelReason(), o.financialStatus(), o.orderId());
+        // Keyed on the order, not the delivery: a re-sent cancellation is one event.
+        events.write(c, o.identityId(), "order_cancelled", "shopify", "cancelled:" + o.orderId(),
+                Map.of("order_id", o.orderId(), "reason", o.cancelReason() == null ? "" : o.cancelReason(),
+                       "cart_token", o.cartToken() == null ? "" : o.cartToken(),
+                       "checkout_token", o.checkoutToken() == null ? "" : o.checkoutToken()));
+    }
+
+    /** orders/paid: records the financial status; never un-does a cancellation. */
+    private void orderPaid(Connection c, InboxRepository.Item item) throws SQLException {
+        var o = order(c, item, false);
+        if (o == null || o.financialStatus() == null) return;
+        Sql.update(c, "UPDATE orders SET financial_status = ? WHERE id = ? AND cancelled_at IS NULL",
+                o.financialStatus(), o.orderId());
+    }
+
+    /**
+     * refunds/create: recorded once per refund id; orders.refunded_paise is the
+     * sum for the order. A refund before its order is folded in when the order lands.
+     */
+    private void refund(Connection c, InboxRepository.Item item) throws SQLException {
+        try (var ps = Sql.prepare(c, SqlFiles.get("shopify_refund.sql"), item.deliveryId());
+             var rs = ps.executeQuery()) {
+            if (!rs.next()) return;
+            var refundId = rs.getString("refund_id");
+            var orderId = rs.getString("order_id");
+            if (refundId == null || orderId == null) return;
+            long amount = 0;
+            for (var a : (String[]) rs.getArray("amounts").getArray()) amount += Paise.ofRupees(a).value();
+
+            int inserted = Sql.update(c, """
+                    INSERT INTO order_refunds (refund_id, order_id, amount_paise, created_at) VALUES (?, ?, ?, ?)
+                    ON CONFLICT (refund_id) DO NOTHING""", refundId, orderId, amount, Sql.timestamp(rs, "created_at"));
+            if (inserted == 0) return;                                  // a replay: counted already
+            Sql.update(c, """
+                    UPDATE orders SET refunded_paise = (SELECT COALESCE(sum(amount_paise), 0) FROM order_refunds
+                                                         WHERE order_id = ?)
+                     WHERE id = ?""", orderId, orderId);
+            UUID identityId = null;
+            try (var q = Sql.prepare(c, "SELECT identity_id FROM orders WHERE id = ?", orderId);
+                 var r = q.executeQuery()) {
+                if (r.next()) identityId = r.getObject(1, UUID.class);
+            }
+            events.write(c, identityId, "refund_initiated", "shopify", "refund:" + refundId,
+                    Map.of("order_id", orderId, "refund_id", refundId, "amount_paise", amount));
+        }
+    }
+
+    /**
+     * app/uninstalled: nothing more will arrive from this shop. Logged at ERROR
+     * (alert on it) and recorded as an event; there is no data to change.
+     */
+    private void uninstalled(Connection c, InboxRepository.Item item) throws SQLException {
+        LOG.error("Shopify app uninstalled (delivery {}): no more webhooks will arrive until it is reinstalled",
+                item.deliveryId());
+        events.write(c, null, "app_uninstalled", "shopify", "shopify:" + item.deliveryId(), Map.of());
     }
 
     /* ------------------------------- carts ------------------------------ */

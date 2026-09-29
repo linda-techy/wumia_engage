@@ -1,0 +1,14 @@
+{
+  "id": 910000000123,
+  "order_id": 6012345678901,
+  "created_at": "2026-09-20T10:15:00+05:30",
+  "note": "Size exchange refused",
+  "restock": true,
+  "transactions": [
+    { "id": 1, "kind": "refund", "status": "success", "amount": "499.00", "currency": "INR" },
+    { "id": 2, "kind": "refund", "status": "failure", "amount": "100.00", "currency": "INR" }
+  ],
+  "refund_line_items": [
+    { "line_item_id": 1, "quantity": 1, "subtotal": "499.00" }
+  ]
+}
