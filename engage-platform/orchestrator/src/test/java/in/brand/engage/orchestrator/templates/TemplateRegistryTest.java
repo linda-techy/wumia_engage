@@ -48,7 +48,8 @@ class TemplateRegistryTest {
 
     @Test void policy_gets_its_cooldowns_from_the_registry() {
         assertSame(registry, cooldowns, "TemplateCooldowns.None must give way to the registry");
-        assertEquals(Optional.of(Duration.ofHours(6)), cooldowns.cooldown("push_back_in_stock_v1"));
+        assertEquals(Optional.of(Duration.ofDays(1)), cooldowns.cooldown("push_price_drop_v1"));
+        assertEquals(Optional.empty(), cooldowns.cooldown("push_back_in_stock_v1"), "the waitlist dedupes back-in-stock");
         assertEquals(Optional.empty(), cooldowns.cooldown("no_such_template"));
     }
 

@@ -3,7 +3,9 @@
 key: push_back_in_stock_nosize_v1
 channel: push
 category: utility          # the shopper asked for it
-cooldown: PT6H
+# No cooldown: the waitlist is the dedupe (each entry alerts once, and only
+# re-arms when the shopper asks again). A per-template cooldown would hide a
+# restock of a DIFFERENT item the shopper is also waiting for.
 locales:
   en:      { title: "Back in stock: {{product}}", body: "Only a few pieces in this restock." }
   hi-Latn: { title: "Wapas stock mein: {{product}}", body: "Is restock mein kam pieces hain." }
