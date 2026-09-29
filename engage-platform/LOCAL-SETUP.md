@@ -23,7 +23,7 @@ Time: about 30 minutes the first time.
 | `SHOPIFY_SHOP_DOMAIN` | Your store | The myshopify domain, not the custom domain `www.wumika.com` | `e4bac4-ef.myshopify.com` |
 | `SHOPIFY_API_SECRET` | App **Client secret** | Dev Dashboard → your app → Settings | already in `config/local.env` |
 | `SHOPIFY_CLIENT_ID` | App **Client ID** | Same page (needed from Phase 2) | already in `config/local.env` |
-| `SHOPIFY_ADMIN_TOKEN` | Admin API token with `read_inventory` and `read_products` (P1-T03: inventory item → variant) | The app's Admin API access token for the store it is installed on. Blank = inventory webhooks wait in the inbox and retry | set in `config/local.env` |
+| `SHOPIFY_ADMIN_TOKEN` | Optional Admin API token (P1-T03: inventory item → variant) | Leave blank: ingest-api exchanges the Client ID and secret for a 24 h token itself (client credentials grant; app and store in the same Dev Dashboard organization). The app needs `read_inventory` and `read_products` approved on the store | blank |
 | `SHOPIFY_ADMIN_API_VERSION` | Admin API version | Same as the app's webhook `api_version` | `2026-07` |
 | `RAZORPAY_WEBHOOK_SECRET` | Webhook secret | **You invent it** and type the same value into Razorpay (§6.2) | already in `config/local.env` |
 | `RAZORPAY_MODE` | `test` or `live` | Start with `test` | `test` |
