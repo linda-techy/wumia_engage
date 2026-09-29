@@ -17,10 +17,11 @@ import java.util.Objects;
  * @param tag         optional collapse key, e.g. {@code restock:<variantId>}; defaults to {@code kind}
  * @param ttl         how long the provider may hold it for an offline device
  * @param highUrgency push: Web Push {@code Urgency: high} and Android high priority
+ * @param beaconSig   push: signature of {@code sendId}, echoed back by the click beacon (null = none)
  */
 public record RenderedMessage(Channel channel, String templateKey, long sendId, String kind,
                               String title, String body, String url, String image, String tag,
-                              Duration ttl, boolean highUrgency) {
+                              Duration ttl, boolean highUrgency, String beaconSig) {
 
     public RenderedMessage {
         Objects.requireNonNull(channel, "channel");
@@ -42,6 +43,7 @@ public record RenderedMessage(Channel channel, String templateKey, long sendId, 
         data.put("url", url);
         if (image != null) data.put("image", image);
         data.put("tag", tag != null ? tag : kind);
+        if (beaconSig != null) data.put("sig", beaconSig);
         return data;
     }
 }

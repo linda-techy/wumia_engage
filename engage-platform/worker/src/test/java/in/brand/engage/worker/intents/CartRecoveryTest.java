@@ -64,8 +64,24 @@ class CartRecoveryTest {
         assertEquals("sent|push_cart_recovery_v1", send);
         assertEquals("exhausted|sent", run(cart));
         assertEquals("Still in your bag: Linen Kurta", push.last.title(), "the ₹1,700 kurta, not the ₹799 dupatta");
-        assertTrue(push.last.url().endsWith("/cart"), push.last.url());
+        assertTrue(push.last.url().contains("/cart?utm_source=engage&utm_medium=push&utm_campaign=cart_recovery"),
+                push.last.url());
         assertEquals(java.time.Duration.ofHours(12), push.last.ttl());
+    }
+
+    @Test void a_click_on_the_push_marks_the_cascade_succeeded() {
+        var id = subscriber(true);
+        var cart = cart(id, 1, false);
+        cartUpdated(id, cart, clock.instant().minus(Duration.ofMinutes(50)));
+        dispatcher.dispatchOnce();
+        assertEquals("exhausted|sent", run(cart));
+
+        // As ingest-api writes it when the service worker's signed click beacon arrives.
+        long runId = count("SELECT id FROM cascade_runs WHERE subject_key = ? ORDER BY id DESC LIMIT 1", cart);
+        event(id, "push_clicked", "{\"send_id\":1,\"cascade_run_id\":" + runId + "}", clock.instant());
+        dispatcher.dispatchOnce();
+
+        assertEquals("succeeded|clicked", run(cart));
     }
 
     @Test void a_recent_change_waits_45_minutes_and_the_tick_sends_it() {

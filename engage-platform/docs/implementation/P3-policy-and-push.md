@@ -350,7 +350,16 @@ Per phase-3 §4. Each is a `EventConsumer` that builds a `MessageIntent`. None c
 
 ---
 
-### ☐ P3-T08 — Beacons, attribution, ArchUnit
+### ☑ P3-T08 — Beacons, attribution, ArchUnit
+
+> **Done 2026-09-29.** Done-when check: with a `FcmAdapter` field added to `CartRecovery` (a journey class), `ArchitectureTest` fails on `only_the_router_reaches_channels` and `only_the_router_holds_channel_adapters`, naming the field; with it removed, all 5 rules pass. `./gradlew build` 220 tests (1 skipped: the FCM smoke test).
+>
+> Where the build differs from the text below:
+> - **Beacons are signed.** Send ids are sequential, so an unsigned click beacon would let anyone mark other people's pushes clicked and end their cascades. The router puts `sig` = HMAC of the send id into every push (`core-domain` `BeaconSignature`, keyed from `SHOPIFY_API_SECRET`, which ingest-api and the worker both already have: nothing new to provision). The service worker echoes it; ingest-api records only beacons whose signature matches, and answers 204 either way. The worker now needs `SHOPIFY_API_SECRET` to start.
+> - **ingest-api does not call the orchestrator.** A signed click sets `sends.clicked_at` (first click only) and `status = clicked`, and writes a `push_clicked` event; the worker's `PushClicks` consumer turns it into `DefaultOrchestrator.onSignal(runId, "clicked")`, which marks the run `succeeded` (also a single-step run that already finished). An impression sets `delivered_at` and `status = delivered`.
+> - **`devices.last_clicked_at` is not set:** a multicast sends one payload to all of a person's devices, so the beacon cannot say which device was clicked. The 180-day dormant rule (phase-2 §9) therefore relies on refreshes alone.
+> - **ArchUnit rules** (`worker` `ArchitectureTest`): only orchestrator and channels touch `channels`; only `MessageRouter` references a `ChannelAdapter` (Micronaut's generated bean definitions excepted); `channels` never depends on policy, orchestrator or worker; policy never depends on orchestrator, channels or worker; `worker.intents` never touches `MessageRouter` or `SendRepository`. `ingest-api`'s own `IngestArchitectureTest` forbids channels, orchestrator and worker. ArchUnit reads bytecode: an unused import is invisible to it, a reference is not.
+> - UTMs are applied by the router (`Utm`), keeping an existing query string and putting the fragment last. The `sw.js` change reaches browsers when ingest-api is deployed (served `no-cache`).
 
 - `/engagement` (P2-T01) now sets `sends.clicked_at` (first click only) and `devices.last_clicked_at`, and calls `orchestrator.onSignal(identityId, subjectKey, CLICKED)`.
 - Every push URL gets `utm_source=engage&utm_medium=push&utm_campaign=<intent>&utm_content=<sid>` in the renderer, not in templates.

@@ -3,6 +3,7 @@ package in.brand.engage.ingest.web;
 import in.brand.engage.core.shopify.AppProxyVerifier;
 import in.brand.engage.core.shopify.AppProxyVerifier.ProxyContext;
 import in.brand.engage.core.shopify.AppProxyVerifier.ProxySignatureException;
+import in.brand.engage.ingest.push.PushEngagement;
 import in.brand.engage.ingest.push.RateLimiter;
 import in.brand.engage.ingest.push.StorefrontRequests.BadRequest;
 import in.brand.engage.ingest.push.StorefrontRequests.Cart;
@@ -58,13 +59,16 @@ public class StorefrontProxyController {
     private final AppProxyVerifier verifier;
     private final SubscriberService subscribers;
     private final RateLimiter limiter;
+    private final PushEngagement engagement;
     private final String serviceWorker;
     private final String serviceWorkerVersion;
 
-    public StorefrontProxyController(AppProxyVerifier verifier, SubscriberService subscribers, RateLimiter limiter) {
+    public StorefrontProxyController(AppProxyVerifier verifier, SubscriberService subscribers, RateLimiter limiter,
+                                     PushEngagement engagement) {
         this.verifier = verifier;
         this.subscribers = subscribers;
         this.limiter = limiter;
+        this.engagement = engagement;
         var raw = resource("/push/sw.js");
         // Content hash, so a deploy that changes the worker changes the version
         // the worker reports in its beacons.
@@ -146,13 +150,15 @@ public class StorefrontProxyController {
     }
 
     /**
-     * Impression/click beacons from the service worker. Accepted and checked
-     * now; they join to {@code sends} once Phase 3 sends carry a send id.
+     * Impression/click beacons from the service worker, joined to their send
+     * when the push's signature checks out (P3-T08). Always 204: a beacon is
+     * fire-and-forget, and the response says nothing about which sends exist.
      */
     @Post("/engagement")
+    @ExecuteOn(TaskExecutors.BLOCKING)
     public HttpResponse<?> engagement(HttpRequest<?> request, @Body Engagement body) {
         verify(request);
-        body.validate();
+        engagement.record(body.validate());
         return HttpResponse.noContent();
     }
 

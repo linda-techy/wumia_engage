@@ -3,6 +3,7 @@ package in.brand.engage.orchestrator;
 import in.brand.engage.channels.ChannelAdapter;
 import in.brand.engage.channels.ChannelException;
 import in.brand.engage.channels.RenderedMessage;
+import in.brand.engage.core.crypto.BeaconSignature;
 import in.brand.engage.core.messaging.Category;
 import in.brand.engage.core.messaging.Channel;
 import in.brand.engage.orchestrator.templates.MessageTemplate;
@@ -42,14 +43,16 @@ public class MessageRouter {
     private final SendRepository sends;
     private final TemplateRegistry templates;
     private final Renderer renderer;
+    private final BeaconSignature beacons;
     private final Map<Channel, ChannelAdapter> adapters = new EnumMap<>(Channel.class);
 
     public MessageRouter(PolicyEngine policy, SendRepository sends, TemplateRegistry templates, Renderer renderer,
-                         List<ChannelAdapter> adapters) {
+                         BeaconSignature beacons, List<ChannelAdapter> adapters) {
         this.policy = policy;
         this.sends = sends;
         this.templates = templates;
         this.renderer = renderer;
+        this.beacons = beacons;
         for (var a : adapters) {
             if (this.adapters.put(a.channel(), a) != null) {
                 throw new IllegalStateException("two adapters for channel " + a.channel());
@@ -93,8 +96,10 @@ public class MessageRouter {
         try {
             var r = renderer.render(template, allow.locale(), cmd.vars());
             if (r.url() == null) throw new IllegalArgumentException("template " + template.key() + " needs variable 'url'");
+            boolean push = cmd.channel() == Channel.PUSH;
             message = new RenderedMessage(cmd.channel(), template.key(), sendId, cmd.intentKey(), r.title(), r.body(),
-                    r.url(), r.image(), null, cmd.ttl(), cmd.highUrgency());
+                    Utm.apply(r.url(), cmd.channel().dbName(), cmd.intentKey(), sendId), r.image(), null,
+                    cmd.ttl(), cmd.highUrgency(), push ? beacons.sign(sendId) : null);
         } catch (IllegalArgumentException e) {
             LOG.error("send {}: cannot render {}: {}", sendId, template.key(), e.getMessage());
             return fail(cmd, sendId, "render_failed", false, false, List.of());

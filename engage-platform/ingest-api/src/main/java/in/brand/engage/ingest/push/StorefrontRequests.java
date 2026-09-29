@@ -79,10 +79,11 @@ public final class StorefrontRequests {
     }
 
     @Serdeable
-    public record Engagement(String kind, String sid, String sw) {
+    /** @param sig the push's signature of {@code sid} (BeaconSignature); unsigned beacons are ignored */
+    public record Engagement(String kind, String sid, String sig, String sw) {
         public Engagement validate() {
             return new Engagement(oneOf(kind, "kind", Set.of("impression", "click")),
-                    optional(sid, "sid", 64), optional(sw, "sw", 32));
+                    optional(sid, "sid", 64), optional(sig, "sig", 64), optional(sw, "sw", 32));
         }
     }
 

@@ -15,6 +15,7 @@ dependencies {
     runtimeOnly("org.yaml:snakeyaml")
 
     // Tests migrate engage_test themselves; the worker never migrates (ingest-api owns the schema).
+    testImplementation("com.tngtech.archunit:archunit-junit5:1.5.1")   // ArchitectureTest
     testImplementation("io.micronaut.flyway:micronaut-flyway")
     testRuntimeOnly("org.flywaydb:flyway-database-postgresql")
 }

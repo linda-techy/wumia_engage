@@ -114,7 +114,7 @@ class FcmAdapterTest {
         var fcm = new FakeFcm(t -> FcmClient.TokenResult.ok());
         var msg = new RenderedMessage(Channel.PUSH, "push_back_in_stock_v1", 42, "back_in_stock",
                 "Size M is back: Linen Kurta", "Only a few pieces in this restock.", "https://w.example/p",
-                null, "restock:4471", Duration.ofHours(1), true);
+                null, "restock:4471", Duration.ofHours(1), true, null);
 
         new FcmAdapter(fcm).send(msg, targets(1));
 
@@ -148,7 +148,7 @@ class FcmAdapterTest {
 
     static RenderedMessage message(String body) {
         return new RenderedMessage(Channel.PUSH, "push_test_v1", 7, "cart_recovery", "Title", body,
-                "https://w.example/cart", null, null, Duration.ofHours(12), false);
+                "https://w.example/cart", null, null, Duration.ofHours(12), false, null);
     }
 
     /** Devices 1..n with tokens t1..tn. */

@@ -50,6 +50,18 @@ class MessageRouterTest {
         assertEquals("test_browse", msg.kind());
     }
 
+    @Test void a_push_link_carries_utms_and_the_payload_carries_a_signed_send_id() {
+        var s = data.subscriber();
+
+        var sent = assertInstanceOf(SendResult.Sent.class, router.send(command(s.id(), key())));
+
+        var msg = fcm.sent.getFirst();
+        assertEquals("https://w.example/p/linen-kurta?utm_source=engage&utm_medium=push&utm_campaign=test_browse"
+                + "&utm_content=" + sent.sendId(), msg.url());
+        var beacons = in.brand.engage.core.crypto.BeaconSignature.fromAppSecret(System.getenv("SHOPIFY_API_SECRET"));
+        assertTrue(beacons.verify(sent.sendId(), msg.pushData().get("sig")), "ingest-api must accept this push's beacons");
+    }
+
     @Test void the_persons_locale_picks_the_copy() {
         var s = data.subscriber();
         data.locale(s.id(), "hi-Latn");

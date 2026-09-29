@@ -17,7 +17,8 @@ const beacon = (kind, data) =>
   fetch('/apps/push/engagement', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ kind, sid: data && data.sid, sw: SW_VERSION })
+    // sig: the push's signature of sid; ingest-api records only signed beacons.
+    body: JSON.stringify({ kind, sid: data && data.sid, sig: data && data.sig, sw: SW_VERSION })
   }).catch(() => {});
 
 if (cfg.apiKey && cfg.projectId && cfg.messagingSenderId && cfg.appId) {
@@ -40,7 +41,7 @@ if (cfg.apiKey && cfg.projectId && cfg.messagingSenderId && cfg.appId) {
       tag: data.tag || data.kind || 'engage',   // collapses repeats of the same intent
       renotify: false,
       requireInteraction: false,
-      data: { url: data.url, sid: data.sid }
+      data: { url: data.url, sid: data.sid, sig: data.sig }
     });
     return Promise.all([shown, beacon('impression', data)]);
   });
@@ -48,9 +49,9 @@ if (cfg.apiKey && cfg.projectId && cfg.messagingSenderId && cfg.appId) {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const { url = '/', sid } = event.notification.data || {};
+  const { url = '/', sid, sig } = event.notification.data || {};
   event.waitUntil((async () => {
-    beacon('click', { sid });
+    beacon('click', { sid, sig });
     const wins = await clients.matchAll({ type: 'window', includeUncontrolled: true });
     // Reuse an open store tab rather than stacking new ones.
     const tab = wins.find((w) => new URL(w.url).origin === self.location.origin);

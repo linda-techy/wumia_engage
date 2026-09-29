@@ -44,7 +44,7 @@ class FcmSmokeTest {
                 com.google.firebase.messaging.FirebaseMessaging.getInstance(FcmClientFactory.app(file))));
         return adapter.send(new RenderedMessage(Channel.PUSH, "push_smoke_test", 0, "smoke_test",
                         "Engage test push", "P3-T04 FCM adapter check. You can ignore this.",
-                        "https://wumika-dev.myshopify.com/", null, "smoke_test", Duration.ofMinutes(10), false),
+                        "https://wumika-dev.myshopify.com/", null, "smoke_test", Duration.ofMinutes(10), false, null),
                 new Addresses(List.of(new Addresses.PushTarget(0, token)), null, null));
     }
 }

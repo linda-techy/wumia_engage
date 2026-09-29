@@ -130,6 +130,20 @@ public class DefaultOrchestrator implements MessageOrchestrator {
                 reason, intentKey, subjectKey);
     }
 
+    /**
+     * A success signal for a run (push: a click). Success terminates the whole
+     * cascade (CLAUDE.md §3.2): a live run stops before its next step, and a
+     * single-step run that already finished is recorded as succeeded. A
+     * cancelled or failed run is left alone.
+     *
+     * @return true if the run changed
+     */
+    public boolean onSignal(Connection c, long runId, String signal) throws SQLException {
+        return Sql.update(c, """
+                UPDATE cascade_runs SET status = 'succeeded', outcome = ?, updated_at = now()
+                 WHERE id = ? AND status IN ('active','waiting','exhausted')""", signal, runId) > 0;
+    }
+
     public Optional<CascadeRun> find(long runId) {
         return db.inTx(c -> one(c, "SELECT * FROM cascade_runs WHERE id = ?", runId));
     }
