@@ -119,6 +119,7 @@ class BackInStockTest {
     @Test void without_a_product_title_the_handle_names_the_item() {
         assertEquals("Floral Anarkali Kurta", BackInStock.fromHandle("floral-anarkali-kurta"));
         assertNull(BackInStock.size(" ", "Default Title"));
+        assertNull(BackInStock.size("Default Title", "Default Title"), "a one-size waitlist entry has no size");
         assertEquals("S", BackInStock.size(null, "S"));
     }
 

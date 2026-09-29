@@ -1,0 +1,69 @@
+{%- comment -%}
+  Engage "notify me" — app block for the product page (phase-2 §4, surface notify_me).
+  Shows only while the selected variant is sold out. engage-push.js does the
+  rest on click: POST /notify-me (the waitlist row back-in-stock reads) and the
+  push soft-ask. Needs the "Engage push" app embed switched on.
+  One-size products ("Default Title") send no size label, so the alert reads
+  "Back in stock: <product>" rather than "Size Default Title is back".
+{%- endcomment -%}
+<div class="engage-notify" data-engage-notify-block hidden>
+  <button type="button" class="engage-notify__btn button button--full-width button--secondary"
+          data-engage-notify=""
+          data-product-handle="{{ product.handle }}"
+          data-size-label="">
+    {{ block.settings.label }}
+  </button>
+</div>
+<script type="application/json" data-engage-notify-variants>
+  [{%- for v in product.variants -%}{"id":{{ v.id | json }},"title":{{ v.title | json }},"available":{{ v.available | json }}}{%- unless forloop.last -%},{%- endunless -%}{%- endfor -%}]
+</script>
+<script>
+  (() => {
+    const root = document.currentScript.previousElementSibling.previousElementSibling;
+    const variants = JSON.parse(document.currentScript.previousElementSibling.textContent);
+    const btn = root.querySelector('button');
+    const label = {{ block.settings.label | json }};
+    const sizedLabel = {{ block.settings.sized_label | json }};
+    const initial = {{ product.selected_or_first_available_variant.id | json }};
+
+    // The theme's product form holds the selected variant in name="id"; the URL
+    // carries ?variant= on most themes. Fall back to the page's initial variant.
+    const selected = () => {
+      const field = document.querySelector('form[action*="/cart/add"] [name="id"]');
+      const fromForm = field && Number(field.value);
+      const fromUrl = Number(new URLSearchParams(location.search).get('variant'));
+      const id = fromForm || fromUrl || initial;
+      return variants.find((v) => v.id === id) || variants.find((v) => v.id === initial);
+    };
+
+    const render = () => {
+      const v = selected();
+      if (!v || v.available) { root.hidden = true; return; }
+      const size = v.title === 'Default Title' ? '' : v.title;
+      btn.dataset.engageNotify = String(v.id);
+      btn.dataset.sizeLabel = size;
+      if (!btn.dataset.engageDone) btn.textContent = size ? sizedLabel.replace('[size]', size) : label;
+      root.hidden = false;
+    };
+
+    // Variant pickers fire change; themes update the form after the event, so read on the next tick.
+    document.addEventListener('change', () => setTimeout(render, 0), true);
+    window.addEventListener('popstate', render);
+    render();
+  })();
+</script>
+
+{% schema %}
+{
+  "name": "Engage notify me",
+  "target": "section",
+  "enabled_on": { "templates": ["product"] },
+  "settings": [
+    { "type": "text", "id": "label", "label": "Button text (one-size products)",
+      "default": "Notify me when it's back" },
+    { "type": "text", "id": "sized_label", "label": "Button text with a size",
+      "info": "[size] is replaced with the selected size.",
+      "default": "Tell me when [size] is back" }
+  ]
+}
+{% endschema %}

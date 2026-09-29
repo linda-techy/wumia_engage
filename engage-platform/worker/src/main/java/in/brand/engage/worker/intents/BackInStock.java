@@ -98,9 +98,13 @@ public class BackInStock implements EventConsumer {
 
     /** What the shopper saw on the notify-me button, else Shopify's variant title; none for a one-size item. */
     static String size(String sizeLabel, String variantTitle) {
-        if (sizeLabel != null && !sizeLabel.isBlank()) return sizeLabel.strip();
-        if (variantTitle == null || variantTitle.isBlank() || variantTitle.equalsIgnoreCase("Default Title")) return null;
-        return variantTitle.strip();
+        if (isSize(sizeLabel)) return sizeLabel.strip();
+        return isSize(variantTitle) ? variantTitle.strip() : null;
+    }
+
+    /** Shopify names the only variant of a one-size product "Default Title": that is not a size. */
+    private static boolean isSize(String s) {
+        return s != null && !s.isBlank() && !s.strip().equalsIgnoreCase("Default Title");
     }
 
     /** "floral-anarkali-kurta" → "Floral Anarkali Kurta", when Shopify gave no title. */

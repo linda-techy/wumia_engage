@@ -237,6 +237,7 @@ document.addEventListener('click', async (e) => {
     sizeLabel: btn.dataset.sizeLabel
   }).catch(() => {});
   const token = await ask('notify_me');
+  btn.dataset.engageDone = '1';     // the notify-me block must not re-label it
   btn.textContent = token ? "We'll alert you" : 'Saved — we will message you';
   btn.disabled = true;
 });
