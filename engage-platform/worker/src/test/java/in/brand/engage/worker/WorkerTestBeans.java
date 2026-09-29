@@ -86,12 +86,14 @@ public class WorkerTestBeans {
     public static class FakePush implements ChannelAdapter {
         final AtomicInteger sent = new AtomicInteger();
         public volatile RenderedMessage last;
+        public final List<RenderedMessage> all = new java.util.concurrent.CopyOnWriteArrayList<>();
 
         @Override public Channel channel() { return Channel.PUSH; }
 
         @Override public DispatchResult send(RenderedMessage m, Addresses a) {
             sent.incrementAndGet();
             last = m;
+            all.add(m);
             return new DispatchResult(null, a.push().size(), List.of());
         }
     }

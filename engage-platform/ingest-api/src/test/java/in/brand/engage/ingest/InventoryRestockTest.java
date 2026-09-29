@@ -40,7 +40,7 @@ class InventoryRestockTest {
         }
         item = String.valueOf(ThreadLocalRandom.current().nextLong(1_000_000_000L, 9_000_000_000L));
         variant = String.valueOf(ThreadLocalRandom.current().nextLong(1_000_000_000L, 9_000_000_000L));
-        admin.items.put(item, Optional.of(new ShopifyAdmin.VariantRef(variant, "777")));
+        admin.items.put(item, Optional.of(new ShopifyAdmin.VariantRef(variant, "777", "Linen Kurta", "linen-kurta", "M")));
         admin.failing = false;
         admin.calls.set(0);
     }
@@ -50,9 +50,10 @@ class InventoryRestockTest {
         update("loc-1", 5, "2026-09-29T10:05:00Z");
 
         assertEquals(1, events("variant_restocked"));
-        assertEquals("777|5", one("""
-                SELECT props->>'product_id' || '|' || (props->>'quantity') FROM events
-                 WHERE name = 'variant_restocked' AND props->>'variant_id' = ?""", variant));
+        assertEquals("777|5|Linen Kurta|linen-kurta|M", one("""
+                SELECT concat_ws('|', props->>'product_id', props->>'quantity', props->>'product_title',
+                                 props->>'product_handle', props->>'variant_title')
+                  FROM events WHERE name = 'variant_restocked' AND props->>'variant_id' = ?""", variant));
     }
 
     @Test void five_to_seven_emits_nothing() throws SQLException {
@@ -111,7 +112,7 @@ class InventoryRestockTest {
 
         var waited = String.valueOf(ThreadLocalRandom.current().nextLong(1_000_000_000L, 9_000_000_000L));
         var waitedVariant = "w" + waited;
-        admin.items.put(waited, Optional.of(new ShopifyAdmin.VariantRef(waitedVariant, "778")));
+        admin.items.put(waited, Optional.of(new ShopifyAdmin.VariantRef(waitedVariant, "778", "Silk Dupatta", "silk-dupatta", "Default Title")));
         var shopper = UUID.randomUUID();
         exec("INSERT INTO identities (id) VALUES (?)", shopper);
         exec("""

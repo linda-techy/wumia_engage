@@ -23,7 +23,7 @@ import org.junit.jupiter.api.Test;
 class ShopifyAdminClientTest {
 
     static final String VARIANT_BODY = """
-            {"data":{"inventoryItem":{"variant":{"id":"gid://shopify/ProductVariant/4471","product":{"id":"gid://shopify/Product/88"}}}}}""";
+            {"data":{"inventoryItem":{"variant":{"id":"gid://shopify/ProductVariant/4471","title":"M","product":{"id":"gid://shopify/Product/88","title":"Linen Kurta","handle":"linen-kurta"}}}}}""";
 
     HttpServer server;
     final List<String> requests = new CopyOnWriteArrayList<>();
@@ -69,7 +69,7 @@ class ShopifyAdminClientTest {
     @Test void exchanges_the_app_credentials_for_a_token_and_resolves_the_variant() {
         var ref = client("").variantOfInventoryItem("9001");
 
-        assertEquals(new ShopifyAdmin.VariantRef("4471", "88"), ref.orElseThrow());
+        assertEquals(new ShopifyAdmin.VariantRef("4471", "88", "Linen Kurta", "linen-kurta", "M"), ref.orElseThrow());
         assertEquals(List.of("shpat_1"), tokensSeen);
         assertTrue(requests.get(1).contains("gid://shopify/InventoryItem/9001"), requests.get(1));
     }

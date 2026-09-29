@@ -9,7 +9,6 @@ import in.brand.engage.worker.Event;
 import in.brand.engage.worker.EventConsumer;
 import io.micronaut.context.annotation.Bean;
 import io.micronaut.context.annotation.Factory;
-import io.micronaut.context.annotation.Value;
 import jakarta.inject.Singleton;
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -37,11 +36,9 @@ public class CartRecovery implements EventConsumer {
     private final DefaultOrchestrator orchestrator;
     private final String cartUrl;
 
-    public CartRecovery(DefaultOrchestrator orchestrator,
-                        @Value("${STOREFRONT_BASE_URL:}") String storefrontBaseUrl,
-                        @Value("${SHOPIFY_SHOP_DOMAIN:}") String shopDomain) {
+    public CartRecovery(DefaultOrchestrator orchestrator, Storefront storefront) {
         this.orchestrator = orchestrator;
-        this.cartUrl = cartUrl(storefrontBaseUrl, shopDomain);
+        this.cartUrl = storefront.cart();
     }
 
     @Factory
@@ -94,20 +91,5 @@ public class CartRecovery implements EventConsumer {
             return List.of(new MessageIntent(identityId, INTENT, cartToken,
                     Map.of("product", product, "url", cartUrl), e.occurredAt().plus(DELAY)));
         }
-    }
-
-    /**
-     * The storefront's own domain when configured (what the shopper subscribed
-     * on; a push from another origin looks like spam to Chrome), else the
-     * myshopify domain.
-     */
-    static String cartUrl(String storefrontBaseUrl, String shopDomain) {
-        if (storefrontBaseUrl != null && !storefrontBaseUrl.isBlank()) {
-            return storefrontBaseUrl.replaceAll("/+$", "") + "/cart";
-        }
-        if (shopDomain == null || shopDomain.isBlank()) {
-            throw new IllegalStateException("set STOREFRONT_BASE_URL (or SHOPIFY_SHOP_DOMAIN) for cart links");
-        }
-        return "https://" + shopDomain + "/cart";
     }
 }

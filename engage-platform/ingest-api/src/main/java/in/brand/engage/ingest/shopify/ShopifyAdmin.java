@@ -8,8 +8,19 @@ import java.util.Optional;
  */
 public interface ShopifyAdmin {
 
-    /** Numeric ids, as webhooks and cart lines carry them. */
-    record VariantRef(String variantId, String productId) {}
+    /**
+     * Numeric ids, as webhooks and cart lines carry them, plus what a
+     * back-in-stock push needs to name the item.
+     *
+     * @param variantTitle "M", "M / Blue", or "Default Title" for a one-size product
+     */
+    record VariantRef(String variantId, String productId, String productTitle, String productHandle,
+                      String variantTitle) {
+
+        public VariantRef(String variantId, String productId) {
+            this(variantId, productId, null, null, null);
+        }
+    }
 
     /**
      * The variant an inventory item stocks.

@@ -35,7 +35,7 @@ import java.util.Optional;
 public class ShopifyAdminClient implements ShopifyAdmin {
 
     private static final String QUERY =
-            "query($id: ID!) { inventoryItem(id: $id) { variant { id product { id } } } }";
+            "query($id: ID!) { inventoryItem(id: $id) { variant { id title product { id title handle } } } }";
     /** Renew this long before expiry, so a request never carries a token about to lapse. */
     private static final Duration RENEW_BEFORE = Duration.ofMinutes(5);
 
@@ -141,7 +141,10 @@ public class ShopifyAdminClient implements ShopifyAdmin {
         if (variant == null) return Optional.empty();
         var product = path(variant, "product");
         return Optional.of(new VariantRef(numericId(variant.get("id").getStringValue()),
-                product == null ? null : numericId(product.get("id").getStringValue())));
+                product == null ? null : numericId(product.get("id").getStringValue()),
+                product == null ? null : string(product, "title"),
+                product == null ? null : string(product, "handle"),
+                string(variant, "title")));
     }
 
     private String text(JsonNode node) {
@@ -186,6 +189,11 @@ public class ShopifyAdminClient implements ShopifyAdmin {
             n = n.get(k);
         }
         return n == null || n.isNull() ? null : n;
+    }
+
+    private static String string(JsonNode node, String key) {
+        var v = node.get(key);
+        return v == null || v.isNull() ? null : v.getStringValue();
     }
 
     /** gid://shopify/ProductVariant/123 → 123 */

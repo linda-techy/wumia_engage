@@ -158,8 +158,9 @@ public class DefaultOrchestrator implements MessageOrchestrator {
         while (true) {
             if (current.stepIndex() >= def.steps().size()) return finish(current, "exhausted", "no_steps_left");
             var step = def.steps().get(current.stepIndex());
+            var vars = vars(current.id());
             var result = router.send(new SendCommand(current.identityId(), current.intentKey(), current.id(),
-                    current.stepIndex(), step.channel(), step.templateKey(), vars(current.id()),
+                    current.stepIndex(), step.channel(), step.templateFor(vars), vars,
                     "run:" + current.id() + ":step:" + current.stepIndex(),
                     step.ttl(), step.highUrgency(), step.allowStaleDevices()));
             boolean last = current.stepIndex() == def.steps().size() - 1;

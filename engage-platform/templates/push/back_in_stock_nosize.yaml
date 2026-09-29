@@ -1,0 +1,11 @@
+# back_in_stock for a one-size product (variant title "Default Title"): the
+# same alert without a size. The back_in_stock intent picks it per shopper.
+key: push_back_in_stock_nosize_v1
+channel: push
+category: utility          # the shopper asked for it
+cooldown: PT6H
+locales:
+  en:      { title: "Back in stock: {{product}}", body: "Only a few pieces in this restock." }
+  hi-Latn: { title: "Wapas stock mein: {{product}}", body: "Is restock mein kam pieces hain." }
+vars: [product, url, image]
+samples: { product: "Floral Anarkali Kurta" }

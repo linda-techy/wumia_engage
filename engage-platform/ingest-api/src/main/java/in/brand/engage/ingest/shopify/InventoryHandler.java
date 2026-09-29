@@ -60,7 +60,8 @@ public class InventoryHandler {
             if (u == null) return null;
             try (var ps = Sql.prepare(c, """
                     SELECT 1 FROM inventory_state
-                     WHERE inventory_item_id = ? AND product_id IS NOT NULL""", u.itemId());
+                     WHERE inventory_item_id = ? AND product_id IS NOT NULL AND product_handle IS NOT NULL""",
+                    u.itemId());
                  var rs = ps.executeQuery()) {
                 return rs.next() ? null : u.itemId();
             }
@@ -80,16 +81,16 @@ public class InventoryHandler {
             // held until commit
         }
 
-        String variantId, productId;
+        ShopifyAdmin.VariantRef v;
         Integer previous;
         try (var ps = Sql.prepare(c, """
-                SELECT variant_id, product_id, available FROM inventory_state WHERE inventory_item_id = ?""",
-                u.itemId());
+                SELECT variant_id, product_id, product_title, product_handle, variant_title, available
+                  FROM inventory_state WHERE inventory_item_id = ?""", u.itemId());
              var rs = ps.executeQuery()) {
             boolean seen = rs.next();
-            if (seen && rs.getString("product_id") != null) {
-                variantId = rs.getString("variant_id");
-                productId = rs.getString("product_id");
+            if (seen && rs.getString("product_id") != null && rs.getString("product_handle") != null) {
+                v = new ShopifyAdmin.VariantRef(rs.getString("variant_id"), rs.getString("product_id"),
+                        rs.getString("product_title"), rs.getString("product_handle"), rs.getString("variant_title"));
                 previous = rs.getInt("available");
             } else {
                 var ref = resolved.get(u.itemId());
@@ -98,11 +99,11 @@ public class InventoryHandler {
                     LOG.info("inventory item {} stocks no variant (deleted?); ignored", u.itemId());
                     return;
                 }
-                variantId = ref.get().variantId();
-                productId = ref.get().productId();
-                previous = seen ? rs.getInt("available") : null;   // a V3 row without product_id
+                v = ref.get();
+                previous = seen ? rs.getInt("available") : null;   // a row cached before the titles were kept
             }
         }
+        var variantId = v.variantId();
 
         Sql.update(c, """
                 INSERT INTO inventory_levels (inventory_item_id, location_id, available, updated_at)
@@ -119,13 +120,16 @@ public class InventoryHandler {
             total = rs.getInt(1);
         }
         Sql.update(c, """
-                INSERT INTO inventory_state (inventory_item_id, variant_id, product_id, available, updated_at)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO inventory_state (inventory_item_id, variant_id, product_id, product_title, product_handle,
+                                             variant_title, available, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (inventory_item_id) DO UPDATE
                    SET variant_id = EXCLUDED.variant_id, product_id = EXCLUDED.product_id,
-                       available = EXCLUDED.available,
+                       product_title = EXCLUDED.product_title, product_handle = EXCLUDED.product_handle,
+                       variant_title = EXCLUDED.variant_title, available = EXCLUDED.available,
                        updated_at = GREATEST(inventory_state.updated_at, EXCLUDED.updated_at)""",
-                u.itemId(), variantId, productId, total, u.updatedAt());
+                u.itemId(), variantId, v.productId(), v.productTitle(), v.productHandle(), v.variantTitle(), total,
+                u.updatedAt());
         resolved.remove(u.itemId());
 
         boolean restocked = total > 0 && (previous != null ? previous <= 0 : waitlisted(c, variantId));
@@ -133,7 +137,10 @@ public class InventoryHandler {
         if (restocked || soldOut) {
             var props = new LinkedHashMap<String, Object>();
             props.put("variant_id", variantId);
-            props.put("product_id", productId);
+            props.put("product_id", v.productId());
+            props.put("product_title", v.productTitle());
+            props.put("product_handle", v.productHandle());
+            props.put("variant_title", v.variantTitle());
             props.put("quantity", total);
             props.put("inventory_item_id", u.itemId());
             var name = restocked ? "variant_restocked" : "variant_sold_out";

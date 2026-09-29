@@ -15,7 +15,7 @@ class TemplateLinterTest {
 
     @Test void every_template_in_the_repository_lints_clean() {
         var templates = TemplateRegistry.loadClasspath();
-        assertEquals(4, templates.size(), "templates/push/*.yaml");
+        assertEquals(5, templates.size(), "templates/push/*.yaml");
         assertEquals(List.of(), lint.lintAll(templates));
     }
 

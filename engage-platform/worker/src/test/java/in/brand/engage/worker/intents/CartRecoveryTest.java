@@ -160,9 +160,10 @@ class CartRecoveryTest {
         assertEquals(0L, count("SELECT count(*) FROM cascade_runs WHERE subject_key = ?", cart));
     }
 
-    @Test void the_cart_link_prefers_the_storefront_domain() {
-        assertEquals("https://www.wumika.com/cart", CartRecovery.cartUrl("https://www.wumika.com/", "x.myshopify.com"));
-        assertEquals("https://x.myshopify.com/cart", CartRecovery.cartUrl("", "x.myshopify.com"));
+    @Test void storefront_links_prefer_the_storefront_domain() {
+        assertEquals("https://www.wumika.com/cart", new Storefront("https://www.wumika.com/", "x.myshopify.com").cart());
+        assertEquals("https://x.myshopify.com/products/linen-kurta?variant=44",
+                new Storefront("", "x.myshopify.com").product("linen-kurta", "44"));
     }
 
     /* -------------------------------- fixtures -------------------------------- */

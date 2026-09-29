@@ -50,9 +50,14 @@ CREATE TABLE inventory_levels (           -- per-location availability, for P1-T
     PRIMARY KEY (inventory_item_id, location_id)
 );
 
--- Not in the original plan: variant_restocked carries product_id, and
--- inventory_state (V3) caches the item -> variant mapping without it.
-ALTER TABLE inventory_state ADD COLUMN product_id TEXT;
+-- Not in the original plan: variant_restocked carries the product and what a
+-- push needs to name it (title, size, link), and inventory_state (V3) caches
+-- the item -> variant lookup without them. Filled from the same Admin API call.
+ALTER TABLE inventory_state
+    ADD COLUMN product_id     TEXT,
+    ADD COLUMN product_title  TEXT,
+    ADD COLUMN product_handle TEXT,
+    ADD COLUMN variant_title  TEXT;          -- "M", "M / Blue", or "Default Title" for one-size items
 CREATE INDEX inventory_state_variant_idx ON inventory_state (variant_id);
 
 CREATE TABLE variant_prices (             -- last seen price, for price_dropped (P1-T04)
