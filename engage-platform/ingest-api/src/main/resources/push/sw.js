@@ -52,11 +52,15 @@ self.addEventListener('notificationclick', (event) => {
   const { url = '/', sid, sig } = event.notification.data || {};
   event.waitUntil((async () => {
     beacon('click', { sid, sig });
+    // This worker's scope is /apps/push/, so it controls no storefront page, and
+    // WindowClient.navigate() only works on pages it controls: navigating an open
+    // store tab throws and nothing opens. Focus a tab already on this exact page,
+    // otherwise open a new one (always allowed inside notificationclick).
+    const target = new URL(url, self.location.origin).href;
     const wins = await clients.matchAll({ type: 'window', includeUncontrolled: true });
-    // Reuse an open store tab rather than stacking new ones.
-    const tab = wins.find((w) => new URL(w.url).origin === self.location.origin);
-    if (tab) { await tab.navigate(url); return tab.focus(); }
-    return clients.openWindow(url);
+    const same = wins.find((w) => w.url === target);
+    if (same) return same.focus();
+    return clients.openWindow(target);
   })());
 });
 
