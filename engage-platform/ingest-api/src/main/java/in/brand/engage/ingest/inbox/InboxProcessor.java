@@ -52,6 +52,7 @@ public class InboxProcessor {
             return;
         }
         try {
+            handler.prepare(item);
             db.inTx(c -> {
                 handler.handle(c, item);
                 inbox.markProcessed(c, item);

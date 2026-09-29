@@ -149,7 +149,15 @@ ingest-api/src/test/resources/fixtures/courier_*.json                           
 
 ---
 
-### ☐ P1-T03 — Inventory → `variant_restocked`
+### ◐ P1-T03 — Inventory → `variant_restocked`
+
+> **Built 2026-09-29; the manual dev-store check is pending**, because it needs two things only the store owner can do: deploy `shopify.app.dev.toml` (new scopes `read_inventory,read_products` and the `inventory_levels/update` topic; the app must be re-approved on the dev store) and put the app's Admin API token in `SHOPIFY_ADMIN_TOKEN`. `InventoryRestockTest` (10) passes, including the four listed tests; removing the late-update guard or the first-sighting baseline fails its test. `./gradlew build` 230 tests; `invariants.sql` 17/17 on a fresh V1–V9 database.
+>
+> Where the build differs from the text below:
+> - **V9 is added now, whole**, including the shipment and refund tables that wait for P1-T02 and P1-T04, plus one column not in the plan: `inventory_state.product_id` (the event carries it; V3's table did not).
+> - **`InboxHandler.prepare(item)`** runs before the transaction; the Admin lookup happens there, only for an item not yet in `inventory_state`. A failure (no token, throttling) leaves the update in the inbox to retry with backoff; nothing is skipped.
+> - **The first update seen for an item is a baseline:** with no previous total there is no crossing to detect, so no event, except when shoppers are waiting on the variant's waitlist and it is in stock, which is a restock for them.
+> - Updates for the same item are serialised with an advisory lock, so two locations updating at once cannot both read a stale total. A deleted item (no variant) is acknowledged and ignored.
 
 `inventory_levels/update` carries `inventory_item_id` and `available` per location. It carries neither the variant id nor the total across locations. Back-in-stock (P3-T07) needs "this variant went from 0 to positive".
 

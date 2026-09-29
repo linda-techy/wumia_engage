@@ -20,7 +20,7 @@ When a task and a design doc disagree, the task wins, because it was written aga
 | Phase | File | Weeks | Status |
 |---|---|---|---|
 | 0 | [P0 — Prerequisites](P0-prerequisites.md) | 0–1 | ☐ Not started. **Start day 1**: external approvals set the critical path. |
-| 1 | [P1 — Core platform](P1-core-platform.md) | 1–2 | ◐ **Built and verified** (V1–V6, ingest-api). 6 gap tasks remain. |
+| 1 | [P1 — Core platform](P1-core-platform.md) | 1–2 | ◐ **Built and verified** (V1–V6, ingest-api). Gap tasks: T03 built (inventory → `variant_restocked`, V9; dev-store check pending); T01, T02, T04–T06 open. |
 | 2 | [P2 — Shopify storefront + FCM push](P2-shopify-storefront-push.md) | 2–4 | ◐ T01–T03 done; first dev-store subscriber and a test push delivered. T04 built (needs JS unit tests + device matrix); T05, T06, T08, T09 open; T07 has `push_v1` only |
 | 3 | [P3 — Policy engine + push sending](P3-policy-and-push.md) | 4–5 | ◐ T01–T06 done (policy engine, migration V8; templates as code; FCM adapter, real push delivered to a dev device; router + orchestrator; worker; signed click beacons, UTMs, ArchUnit). T07: `cart_recovery` only; the other three intents wait for P1-T03, P1-T04, P2-T06 |
 | 4 | [P4 — WhatsApp, SMS, orchestrator](P4-whatsapp-sms-orchestrator.md) | 5–7 | ☐ Blocked on Meta verification + DLT |
@@ -62,7 +62,7 @@ engage/
 | V1–V6 | P1 ✓ | core, admin & config, Shopify & push, orchestrator tables, Razorpay payments, identity functions |
 | V7 | P2 ✓ | `push_v1` consent copy registered (took V7 before this table was renumbered; forward-only, so later versions moved up by one) |
 | V8 | P3 ✓ | `events.dispatched_at` + claim index; `config_keys.default_value`; kill-switch, push and `holdout.journey_pct` config keys; `config_changed` notify trigger (planned as V10; built before the P1 gaps and P2 views, so it took the next free number and those two moved up) |
-| V9 | P1 gaps | `shipments`, `shipment_events`, `order_refunds`, `inventory_levels`, `variant_prices`; cancellation and refund columns on `orders` |
+| V9 | P1 gaps ✓ | `shipments`, `shipment_events`, `order_refunds`, `inventory_levels`, `variant_prices`; cancellation and refund columns on `orders`; `inventory_state.product_id` (added with P1-T03) |
 | V10 | P2 | `push_prompt_funnel` view; `devices` staleness view |
 | V11 | P4 | `wa_phone_numbers` + history (quality, tier); WhatsApp config keys |
 | V12 | P5 | journey parameter config keys with defaults; `profile_recompute()` |

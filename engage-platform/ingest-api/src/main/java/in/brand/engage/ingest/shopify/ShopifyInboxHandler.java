@@ -32,13 +32,15 @@ public class ShopifyInboxHandler implements InboxHandler {
     private final IdentityResolver identities;
     private final ConsentWriter consents;
     private final EventWriter events;
+    private final InventoryHandler inventory;
     private final int matchWindowMinutes;
 
     public ShopifyInboxHandler(IdentityResolver identities, ConsentWriter consents, EventWriter events,
-                               EngageProperties.Razorpay razorpay) {
+                               InventoryHandler inventory, EngageProperties.Razorpay razorpay) {
         this.identities = identities;
         this.consents = consents;
         this.events = events;
+        this.inventory = inventory;
         this.matchWindowMinutes = razorpay.matchWindowMinutes() > 0 ? razorpay.matchWindowMinutes() : 30;
     }
 
@@ -48,12 +50,18 @@ public class ShopifyInboxHandler implements InboxHandler {
     }
 
     @Override
+    public void prepare(InboxRepository.Item item) {
+        if ("inventory_levels/update".equals(item.topic())) inventory.prepare(item);
+    }
+
+    @Override
     public void handle(Connection c, InboxRepository.Item item) throws SQLException {
         switch (item.topic()) {
             case "checkouts/create", "checkouts/update" -> checkout(c, item);
             case "orders/create" -> order(c, item);
             case "carts/create", "carts/update" -> cart(c, item);
             case "customers/create", "customers/update" -> customer(c, item);
+            case "inventory_levels/update" -> inventory.handle(c, item);
             default -> { /* acknowledged; other topics are consumed in later phases */ }
         }
     }

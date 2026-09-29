@@ -14,4 +14,12 @@ public interface InboxHandler {
     String source();
 
     void handle(Connection c, InboxRepository.Item item) throws SQLException;
+
+    /**
+     * Runs before {@link #handle}, outside any transaction: the place for a
+     * provider call (the Shopify Admin API) that must not pin a database
+     * connection while it waits. Throwing retries the item with backoff,
+     * exactly as a failure in {@code handle} does.
+     */
+    default void prepare(InboxRepository.Item item) {}
 }

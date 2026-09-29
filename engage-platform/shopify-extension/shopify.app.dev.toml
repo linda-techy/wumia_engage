@@ -12,8 +12,9 @@ embedded = false
 
 [access_scopes]
 # Read-only. read_orders covers orders/*, checkouts/* and carts/* webhooks;
-# read_customers covers customers/*.
-scopes = "read_orders,read_customers"
+# read_customers covers customers/*; read_inventory covers inventory_levels/*
+# and, with read_products, the inventory item -> variant lookup (P1-T03).
+scopes = "read_orders,read_customers,read_inventory,read_products"
 use_legacy_install_flow = false
 
 [auth]
@@ -34,5 +35,6 @@ api_version = "2026-07"
 # Quick tunnels change URL on restart: update uri, then redeploy.
 [[webhooks.subscriptions]]
 topics = ["checkouts/create", "checkouts/update", "orders/create",
-          "carts/create", "carts/update", "customers/create", "customers/update"]
+          "carts/create", "carts/update", "customers/create", "customers/update",
+          "inventory_levels/update"]
 uri = "https://engage-dev.wumika.com/webhooks/shopify"
