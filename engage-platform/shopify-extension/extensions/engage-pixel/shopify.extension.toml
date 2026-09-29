@@ -1,0 +1,29 @@
+# Web pixel (phase-2 §7, P2-T06): checkout timing and product views, posted
+# to ingest-api /pixel/events. No personal data leaves the pixel: checkout
+# token, product, timestamp, and the push embed's anon id when present.
+#
+# Activated per shop with Admin GraphQL webPixelCreate, settings:
+#   {"ingestUrl": "https://<ingest host>/pixel/events", "writeKey": "<PIXEL_WRITE_KEY>"}
+type = "web_pixel_extension"
+name = "engage-pixel"
+runtime_context = "strict"
+
+# The pixel loads only when the visitor's consent covers these.
+[customer_privacy]
+analytics = true
+marketing = true
+preferences = false
+sale_of_data = "enabled"
+
+[settings]
+type = "object"
+
+[settings.fields.ingestUrl]
+name = "Ingest URL"
+description = "https://<ingest host>/pixel/events"
+type = "single_line_text_field"
+
+[settings.fields.writeKey]
+name = "Write key"
+description = "Same value as PIXEL_WRITE_KEY on ingest-api"
+type = "single_line_text_field"

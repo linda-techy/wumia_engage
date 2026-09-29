@@ -1,0 +1,10 @@
+{
+  "name": "engage-pixel",
+  "private": true,
+  "version": "1.0.0",
+  "main": "dist/main.js",
+  "dependencies": {
+    "@shopify/web-pixels-extension": "^2.18.0"
+  }
+}
+
