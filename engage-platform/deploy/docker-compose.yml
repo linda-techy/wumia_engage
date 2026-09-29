@@ -72,7 +72,10 @@ services:
       # image's user). A missing file stops the worker at boot, not at the first push.
       FIREBASE_SERVICE_ACCOUNT_FILE: /secrets/firebase-service-account.json
     volumes:
-      - ./secrets:/secrets:ro
+      # The file, not the directory: ./secrets is deploy:deploy 750, which uid
+      # 10001 cannot enter. Docker resolves a file mount as root, so only the
+      # file's own permissions (400, uid 10001) apply inside the container.
+      - ./secrets/firebase-service-account.json:/secrets/firebase-service-account.json:ro
     # No published port: /health is for the container runtime, and nothing
     # outside needs to reach the worker.
     depends_on:
