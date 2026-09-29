@@ -35,6 +35,7 @@ api_version = "2026-07"
 # Quick tunnels change URL on restart: update uri, then redeploy.
 [[webhooks.subscriptions]]
 topics = ["checkouts/create", "checkouts/update", "orders/create",
+          "orders/cancelled", "orders/paid", "refunds/create",
           "carts/create", "carts/update", "customers/create", "customers/update",
-          "inventory_levels/update"]
+          "inventory_levels/update", "products/update", "app/uninstalled"]
 uri = "https://engage-dev.wumika.com/webhooks/shopify"

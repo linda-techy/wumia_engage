@@ -1,4 +1,5 @@
--- Extract a Shopify orders/create payload.
+-- Extract a Shopify order payload: orders/create, orders/cancelled, orders/paid
+-- all carry the full order.
 -- Parameter 1: delivery_id (X-Shopify-Webhook-Id)
 --
 -- note_attributes carries the cart-drawer WhatsApp opt-in
@@ -40,7 +41,9 @@ SELECT p->>'id'                                                         AS order
        -- not with processing time, so a late or replayed webhook can never
        -- override a newer choice (e.g. re-subscribe someone who unsubscribed).
        COALESCE((p->'customer'->'email_marketing_consent'->>'consent_updated_at')::timestamptz,
-                (p->>'created_at')::timestamptz)                         AS email_consent_at
+                (p->>'created_at')::timestamptz)                         AS email_consent_at,
+       (NULLIF(p->>'cancelled_at', ''))::timestamptz                    AS cancelled_at,
+       NULLIF(p->>'cancel_reason', '')                                  AS cancel_reason
   FROM webhook_inbox i
  CROSS JOIN LATERAL (SELECT i.payload AS p) x
  WHERE i.source = 'shopify'

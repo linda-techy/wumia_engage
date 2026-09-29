@@ -2,7 +2,7 @@
 
 **Weeks 1–2 · Owners: BE1, BE2 · Design:** [`technical/phase-1-core-platform.md`](../technical/phase-1-core-platform.md)
 
-## Status: ◐ built and verified; 6 gap tasks remain
+## Status: ◐ built and verified; T01, T03, T04 done; T02, T05, T06 remain
 
 What exists and has passed against PostgreSQL 16:
 
@@ -189,7 +189,16 @@ ingest-api/src/main/resources/sql/shopify_inventory.sql
 
 ---
 
-### ☐ P1-T04 — Remaining Shopify topics
+### ✓ P1-T04 — Remaining Shopify topics
+
+> **Built 2026-09-30.** All five topics are handled by `ShopifyInboxHandler` (plus `PriceHandler` for `products/update`) and added to `shopify.app.dev.toml`; the existing scopes cover them. `ShopifyLifecycleTest` (9) sends each topic signed through `/webhooks/shopify` and drains the inbox: cancelled before and after its order and re-sent; paid, then a late paid after a cancellation; a refund replayed twice, and a refund arriving before its order; a price fall, rise, replay, late update and an unreadable price. `./gradlew build` 251 tests.
+>
+> Where the build differs from the text below:
+> - **Every order topic upserts the order**, so a cancellation or payment that arrives before `orders/create` still lands. Only `orders/create` emits `order_placed`. `cancelled_at` and `cancel_reason` are kept once set; `orders/paid` never overwrites the status of a cancelled order.
+> - **A refund before its order** is kept in `order_refunds` and folded into `orders.refunded_paise` when the order arrives. Only `transactions[]` with `kind = refund` and `status = success` count as refunded money. `refund_initiated` carries the buyer's identity when the order is known.
+> - **Prices:** the first `products/update` seen for a variant is the baseline (no event), as with inventory. An update not newer than the stored one (`updated_at`) changes nothing. A price with more than two decimals is logged and that variant skipped; the rest of the product is processed. `price_dropped` props: `variant_id, product_id, product_title, product_handle, variant_title, old_price_paise, new_price_paise`; dedupe `pricedrop:<variant>:<updated_at>`.
+> - **`app/uninstalled` logs an ERROR and records an `app_uninstalled` event; it does not yet halt sends.** Setting `halt.marketing` needs a `config_versions` row, whose `changed_by` must be an operator, and there is no system operator yet. Deferred to P6-T02 (kill-switch writes), which should trip the halt on this event.
+> - Fixtures: `shopify_order_cancelled.json` and `shopify_refund_create.json`; `orders/paid` reuses `shopify_order_create.json`; the product and uninstall payloads are built in the test.
 
 | Topic | Effect | Event |
 |---|---|---|
