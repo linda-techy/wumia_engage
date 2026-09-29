@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /** Test consumers, a test cascade, and a push adapter that never leaves the JVM. */
 @Factory
-class WorkerTestBeans {
+public class WorkerTestBeans {
 
     static final String INTENT = "test_worker_browse";
 
@@ -83,13 +83,15 @@ class WorkerTestBeans {
 
     @Singleton
     @Replaces(FcmAdapter.class)
-    static class FakePush implements ChannelAdapter {
+    public static class FakePush implements ChannelAdapter {
         final AtomicInteger sent = new AtomicInteger();
+        public volatile RenderedMessage last;
 
         @Override public Channel channel() { return Channel.PUSH; }
 
         @Override public DispatchResult send(RenderedMessage m, Addresses a) {
             sent.incrementAndGet();
+            last = m;
             return new DispatchResult(null, a.push().size(), List.of());
         }
     }

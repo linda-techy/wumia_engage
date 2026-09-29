@@ -116,6 +116,20 @@ public class DefaultOrchestrator implements MessageOrchestrator {
                 reason, identityId, subjectKey));
     }
 
+    /**
+     * Cancels the live run of one intent for a subject, on the caller's
+     * connection: an event consumer restarting a cascade (a cart changed) or
+     * ending it (the order was placed) commits the cancel with the event.
+     *
+     * @return runs cancelled (0 or 1)
+     */
+    public int cancel(Connection c, String intentKey, String subjectKey, String reason) throws SQLException {
+        return Sql.update(c, """
+                UPDATE cascade_runs SET status = 'cancelled', outcome = ?, updated_at = now()
+                 WHERE intent_key = ? AND subject_key = ? AND status IN ('active','waiting')""",
+                reason, intentKey, subjectKey);
+    }
+
     public Optional<CascadeRun> find(long runId) {
         return db.inTx(c -> one(c, "SELECT * FROM cascade_runs WHERE id = ?", runId));
     }

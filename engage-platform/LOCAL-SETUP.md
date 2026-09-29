@@ -29,6 +29,7 @@ Time: about 30 minutes the first time.
 | `PUBLIC_BASE_URL` | Tunnel URL | From the tunnel (§6.1); changes on every quick-tunnel restart | update in `config/local.env` |
 | `FIREBASE_SERVICE_ACCOUNT_FILE` | FCM credentials, for the worker (Phase 3) | Firebase → Project settings → Service accounts → Generate key. Keep it in `config/` (git-ignored); a relative path resolves from the repo root under `:worker:run` | `config/firebase-service-account.json` |
 | `WORKER_PORT` | Worker `/health` port (Phase 3) | Any free port | `8084` |
+| `STOREFRONT_BASE_URL` | Where push links point, e.g. `<this>/cart` (Phase 3) | The domain shoppers subscribe on. Blank = `https://SHOPIFY_SHOP_DOMAIN` | blank locally |
 | `WORKER_JOBS_ENABLED` | `false` stops the worker's scheduled jobs (event dispatch, cascade tick, sweeper) | Leave `true` | `true` |
 
 Everything else in the file (Firebase, WhatsApp, SMS) stays blank until Phases 2–4.

@@ -1,11 +1,15 @@
 # cart_recovery step 1, 45 min after the last cart change (phase-3 §4).
-# Scarcity, not discount, and only with a true stock count.
+#
+# No stock count and no size: cart lines carry neither a stock level (that
+# needs inventory from P1-T03) nor a clean size (variant titles can be
+# "Default Title" or "M / Blue"). Scarcity copy is only allowed with a true
+# count, so it waits for a stock-aware version of this template.
 key: push_cart_recovery_v1
 channel: push
 category: marketing
 cooldown: PT12H
 locales:
-  en:      { title: "Your {{size}} is still in your bag", body: "{{product}}: only {{left}} left in your size." }
-  hi-Latn: { title: "Aapka {{size}} abhi bhi bag mein hai", body: "{{product}}: aapke size mein sirf {{left}} bache hain." }
-vars: [size, product, left, url, image]
-samples: { size: "XXL", product: "Floral Anarkali Kurta", left: "10" }
+  en:      { title: "Still in your bag: {{product}}", body: "It's saved for you. Complete your order when you're ready." }
+  hi-Latn: { title: "Aapke bag mein: {{product}}", body: "Aapke liye save hai. Jab chahein order complete kijiye." }
+vars: [product, url, image]
+samples: { product: "Floral Anarkali Kurta" }

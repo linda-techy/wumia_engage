@@ -328,7 +328,14 @@ Consumers run in the same transaction as the claim; if one throws, the transacti
 
 ---
 
-### ☐ P3-T07 — Four push intents
+### ◐ P3-T07 — Four push intents
+
+> **2026-09-29: `cart_recovery` built; the other three wait for their events.** `variant_restocked` (P1-T03), `price_dropped` (P1-T04) and `product_viewed` (P2-T06) are not emitted yet; only `cart_updated` and `order_placed` exist.
+>
+> **`cart_recovery`** (`worker/.../intents/CartRecovery.java`): `CartRecoveryTest` (8) goes from a `cart_updated` event to a `sends` row, sent or blocked `NO_MARKETING_CONSENT`. Every cart change cancels the live run (`cart_changed`) and starts a new one 45 min after the change; an emptied cart ends it (`cart_emptied`), and so does `order_placed` for the cart or a cart already converted. Anonymous carts start nothing. Removing the restart or the order cancel fails those tests. `./gradlew build` 200 tests.
+> - **The template lost its scarcity line.** `push_cart_recovery_v1` was "Your {{size}} is still in your bag" / "only {{left}} left in your size", but cart lines carry no stock level (inventory arrives with P1-T03) and no clean size (variant titles can be "Default Title" or "M / Blue"). Scarcity copy is only allowed with a true count, so v1 is now "Still in your bag: {{product}}" / "It's saved for you. Complete your order when you're ready." A stock-aware version follows P1-T03. v1 had never been sent.
+> - The push names the most expensive item in the cart and links to `<STOREFRONT_BASE_URL>/cart` (falls back to `https://SHOPIFY_SHOP_DOMAIN/cart`). Set `STOREFRONT_BASE_URL` to the domain shoppers subscribe on before this goes live (see T04's spam finding).
+> - The "Done when" restock-to-device check belongs to `back_in_stock` and waits for P1-T03.
 
 Per phase-3 §4. Each is a `EventConsumer` that builds a `MessageIntent`. None calls the router.
 

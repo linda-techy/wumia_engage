@@ -22,7 +22,7 @@ When a task and a design doc disagree, the task wins, because it was written aga
 | 0 | [P0 — Prerequisites](P0-prerequisites.md) | 0–1 | ☐ Not started. **Start day 1**: external approvals set the critical path. |
 | 1 | [P1 — Core platform](P1-core-platform.md) | 1–2 | ◐ **Built and verified** (V1–V6, ingest-api). 6 gap tasks remain. |
 | 2 | [P2 — Shopify storefront + FCM push](P2-shopify-storefront-push.md) | 2–4 | ◐ T01–T03 done; first dev-store subscriber and a test push delivered. T04 built (needs JS unit tests + device matrix); T05, T06, T08, T09 open; T07 has `push_v1` only |
-| 3 | [P3 — Policy engine + push sending](P3-policy-and-push.md) | 4–5 | ◐ T01–T06 done (policy engine, migration V8; templates as code; FCM adapter, real push delivered to a dev device; router + orchestrator; worker) |
+| 3 | [P3 — Policy engine + push sending](P3-policy-and-push.md) | 4–5 | ◐ T01–T06 done (policy engine, migration V8; templates as code; FCM adapter, real push delivered to a dev device; router + orchestrator; worker). T07: `cart_recovery` only; the other three intents wait for P1-T03, P1-T04, P2-T06 |
 | 4 | [P4 — WhatsApp, SMS, orchestrator](P4-whatsapp-sms-orchestrator.md) | 5–7 | ☐ Blocked on Meta verification + DLT |
 | 5 | [P5 — Journeys](P5-journeys.md) | 7–9 | ☐ Blocked on the Razorpay spike (P0-T06) |
 | 6 | [P6 — Admin console + campaigns](P6-admin-console-campaigns.md) | 9–11 | ☐ |
