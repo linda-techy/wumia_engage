@@ -193,11 +193,19 @@ vars: [size, product, url, image]
 
 ---
 
-### ◐ P3-T04 — `channels` + `FcmAdapter`
+### ☑ P3-T04 — `channels` + `FcmAdapter`
 
-> **Built 2026-09-28; the manual send to a dev device is pending**, so the box stays open. `FcmAdapterTest` (13) and `FcmTokenPrunerTest` (1, Postgres) pass; `./gradlew build` 167 tests. To finish: `FCM_SMOKE_TOKEN=<dev device token> ./gradlew :channels:test --tests '*FcmSmokeTest'` (skipped unless the variable is set). No local database holds a device; the first dev-store subscriber is on the dev server.
+> **Done 2026-09-29.** `FcmAdapterTest` (13) and `FcmTokenPrunerTest` (1, Postgres) pass; `./gradlew build` 167 tests (1 skipped: the smoke test). **Manual send:** `FcmSmokeTest` sent one push through `FcmAdapter` → `FirebaseFcmClient` to the dev-store subscriber (device 1 on the dev server, Chrome on Android) at 00:41 IST; FCM accepted it and it was displayed on the phone. Rerun with `FCM_SMOKE_TOKEN=<token> ./gradlew :channels:test --tests '*FcmSmokeTest'`.
 >
-> **2026-09-29 attempt, from the developer PC: blocked by Avast, not by the code.** Avast Web/Mail Shield intercepts HTTPS on that machine, and inside Docker Desktop too. With the JDK's trust store the Firebase token fetch fails PKIX; with `-Djavax.net.ssl.trustStoreType=Windows-ROOT` it authenticates but the send fails "Not in GZIP format", because Avast rewrites Google's compressed responses. The push never reached FCM. Fix on the PC: add Avast Web Shield exceptions for `fcm.googleapis.com` and `oauth2.googleapis.com` (or turn off HTTPS scanning), then rerun the command above with `JAVA_TOOL_OPTIONS=-Djavax.net.ssl.trustStoreType=Windows-ROOT` if Maven downloads still need it. Or run `FcmSmokeTest.main` on a host without interception (the dev server).
+> **Two things broke the first attempts, and one is a real dependency fix:**
+> - **firebase-admin 9.4.3 cannot send under Micronaut 5.** It asks for httpclient5 5.3.1; Micronaut's platform lifts it to 5.6.1, which decompresses responses itself, so every call failed `ZipException: Not in GZIP format`. Upgraded to **9.11.0**, built against httpclient5 5.6.
+> - **Avast Web/Mail Shield on the developer PC** intercepts HTTPS (also inside Docker Desktop): PKIX failures for Maven and Firebase under the JDK trust store. With Avast off (or `-Djavax.net.ssl.trustStoreType=Windows-ROOT`) this is not a problem.
+>
+> **Chrome on Android labelled the test push "possible spam".** Chrome runs an on-device check on web push and warns on notifications that look deceptive. The test push invited it: the title said "Engage", not the brand; the body read like a system test; there was no icon; it came from a `myshopify.com` origin just after midnight. What this means for real sends, before P3-T07 goes live:
+> - Every push shows the brand: the service worker should default `icon` and `badge` to the Wumika icon (today `sw.js` sends none unless the payload has one), and copy leads with the product, as the templates already do.
+> - Send from the production domain the shopper subscribed on, not `*.myshopify.com`, once the storefront runs there.
+> - Never send test-style copy to a real subscriber. The smoke test's copy was for this check only.
+> - Measure it: if real sends are flagged too, the P2 metrics (permission revocations per surface) will show it as rising unsubscribes.
 >
 > Where the build differs from the text below:
 > - **`send(RenderedMessage, Addresses)`**, not `send(Decision.Allow, …)`: `Decision` is policy's type and `channels` may not import it. `Addresses` moved from `policy` to `core-domain` so both share it.

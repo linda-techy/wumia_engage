@@ -11,7 +11,10 @@ dependencies {
     api(project(":core-domain"))
     api(project(":core-persistence"))                    // DeviceRepository, for token pruning
     implementation("org.slf4j:slf4j-api")
-    implementation("com.google.firebase:firebase-admin:9.4.3")
+    // 9.11+: built against httpclient5 5.6. With 9.4.x, Micronaut's platform lifts
+    // httpclient5 from 5.3 to 5.6, which decompresses responses itself, and every
+    // FCM call fails "Not in GZIP format" (seen 2026-09-29).
+    implementation("com.google.firebase:firebase-admin:9.11.0")
 
     testImplementation("io.micronaut.sql:micronaut-jdbc-hikari")
     testImplementation("io.micronaut.flyway:micronaut-flyway")
