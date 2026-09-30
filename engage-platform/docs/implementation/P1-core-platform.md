@@ -2,7 +2,7 @@
 
 **Weeks 1–2 · Owners: BE1, BE2 · Design:** [`technical/phase-1-core-platform.md`](../technical/phase-1-core-platform.md)
 
-## Status: ◐ built and verified; T01, T03, T04, T05 done; T02, T06 remain
+## Status: ◐ built and verified; T01–T05 done; T06 remains
 
 What exists and has passed against PostgreSQL 16:
 
@@ -58,7 +58,16 @@ scripts/send-test-webhook.sh bad-signature        # HTTP 401, no inbox row
 
 ---
 
-### ☐ P1-T02 — Fulfillments and courier events
+### ✓ P1-T02 — Fulfillments and courier events
+
+> **Built 2026-09-30 for Shiprocket (ADR-005, `docs/decisions/`).** `CourierFlowTest` (9): fulfillment then scans ends `delivered` with one `order_shipped`, `out_for_delivery`, `order_delivered` each, all naming the buyer, order and AWB; scans before the fulfillment attach to it (one row); `delivered` before `out_for_delivery` stays `delivered` and a stale scan emits nothing; a late in-transit scan cannot move out-for-delivery back; the same scan twice (identical or re-formatted) is one row and one event; two NDR attempts count 2 with the reason and two `delivery_failed`, and a re-attempt still delivers; a cancelled fulfillment cancels and stays cancelled; a wrong or missing token is 401 with nothing stored; Shiprocket labels and times map. Mutation check: removing the terminal guard or the courier-time comparison each fails a test.
+>
+> Where the build differs from the text below:
+> - **Shared `courier/Shipments`** applies both sources: found by AWB (any carrier), else fulfillment id, else created; one per-AWB advisory lock so both writers cannot create two rows. Status moves by courier time; same time → later stage; terminal (`delivered`, `rto`, `cancelled`) never left. NDR sits below out-for-delivery so a re-attempt can go out again; every newer NDR increments `ndr_attempts`.
+> - **Shopify's fulfillment `shipment_status`** (in_transit, out_for_delivery, attempted_delivery/failure, delivered) feeds the same rules, so states arrive even before the courier webhook is connected. `order_shipped` comes from a successful fulfillment with a tracking number, once per shipment.
+> - **Controller at `web/CourierWebhookController`** (`/webhooks/courier`; the path avoids words Shiprocket refuses). Auth is Shiprocket's `x-api-key` token (`COURIER_WEBHOOK_TOKEN`), not a signature: Shiprocket has none. The inbox dedupes on a body hash; `shipment_events` on AWB + status + time.
+> - Events carry `props.order_id`, `awb`, `carrier`, `shipment_id` (+ `ndr_reason`). A courier event before the order is known carries no identity; `rto` emits no event yet (nothing consumes it).
+> - Scope `read_fulfillments` and topics `fulfillments/create`, `fulfillments/update` added to the dev app.
 
 The design (§4) relies on shipping events to drive `order_tracking` (P4) and `ndr_rescue` (P5). Shopify tells us an order shipped. Only the courier tells us *out for delivery*, *delivered* and *NDR*.
 

@@ -1,0 +1,34 @@
+{
+  "awb": "19041424751540",
+  "courier_name": "Delhivery Surface",
+  "order_id": "1042_6012345678901",
+  "sr_order_id": 348456385,
+  "awb_assigned_date": "2026-09-20 09:31:00",
+  "is_return": 0,
+  "channel_id": 3422553,
+  "pod_status": "OTP Based Delivery",
+  "pod": "Not Available",
+  "current_status": "OUT FOR DELIVERY",
+  "current_status_id": 17,
+  "shipment_status": "OUT FOR DELIVERY",
+  "shipment_status_id": 17,
+  "current_timestamp": "21 09 2026 09:15:00",
+  "scans": [
+    {
+      "date": "2026-09-20 09:31:00",
+      "status": "X-UCI",
+      "activity": "Manifested - Manifest uploaded",
+      "location": "Kochi_Hub (Kerala)",
+      "sr-status": "5",
+      "sr-status-label": "MANIFEST GENERATED"
+    },
+    {
+      "date": "2026-09-21 09:15:00",
+      "status": "X-EV",
+      "activity": "Out for delivery",
+      "location": "Kochi_Hub (Kerala)",
+      "sr-status": "17",
+      "sr-status-label": "OUT FOR DELIVERY"
+    }
+  ]
+}

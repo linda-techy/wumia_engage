@@ -22,6 +22,10 @@ public final class EngageProperties {
     @ConfigurationProperties("engage.consent")
     public record Consent(String checkoutNoticeSince) {}
 
+    /** Shipping aggregator webhooks (P1-T02, ADR-005). Blank token = every courier webhook is refused. */
+    @ConfigurationProperties("engage.courier")
+    public record Courier(String webhookToken) {}
+
     /** Web pixel intake (P2-T06). Blank = the endpoint answers 503. */
     @ConfigurationProperties("engage.pixel")
     public record Pixel(String writeKey) {}

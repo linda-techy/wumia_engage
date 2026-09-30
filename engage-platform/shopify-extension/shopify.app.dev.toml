@@ -16,7 +16,8 @@ embedded = false
 # and, with read_products, the inventory item -> variant lookup (P1-T03).
 # write_pixels + read_customer_events: the engage-pixel web pixel (P2-T06),
 # activated with webPixelCreate.
-scopes = "read_orders,read_customers,read_inventory,read_products,write_pixels,read_customer_events"
+# read_fulfillments: fulfillments/create + update (P1-T02, AWB and shipping states).
+scopes = "read_orders,read_customers,read_inventory,read_products,write_pixels,read_customer_events,read_fulfillments"
 use_legacy_install_flow = false
 
 [auth]
@@ -39,5 +40,6 @@ api_version = "2026-07"
 topics = ["checkouts/create", "checkouts/update", "orders/create",
           "orders/cancelled", "orders/paid", "refunds/create",
           "carts/create", "carts/update", "customers/create", "customers/update",
-          "inventory_levels/update", "products/update", "app/uninstalled"]
+          "inventory_levels/update", "products/update", "app/uninstalled",
+          "fulfillments/create", "fulfillments/update"]
 uri = "https://engage-dev.wumika.com/webhooks/shopify"

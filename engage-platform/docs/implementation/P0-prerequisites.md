@@ -137,7 +137,7 @@ Create `docs/decisions/`:
 | ADR-002 | Razorpay. Spike result appended by T06. |
 | ADR-003 | Push prompt surfaces: add-to-cart, notify-me, Thank you page. |
 | ADR-004 | Postgres in `ap-south-1`. |
-| ADR-005 | **Shipping aggregator** (Shiprocket, Delhivery, ClickPost …). Decides the courier webhook adapter in P1-T02 and the NDR reply API in P5-T07. |
+| ADR-005 | **Shipping aggregator: Shiprocket** (decided 2026-09-30, `docs/decisions/ADR-005-shipping-aggregator.md`). Decides the courier webhook adapter in P1-T02 and the NDR reply API in P5-T07. |
 
 ---
 
