@@ -22,3 +22,6 @@ out/
 
 # Node (Shopify extension, Angular)
 node_modules/
+
+# Shopify CLI build output (rebuilt on every deploy)
+shopify-extension/extensions/*/dist/

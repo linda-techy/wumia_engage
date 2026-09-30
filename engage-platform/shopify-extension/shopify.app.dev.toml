@@ -14,7 +14,9 @@ embedded = false
 # Read-only. read_orders covers orders/*, checkouts/* and carts/* webhooks;
 # read_customers covers customers/*; read_inventory covers inventory_levels/*
 # and, with read_products, the inventory item -> variant lookup (P1-T03).
-scopes = "read_orders,read_customers,read_inventory,read_products"
+# write_pixels + read_customer_events: the engage-pixel web pixel (P2-T06),
+# activated with webPixelCreate.
+scopes = "read_orders,read_customers,read_inventory,read_products,write_pixels,read_customer_events"
 use_legacy_install_flow = false
 
 [auth]

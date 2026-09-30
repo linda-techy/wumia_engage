@@ -34,6 +34,10 @@ engage:
     webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:}
     mode: ${RAZORPAY_MODE:test}
     match-window-minutes: ${RAZORPAY_MATCH_WINDOW_MINUTES:30}
+  pixel:
+    # Shared with the web pixel's settings (webPixelCreate). Public by nature:
+    # it keeps out casual traffic only. Empty = /pixel/events answers 503.
+    write-key: ${PIXEL_WRITE_KEY:}
   privacy:
     # Empty = refuse to start (fail closed). * = every customer.
     customer-allowlist-emails: ${CUSTOMER_ALLOWLIST_EMAILS:}

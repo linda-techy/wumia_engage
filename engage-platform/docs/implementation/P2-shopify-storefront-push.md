@@ -173,7 +173,17 @@ ingest-api/src/main/java/in/brand/engage/ingest/storefront/ThankYouController.ja
 
 ---
 
-### ☐ P2-T06 — Web pixel
+### ◐ P2-T06 — Web pixel
+
+> **Built 2026-09-30; the dev-store check waits for the scope approval, `PIXEL_WRITE_KEY` on the server and `webPixelCreate`.** `PixelIntakeTest` (9): a product view stored with no identity and no identity created; email and phone in the body dropped; a replay stored once; checkout steps move `last_step` forward and a late earlier step cannot move it back; a step for an unknown checkout kept as an event only; wrong or missing key 401; unlisted names, bad timestamps and missing required fields 400; the 301st event from one browser in an hour 429; the CORS preflight from the sandbox's `null` origin allowed. `./gradlew build` 267 tests.
+>
+> Where the build differs from the text below:
+> - **The controller is `web/PixelController`, the logic `pixel/PixelEvents`** (the existing packages); no SQL file, the one UPDATE is inline.
+> - **`product_added_to_cart` is also accepted**: browse_abandon needs "no add-to-cart" from the same browser.
+> - **The pixel reads the push embed's `engage:anon` from the storefront's localStorage** (`browser.localStorage`, top frame) and sends it as `anonId`. Ingest stores it in the event props only; a consumer may use it to find an identity the push embed *already* linked (identity key `anon`), never to create one.
+> - `last_step` holds the pixel event name (`payment_info_submitted`, etc.), not the `contact | shipping | payment` in V3's column comment. It moves only to a later pixel timestamp. A step that arrives before the checkout webhook created the row is kept as an event only.
+> - Blank `PIXEL_WRITE_KEY` → 503 rather than refusing to start, so a deploy without it stays healthy. CORS (`@CrossOrigin`) is opened on this route only.
+> - Scopes `write_pixels,read_customer_events` added to `shopify.app.dev.toml`; the pixel is `extensions/engage-pixel` (strict sandbox; loads only with analytics + marketing consent where the region requires consent).
 
 **Files**
 ```
