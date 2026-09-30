@@ -215,7 +215,10 @@ ingest-api/src/main/resources/sql/pixel_event.sql
 
 ---
 
-### ☐ P2-T07 — Consent copy registration (interim)
+### ✓ P2-T07 — Consent copy registration (interim)
+
+> **Done 2026-09-30, by migrations rather than a psql seed** (so every environment gets the same rows): `push_v1` (V7), `checkout_notice_v1` + `ty_wa_v1` (V12), `push_v2` (V13), `wa_v1` + `wa_inthread_v1` (V14). Under the consent model decided 2026-09-30, every explicit WhatsApp opt-in (cart tick, Thank you tap, a message the shopper sends) covers **offers too** (`{transactional,marketing}`); order updates alone come from the checkout notice. `wa_v1` text: `Send me order updates and offers from WUMIKA on WhatsApp` (the embed's default "WhatsApp opt-in text"); `wa_inthread_v1`: `Yes, send me order updates, size-back-in-stock alerts and offers on WhatsApp.` (the wa.me prefill; recorded when P4 inbound sees it).
+> - **The cart checkbox now exists:** app block `Engage WhatsApp opt-in` (`blocks/wa-optin.liquid`, cart template). Unticked unless this cart was ticked before; label and version come from the embed so the words shown are the words registered; hidden when the embed or its WhatsApp copy is missing. `wa-optin-block.test.js` (4; a pre-ticked box fails it). Cart drawers are theme code, not app-block targets: add the same checkbox there only if the theme exposes a hook.
 
 P6 builds the registry screen. Until then, copy versions are registered by a seed SQL file run with `psql`, so the storefront can go live:
 

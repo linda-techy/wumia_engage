@@ -328,7 +328,8 @@ function showWhatsAppOptIn(surface) {
   const num = (CFG.waNumber || '').replace(/[^0-9]/g, '');
   if (!num) return;
   if (store.get('wa-dismissed')) return;
-  const msg = encodeURIComponent('Yes, send me order and size-back-in-stock updates.');
+  // wa_inthread_v1 (V14): the shopper sends this themselves, which is the opt-in.
+  const msg = encodeURIComponent('Yes, send me order updates, size-back-in-stock alerts and offers on WhatsApp.');
   const link = el('a', { class: 'engage-btn engage-btn--primary', href: `https://wa.me/${num}?text=${msg}`,
     target: '_blank', rel: 'noopener', onclick: () => { track(surface, 'soft_accepted'); bar.remove(); } },
     'Get updates on WhatsApp');
