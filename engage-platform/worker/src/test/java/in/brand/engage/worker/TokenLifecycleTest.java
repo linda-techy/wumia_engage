@@ -20,6 +20,8 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 class TokenLifecycleTest {
 
     @Inject TokenLifecycle lifecycle;
+    @Inject PushTokenGauge gauge;
+    @Inject io.micrometer.core.instrument.MeterRegistry registry;
     @Inject TestClock clock;
     @Inject Db db;
 
@@ -63,6 +65,27 @@ class TokenLifecycleTest {
         lifecycle.deactivateDormant();
 
         assertEquals(0, lifecycle.deactivateDormant());
+    }
+
+    @Test void the_gauge_counts_devices_by_state_and_browser() {
+        double staleBefore = tokens("stale", "chrome");
+        device(clock.instant().minus(Duration.ofDays(45)), null);
+        device(clock.instant().minus(Duration.ofDays(45)), null);
+
+        gauge.refresh();
+
+        assertEquals(staleBefore + 2, tokens("stale", "chrome"));
+    }
+
+    @Test void the_prometheus_endpoint_fails_closed_without_a_token() {
+        var res = new MetricsAccessFilter("").check(io.micronaut.http.HttpRequest.GET("/prometheus"));
+        assertEquals(io.micronaut.http.HttpStatus.NOT_FOUND, res.status());
+    }
+
+    private double tokens(String state, String browser) {
+        gauge.refresh();
+        var g = registry.find("engage.push.tokens").tags("state", state, "browser", browser).gauge();
+        return g == null ? 0 : g.value();
     }
 
     /* -------------------------------- fixtures -------------------------------- */

@@ -229,9 +229,9 @@ Each row holds the **verbatim** text shown to the shopper and the purposes it co
 
 ---
 
-### ◐ P2-T08 — Token lifecycle job
+### ✓ P2-T08 — Token lifecycle job
 
-> **Built 2026-09-30; the gauge waits for P1-T05 (no metrics library yet).** `worker/TokenLifecycle`: 02:30 IST (`@Scheduled` cron, zone Asia/Kolkata), one pass per night across workers via `pg_try_advisory_xact_lock` (the others skip). `TokenLifecycleTest` (3): fresh → `active`, 45 days → `stale` and still active, 200 days → deactivated `dormant`; a click within 180 days keeps an unrefreshed device, one 190 days ago does not; a second pass changes nothing. `./gradlew build` 277 tests.
+> **Built 2026-09-30; gauge added the same day.** `engage_push_tokens{state,browser}` is a Micrometer `MultiGauge` on the worker (`PushTokenGauge`), refreshed every minute from `device_health`; vanished combinations are dropped. The worker's `/prometheus` uses the same `METRICS_TOKEN` guard as ingest-api (its port is not published anyway). `worker/TokenLifecycle`: 02:30 IST (`@Scheduled` cron, zone Asia/Kolkata), one pass per night across workers via `pg_try_advisory_xact_lock` (the others skip). `TokenLifecycleTest` (3): fresh → `active`, 45 days → `stale` and still active, 200 days → deactivated `dormant`; a click within 180 days keeps an unrefreshed device, one 190 days ago does not; a second pass changes nothing. `./gradlew build` 277 tests.
 > - **V11 (`push_prompt_funnel`, `device_health`) is built now** with this task, because the stale state is that view; P2-T09 adds the browser matrix on top. `device_health` also carries `deactivated_reason`.
 
 Nightly, 02:30 IST, one runner via advisory lock:
