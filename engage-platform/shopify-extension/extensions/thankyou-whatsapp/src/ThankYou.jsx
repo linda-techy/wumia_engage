@@ -1,4 +1,6 @@
-// Thank you page WhatsApp opt-in (phase-2 §6.2, P2-T05).
+// Thank you page WhatsApp opt-in (phase-2 §6.2, P2-T05). Order updates already
+// go to the checkout phone on the notice basis (checkout_notice_v1); this tap
+// is the explicit opt-in that also covers offers (marketing).
 // Target: purchase.thank-you.block.render. Preact + Polaris web components.
 //
 // Sends only the order id and the copy version, with Shopify's session token
@@ -10,7 +12,7 @@ import { render } from 'preact';
 import { useState } from 'preact/hooks';
 
 const COPY_VERSION = 'ty_wa_v1';
-const CONSENT_TEXT = 'Get dispatch, delivery and exchange updates from WUMIKA on WhatsApp.';
+const CONSENT_TEXT = 'Get order updates, new arrivals and offers from WUMIKA on WhatsApp. Reply STOP anytime to opt out.';
 
 export default async () => {
   render(<WhatsAppOptIn />, document.body);
@@ -38,14 +40,14 @@ function WhatsAppOptIn() {
   }
 
   if (state === 'done') {
-    return <s-banner tone="success">Done. Delivery updates will come on WhatsApp.</s-banner>;
+    return <s-banner tone="success">Done. You will get updates and offers on WhatsApp.</s-banner>;
   }
   return (
-    <s-section heading="Track this order on WhatsApp">
+    <s-section heading="WUMIKA on WhatsApp">
       <s-stack gap="base">
         <s-paragraph>{CONSENT_TEXT}</s-paragraph>
         {state === 'error' && <s-banner tone="critical">That did not go through. Please try again.</s-banner>}
-        <s-button onClick={optIn} loading={state === 'saving'}>Yes, send updates on WhatsApp</s-button>
+        <s-button onClick={optIn} loading={state === 'saving'}>Yes, send me updates on WhatsApp</s-button>
       </s-stack>
     </s-section>
   );

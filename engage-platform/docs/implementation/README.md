@@ -65,7 +65,7 @@ engage/
 | V9 | P1 gaps ✓ | `shipments`, `shipment_events`, `order_refunds`, `inventory_levels`, `variant_prices`; cancellation and refund columns on `orders`; `inventory_state.product_id` (added with P1-T03) |
 | V10 | P3-T07 ✓ | index on pixel events by `client_id` (browse_abandon session lookup). Built before the P2 views, so it took V10 and the planned P2–P7 migrations below moved up by one |
 | V11 | P2 ✓ | `push_prompt_funnel` view; `device_health` (stale/active/inactive) view, built with P2-T08 |
-| V12 | P2-T05 ✓ | `ty_wa_v1` Thank you page WhatsApp copy (transactional). Built before P4, so the planned P4–P7 migrations below moved up by one more |
+| V12 | P2-T05 ✓ | `checkout_notice_v1` (WhatsApp order updates on the checkout phone notice) and `ty_wa_v1` (Thank you page opt-in incl. offers). Built before P4, so the planned P4–P7 migrations below moved up by one more |
 | V13 | P4 | `wa_phone_numbers` + history (quality, tier); WhatsApp config keys |
 | V14 | P5 | journey parameter config keys with defaults; `profile_recompute()` |
 | V15 | P6 | `exports`, `operator_recovery_codes`, `pii_unmask_log` |

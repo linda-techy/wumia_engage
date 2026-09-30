@@ -36,14 +36,17 @@ public class ShopifyInboxHandler implements InboxHandler {
 
     private final IdentityResolver identities;
     private final ConsentWriter consents;
+    private final OffsetDateTime noticeSince;   // null = checkout notice not live
     private final EventWriter events;
     private final InventoryHandler inventory;
     private final PriceHandler prices;
     private final int matchWindowMinutes;
 
     public ShopifyInboxHandler(IdentityResolver identities, ConsentWriter consents, EventWriter events,
-                               InventoryHandler inventory, PriceHandler prices, EngageProperties.Razorpay razorpay) {
+                               InventoryHandler inventory, PriceHandler prices, EngageProperties.Razorpay razorpay,
+                               EngageProperties.Consent consent) {
         this.identities = identities;
+        this.noticeSince = noticeSince(consent.checkoutNoticeSince());
         this.consents = consents;
         this.events = events;
         this.inventory = inventory;
@@ -54,6 +57,15 @@ public class ShopifyInboxHandler implements InboxHandler {
     @Override
     public String source() {
         return "shopify";
+    }
+
+    /** "2026-10-01" (IST midnight) or an ISO instant; blank = off. A typo fails startup rather than guessing. */
+    public static OffsetDateTime noticeSince(String v) {
+        if (v == null || v.isBlank()) return null;
+        var t = v.strip();
+        return t.length() == 10
+                ? java.time.LocalDate.parse(t).atStartOfDay(java.time.ZoneId.of("Asia/Kolkata")).toOffsetDateTime()
+                : OffsetDateTime.parse(t);
     }
 
     @Override
@@ -246,6 +258,9 @@ public class ShopifyInboxHandler implements InboxHandler {
                     consents.grantWhatsAppFromOrderAttributes(c, identityId, orderId, phone.source(), noteAttributes,
                             createdAt);
                     consents.applyPendingOptIns(c, identityId, orderId);
+                    if (noticeSince != null && createdAt != null && !createdAt.isBefore(noticeSince)) {
+                        consents.grantWhatsAppFromCheckoutNotice(c, identityId, orderId, phone.source(), createdAt);
+                    }
                 }
                 consents.syncShopifyEmailConsent(c, identityId, rs.getString("email_consent_state"),
                         "order:" + orderId, Sql.timestamp(rs, "email_consent_at"));

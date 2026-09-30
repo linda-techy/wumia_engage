@@ -51,8 +51,9 @@ class ThankYouOptInTest {
             // empties consent_copy_versions (created_by references operators).
             st.execute("""
                 INSERT INTO consent_copy_versions (version, channel, text, purposes, surface)
-                VALUES ('ty_wa_v1', 'whatsapp', 'Get dispatch, delivery and exchange updates from WUMIKA on WhatsApp.',
-                        '{transactional}', 'thank_you')
+                VALUES ('ty_wa_v1', 'whatsapp',
+                        'Get order updates, new arrivals and offers from WUMIKA on WhatsApp. Reply STOP anytime to opt out.',
+                        '{transactional,marketing}', 'thank_you')
                 ON CONFLICT (version) DO NOTHING""");
         }
     }
@@ -65,7 +66,7 @@ class ThankYouOptInTest {
 
         orderCreated();
 
-        assertEquals("whatsapp|transactional|granted|ty_wa_v1", thankYouConsent());
+        assertEquals("whatsapp|marketing|granted|ty_wa_v1,whatsapp|transactional|granted|ty_wa_v1", thankYouConsent());
         assertEquals("t", q("SELECT (applied_at IS NOT NULL)::text::char FROM pending_optins WHERE order_id = '" + ORDER + "'"));
     }
 
@@ -75,9 +76,9 @@ class ThankYouOptInTest {
 
         assertEquals(HttpStatus.OK, optIn(token(), GID, "ty_wa_v1"));
 
-        assertEquals("whatsapp|transactional|granted|ty_wa_v1", thankYouConsent());
+        assertEquals("whatsapp|marketing|granted|ty_wa_v1,whatsapp|transactional|granted|ty_wa_v1", thankYouConsent());
         assertEquals(q("SELECT identity_id::text FROM orders WHERE id = '" + ORDER + "'"),
-                q("SELECT identity_id::text FROM consents WHERE source = 'thank_you'"), "the order's buyer, not the request");
+                q("SELECT DISTINCT identity_id::text FROM consents WHERE source = 'thank_you'"), "the order's buyer, not the request");
     }
 
     @Test
@@ -87,7 +88,7 @@ class ThankYouOptInTest {
         optIn(token(), GID, "ty_wa_v1");
         optIn(token(), ORDER, "ty_wa_v1");        // the bare number is the same order
 
-        assertEquals("1", q("SELECT count(*) FROM consents WHERE source = 'thank_you'"));
+        assertEquals("2", q("SELECT count(*) FROM consents WHERE source = 'thank_you'"), "one row per purpose, once");
     }
 
     @Test
@@ -177,7 +178,9 @@ class ThankYouOptInTest {
     }
 
     String thankYouConsent() throws SQLException {
-        return q("SELECT concat_ws('|', channel, purpose, state, copy_version) FROM consents WHERE source = 'thank_you'");
+        return q("""
+                SELECT string_agg(concat_ws('|', channel, purpose, state, copy_version), ',' ORDER BY purpose DESC)
+                  FROM consents WHERE source = 'thank_you'""");
     }
 
     String q(String sql) throws SQLException {
