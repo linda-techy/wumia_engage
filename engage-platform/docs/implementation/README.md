@@ -63,12 +63,12 @@ engage/
 | V7 | P2 ✓ | `push_v1` consent copy registered (took V7 before this table was renumbered; forward-only, so later versions moved up by one) |
 | V8 | P3 ✓ | `events.dispatched_at` + claim index; `config_keys.default_value`; kill-switch, push and `holdout.journey_pct` config keys; `config_changed` notify trigger (planned as V10; built before the P1 gaps and P2 views, so it took the next free number and those two moved up) |
 | V9 | P1 gaps ✓ | `shipments`, `shipment_events`, `order_refunds`, `inventory_levels`, `variant_prices`; cancellation and refund columns on `orders`; `inventory_state.product_id` (added with P1-T03) |
-| V10 | P3-T07 ✓ | index on pixel events by `client_id` (browse_abandon session lookup) |
-| V10 | P2 | `push_prompt_funnel` view; `devices` staleness view |
-| V11 | P4 | `wa_phone_numbers` + history (quality, tier); WhatsApp config keys |
-| V12 | P5 | journey parameter config keys with defaults; `profile_recompute()` |
-| V13 | P6 | `exports`, `operator_recovery_codes`, `pii_unmask_log` |
-| V14 | P7 | `holdout_lift_weekly`, `spend_by_intent_daily`; `email.daily_cap`; `consent_erasure_proofs` + `erase_identity()` |
+| V10 | P3-T07 ✓ | index on pixel events by `client_id` (browse_abandon session lookup). Built before the P2 views, so it took V10 and the planned P2–P7 migrations below moved up by one |
+| V11 | P2 | `push_prompt_funnel` view; `devices` staleness view |
+| V12 | P4 | `wa_phone_numbers` + history (quality, tier); WhatsApp config keys |
+| V13 | P5 | journey parameter config keys with defaults; `profile_recompute()` |
+| V14 | P6 | `exports`, `operator_recovery_codes`, `pii_unmask_log` |
+| V15 | P7 | `holdout_lift_weekly`, `spend_by_intent_daily`; `email.daily_cap`; `consent_erasure_proofs` + `erase_identity()` |
 
 Migrations are forward-only. Never edit one that has run anywhere but your laptop. Fix forward with the next version.
 
@@ -84,7 +84,7 @@ These were found while checking the plan against the schema that exists. The tas
 | Micronaut Data repositories and Testcontainers | Plain JDBC + SQL files; tests on local `engage_test` / CI service container | Matches the Phase 1 code that exists and was verified |
 | Journeys cancel on `checkout_started`, `cart_emptied` | Those events are added to `ShopifyInboxHandler` in P5-T01 | Phase 1 did not emit them |
 
-Every migration block in these files (V8–V14) has been applied in order on PostgreSQL 16 on top of V1–V6, followed by `db/tests/invariants.sql` (still 17/17) and a functional check of the new views and `profile_recompute()`.
+Every planned migration block in these files (V8 onward) has been applied in order on PostgreSQL 16 on top of V1–V6, followed by `db/tests/invariants.sql` (still 17/17) and a functional check of the new views and `profile_recompute()`.
 
 ---
 
