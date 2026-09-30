@@ -96,7 +96,7 @@ class CheckoutNoticeConsentTest {
     void a_cart_tick_already_covers_order_updates_so_the_notice_adds_nothing() throws Exception {
         exec("""
             INSERT INTO consent_copy_versions (version, channel, text, purposes, surface)
-            VALUES ('wa_v1', 'whatsapp', 'Send me order and delivery updates from Wumika on WhatsApp',
+            VALUES ('wa_v1', 'whatsapp', 'Send me order updates and offers from WUMIKA on WhatsApp',
                     '{transactional,marketing}', 'cart')
             ON CONFLICT (version) DO NOTHING""");
 

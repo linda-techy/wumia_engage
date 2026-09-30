@@ -57,7 +57,7 @@ class WebhookFlowTest {
                          consents, pending_optins, identity_keys, profiles, identities CASCADE""");
             st.execute("""
                 INSERT INTO consent_copy_versions (version, channel, text, purposes, surface)
-                VALUES ('wa_v1', 'whatsapp', 'Send me order updates and offers from BRAND on WhatsApp',
+                VALUES ('wa_v1', 'whatsapp', 'Send me order updates and offers from WUMIKA on WhatsApp',
                         '{transactional,marketing}', 'cart')
                 ON CONFLICT (version) DO NOTHING""");
         }

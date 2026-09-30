@@ -1,0 +1,52 @@
+{%- comment -%}
+  Engage WhatsApp opt-in: an app block for the cart page (P2-T07, phase-2 §6.1).
+  Never pre-ticked: it starts ticked only if this shopper ticked it earlier in
+  this cart (the cart attribute says so). The label and version come from the
+  Engage push embed ("WhatsApp opt-in text" / "WhatsApp copy version"), so the
+  words shown are the words registered (wa_v1, V14). Ticking writes the cart
+  attributes _engage_wa_optin=yes, _engage_wa_copy, _engage_wa_at, which reach
+  the order and are recorded by ConsentWriter; unticking clears them.
+  Requires the Engage push app embed to be enabled.
+{%- endcomment -%}
+{%- assign ticked = false -%}
+{%- if cart.attributes._engage_wa_optin == 'yes' -%}{%- assign ticked = true -%}{%- endif -%}
+<div class="engage-wa-optin" {{ block.shopify_attributes }} hidden>
+  <label class="engage-wa-optin__label">
+    <input type="checkbox" class="engage-wa-optin__box" data-engage-wa-optin {% if ticked %}checked{% endif %}>
+    <span class="engage-wa-optin__text"></span>
+  </label>
+</div>
+<script>
+  (function () {
+    var root = document.currentScript.previousElementSibling;
+    // The embed (EngageConfig) renders at the end of <body>, after this block.
+    function init() {
+      var cfg = (window.EngageConfig || {}).copy || {};
+      if (!cfg.whatsapp || !cfg.whatsappVersion) return;     // embed off or copy not set: show nothing
+      root.querySelector('.engage-wa-optin__text').textContent = cfg.whatsapp;
+      root.hidden = false;
+      root.querySelector('[data-engage-wa-optin]').addEventListener('change', function (e) {
+        if (window.EngagePush) window.EngagePush.setWhatsAppOptIn(e.target.checked);
+      });
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+    else init();
+  })();
+</script>
+<style>
+  .engage-wa-optin { margin: 12px 0; }
+  .engage-wa-optin__label { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; font-size: 14px; line-height: 1.4; }
+  .engage-wa-optin__box { margin-top: 2px; width: 16px; height: 16px; flex: none; }
+</style>
+
+{% schema %}
+{
+  "name": "Engage WhatsApp opt-in",
+  "target": "section",
+  "enabled_on": { "templates": ["cart"] },
+  "settings": [
+    { "type": "paragraph",
+      "content": "Unticked checkbox for WhatsApp updates and offers. The words come from the Engage push embed (WhatsApp opt-in text); register a new version before changing them." }
+  ]
+}
+{% endschema %}
