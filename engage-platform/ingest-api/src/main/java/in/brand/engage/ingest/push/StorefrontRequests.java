@@ -13,8 +13,8 @@ public final class StorefrontRequests {
 
     private StorefrontRequests() {}
 
-    static final Set<String> PERMISSION_SURFACES = Set.of("add_to_cart", "notify_me", "thank_you", "settings");
-    static final Set<String> PROMPT_SURFACES = Set.of("add_to_cart", "notify_me", "thank_you", "cart");
+    static final Set<String> PERMISSION_SURFACES = Set.of("add_to_cart", "notify_me", "thank_you", "settings", "browse");
+    static final Set<String> PROMPT_SURFACES = Set.of("add_to_cart", "notify_me", "thank_you", "cart", "browse");
     static final Set<String> PROMPT_STEPS = Set.of(
             "soft_shown", "soft_accepted", "soft_dismissed",
             "native_granted", "native_denied", "native_dismissed",

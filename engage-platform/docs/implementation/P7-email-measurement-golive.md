@@ -12,7 +12,7 @@ Marketing email takes the free second and third touches in cascades. Every journ
 |---|---|---|---|---|
 | P7-T01 | `SesAdapter` + SNS bounce/complaint intake + one-click unsubscribe | BE2 | 2 d | P0-T07 |
 | P7-T02 | MJML templates + warm-up ramp | FE + BE2 | 1.5 d | T01 |
-| P7-T03 | Measurement: V16 lift views, reports, spend reconciliation | BE1 + FE | 2 d | P5-T09 |
+| P7-T03 | Measurement: V17 lift views, reports, spend reconciliation | BE1 + FE | 2 d | P5-T09 |
 | P7-T04 | Load test (k6) | BE2 | 1.5 d | P6 done |
 | P7-T05 | Privacy: `erase_identity()`, Shopify compliance webhooks | BE1 | 1.5 d | P1 done |
 | P7-T06 | Security review + abuse hardening | BE1 + BE2 | 2 d | P6 done |
@@ -48,7 +48,7 @@ core-domain/src/main/java/in/brand/engage/aws/SnsSignatureVerifier.java
 ### ☐ P7-T02 — Templates + warm-up
 
 - `templates/email/*.mjml` compiled with `mjml` at build time into `templates/email/dist/*.html`, plus a `.txt` alternative for each. The lint (P3-T03) fails a build whose HTML exceeds 100 KB or lacks the unsubscribe placeholder.
-- Warm-up: config key `email.daily_cap` (added in V16) with **effective-dated versions**, entered by an operator through the P6 config API (so each has an actor and a reason), for weeks 1–4 (500, 2,000, 8,000, then removed). The policy engine counts today's email marketing sends against it and defers the rest to tomorrow 09:00 IST.
+- Warm-up: config key `email.daily_cap` (added in V17) with **effective-dated versions**, entered by an operator through the P6 config API (so each has an actor and a reason), for weeks 1–4 (500, 2,000, 8,000, then removed). The policy engine counts today's email marketing sends against it and defers the rest to tomorrow 09:00 IST.
 - Audience for weeks 1–3 is further restricted by an `email_engaged_days` guard (opened or clicked in 30/60 days, or purchased in 180).
 
 **Done when:** four `config_versions` rows exist for `email.daily_cap` with consecutive effective windows, and a test shows the 501st email on day 1 deferred.
@@ -57,7 +57,7 @@ core-domain/src/main/java/in/brand/engage/aws/SnsSignatureVerifier.java
 
 ### ☐ P7-T03 — Measurement
 
-**Migration `V16__measurement_and_privacy.sql`** (lift views part)
+**Migration `V17__measurement_and_privacy.sql`** (lift views part)
 ```sql
 -- Net revenue per bucket per IST week, with the bucket size as it stood at the
 -- end of that week. The denominator counts identities with no orders, which is
@@ -114,13 +114,13 @@ ON CONFLICT (key) DO NOTHING;
 
 ### ☐ P7-T05 — Privacy
 
-**V16 (privacy part)**: `erase_identity(p_identity UUID, p_request_ref TEXT)`:
+**V17 (privacy part)**: `erase_identity(p_identity UUID, p_request_ref TEXT)`:
 1. Writes an anonymised proof row for every consent withdrawal (channel, purpose, time, `request_ref`) into `consent_erasure_proofs`.
 2. Deletes `identity_keys`, `devices`, `profiles`, `stock_waitlist`, `cascade_runs`, `events` for the identity, and nulls the identity on `orders`, `checkouts`, `carts`, `payment_attempts`.
 3. Scrubs `sends.decision` of any address and sets `sends.identity_id` to a tombstone identity so aggregates still add up.
 4. Deletes the identity. Writes an `audit_log` row.
 
-`consent_erasure_proofs (request_ref, channel, purpose, state, occurred_at)` is created in V16 alongside the function, with no identity column. Most child tables already cascade on identity delete (V1–V4 FKs); the function handles the ones that do not. An `invariants.sql` test (T18, which changes the final line to `ALL 18 …`) asserts that no row anywhere still references the erased id or its phone/email.
+`consent_erasure_proofs (request_ref, channel, purpose, state, occurred_at)` is created in V17 alongside the function, with no identity column. Most child tables already cascade on identity delete (V1–V4 FKs); the function handles the ones that do not. An `invariants.sql` test (T18, which changes the final line to `ALL 18 …`) asserts that no row anywhere still references the erased id or its phone/email.
 
 **Shopify compliance webhooks:** `customers/redact` → `erase_identity` for the identities resolved from the payload's customer id, email and phone; `customers/data_request` → an export row for OWNER review; `shop/redact` → alert and runbook (it only arrives 48 h after uninstall). All three go through the existing HMAC + inbox path.
 

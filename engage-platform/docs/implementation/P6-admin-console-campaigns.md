@@ -19,7 +19,7 @@ Operators log in with MFA, see the system's health, halt it in an incident, chan
 | P6-T05 | Segment DSL → SQL compiler | BE1 | 2 d | T01 |
 | P6-T06 | Campaigns: estimate, approve, arm, executor | BE1 | 3 d | T05 |
 | P6-T07 | Angular 22 admin UI | FE | 8 d (parallel from T01) | T01–T06 endpoints |
-| P6-T08 | Exports, PII masking, recovery codes (V15) | BE2 | 1.5 d | T01 |
+| P6-T08 | Exports, PII masking, recovery codes (V16) | BE2 | 1.5 d | T01 |
 
 ---
 
@@ -83,7 +83,7 @@ admin-api/src/main/java/in/brand/engage/admin/operators/BootstrapOwner.java   # 
 
 - `GET/POST /consent-copy` (`CONFIG_ADMIN` to create; rows immutable, V4 trigger). Shows the grant count per version. Replaces the P2-T07 seed file for new versions.
 - `GET /templates` joins `templates` and `wa_templates`: requested vs approved category (mismatch flagged), status, quality.
-- `GET /inspector?phone=` → exact match on the normalised number (`Msisdn`), returns masked identifiers, every `cascade_runs` row with its `cascade_attempts`, and every `sends` row with `decision`. Each lookup writes a `pii_unmask_log` row (V15) with the operator and reason.
+- `GET /inspector?phone=` → exact match on the normalised number (`Msisdn`), returns masked identifiers, every `cascade_runs` row with its `cascade_attempts`, and every `sends` row with `decision`. Each lookup writes a `pii_unmask_log` row (V16) with the operator and reason.
 
 ---
 
@@ -154,7 +154,7 @@ Structure, auth handling and the composer from `06-admin-ui-angular.md`. Signals
 
 ### ☐ P6-T08 — Exports, PII, recovery codes
 
-**Migration `V15__admin_security.sql`**
+**Migration `V16__admin_security.sql`**
 ```sql
 CREATE TABLE operator_recovery_codes (
     operator_id UUID NOT NULL REFERENCES operators(id) ON DELETE CASCADE,

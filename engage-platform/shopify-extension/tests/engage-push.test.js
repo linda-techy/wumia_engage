@@ -22,11 +22,14 @@ function define(obj, key, value) {
   Object.defineProperty(obj, key, { value, configurable: true, writable: true });
 }
 
-async function load({ ua, touch = 0, standalone = false, push = true, permission = 'default', storage = {} }) {
+async function load({ ua, touch = 0, standalone = false, push = true, permission = 'default', storage = {},
+                      session = {}, earlyAsk = { pageViews: 0, seconds: 0 } }) {
   vi.resetModules();
   document.body.innerHTML = '';
   localStorage.clear();
+  sessionStorage.clear();
   for (const [k, v] of Object.entries(storage)) localStorage.setItem('engage:' + k, v);
+  for (const [k, v] of Object.entries(session)) sessionStorage.setItem('engage:' + k, v);
 
   define(navigator, 'userAgent', ua);
   define(navigator, 'maxTouchPoints', touch);
@@ -54,6 +57,7 @@ async function load({ ua, touch = 0, standalone = false, push = true, permission
 
   window.EngageConfig = {
     proxy: '/apps/push',
+    earlyAsk,
     waNumber: '+91 98765 43210',
     copy: { push: 'Get size-back alerts', pushVersion: 'push_v1', whatsapp: 'Updates on WhatsApp', whatsappVersion: 'wa_v1' }
   };
@@ -160,6 +164,71 @@ describe('soft ask', () => {
     await tick();
     await tick();
     expect(calls.find((c) => c.body?.step === 'soft_shown').body.surface).toBe('add_to_cart');
+  });
+});
+
+/* ------------------------------- early ask -------------------------------- */
+
+describe('early ask while browsing (most Indian stores ask on arrival; we ask softly, a little later)', () => {
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }); });
+
+  const shownSurfaces = () => calls.filter((c) => c.body?.step === 'soft_shown').map((c) => c.body.surface);
+
+  it('the second page view of a visit opens our soft ask, never the browser prompt', async () => {
+    await load({ ua: UA.androidChrome, session: { pv: '1' }, earlyAsk: { pageViews: 2, seconds: 20 } });
+    await vi.advanceTimersByTimeAsync(1500);
+
+    expect(shownSurfaces()).toEqual(['browse']);
+    expect(document.querySelector('.engage-overlay')).not.toBeNull();
+    expect(requestPermission).not.toHaveBeenCalled();
+  });
+
+  it('on the first page it waits for the seconds on site', async () => {
+    await load({ ua: UA.androidChrome, earlyAsk: { pageViews: 2, seconds: 20 } });
+    await vi.advanceTimersByTimeAsync(19_000);
+    expect(shownSurfaces()).toEqual([]);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(shownSurfaces()).toEqual(['browse']);
+  });
+
+  it('asks once per visit', async () => {
+    await load({ ua: UA.androidChrome, session: { pv: '3', early: '1' }, earlyAsk: { pageViews: 2, seconds: 20 } });
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(shownSurfaces()).toEqual([]);
+  });
+
+  it('respects "Not now" for 14 days and a blocked browser', async () => {
+    await load({ ua: UA.androidChrome, session: { pv: '1' }, storage: { dismissed: String(Date.now()) },
+                 earlyAsk: { pageViews: 2, seconds: 20 } });
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(shownSurfaces()).toEqual([]);
+
+    await load({ ua: UA.androidChrome, permission: 'denied', session: { pv: '1' }, earlyAsk: { pageViews: 2, seconds: 20 } });
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(shownSurfaces()).toEqual([]);
+  });
+
+  it('0 turns a trigger off', async () => {
+    await load({ ua: UA.androidChrome, session: { pv: '4' }, earlyAsk: { pageViews: 0, seconds: 0 } });
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(shownSurfaces()).toEqual([]);
+  });
+
+  it('never stacks a second prompt on an open one', async () => {
+    const push = await load({ ua: UA.androidChrome, earlyAsk: { pageViews: 2, seconds: 20 } });
+    push.ask('add_to_cart');                                // the add-to-cart ask is already open
+    await vi.advanceTimersByTimeAsync(20_000);
+
+    expect(shownSurfaces()).toEqual(['add_to_cart']);
+    expect(document.querySelectorAll('.engage-overlay').length).toBe(1);
+  });
+
+  it('on iOS Safari the early moment offers WhatsApp instead', async () => {
+    await load({ ua: UA.iosSafari, session: { pv: '1' }, earlyAsk: { pageViews: 2, seconds: 20 } });
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(document.querySelector('.engage-bar a')).not.toBeNull();
+    expect(events()).toEqual(['ios_redirected_to_whatsapp']);
   });
 });
 

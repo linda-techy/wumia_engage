@@ -121,6 +121,7 @@ export async function ask(surface) {
   }
   if (Notification.permission === 'denied') return null;
   if (Notification.permission === 'granted') return subscribe(surface);
+  if (document.querySelector('.engage-overlay')) return null;   // one prompt at a time
 
   const dismissedAt = Number(store.get('dismissed') || 0);
   if (Date.now() - dismissedAt < 2 * WEEK) return null;       // do not nag
@@ -242,6 +243,35 @@ document.addEventListener('click', async (e) => {
   btn.disabled = true;
 });
 
+/* ---------------------- surface: early (browsing) ----------------------- */
+// Most Indian stores ask as soon as someone lands. We ask a little later and
+// softly: on the Nth page view of a visit, or after N seconds on the site,
+// whichever comes first, once per visit. Our own prompt comes first; the
+// browser's Allow only after a tap, so a "Block" is never spent on arrival.
+// ask() still honours a blocked browser and a "Not now" within 14 days.
+function earlyAsk() {
+  const cfg = CFG.earlyAsk || {};
+  const views = Number(cfg.pageViews ?? 2);
+  const seconds = Number(cfg.seconds ?? 20);
+  const session = {
+    get: (k) => { try { return sessionStorage.getItem('engage:' + k); } catch { return null; } },
+    set: (k, v) => { try { sessionStorage.setItem('engage:' + k, v); } catch {} }
+  };
+  if (session.get('early')) return;                    // already asked this visit
+  const count = Number(session.get('pv') || 0) + 1;
+  session.set('pv', String(count));
+
+  let timer;
+  const fire = () => {
+    clearTimeout(timer);
+    if (session.get('early')) return;
+    session.set('early', '1');
+    ask('browse');
+  };
+  if (views > 0 && count >= views) { timer = setTimeout(fire, 1500); return; }   // let the page settle
+  if (seconds > 0) timer = setTimeout(fire, seconds * 1000);
+}
+
 /* ------------------------------ foreground ------------------------------- */
 // Pushes that arrive while the tab is focused skip the SW background handler.
 async function foreground() {
@@ -311,6 +341,7 @@ function showWhatsAppOptIn(surface) {
 
 /* ---------------------------------- boot --------------------------------- */
 if (pushCapable) { refreshIfDue(); foreground(); }
+earlyAsk();
 
 // Public surface for theme code: onclick="EngagePush.ask('add_to_cart')",
 // and a WhatsApp cart checkbox can call EngagePush.setWhatsAppOptIn(checked).
