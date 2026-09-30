@@ -7,6 +7,7 @@
 type = "web_pixel_extension"
 name = "engage-pixel"
 runtime_context = "strict"
+uid = "b1d274f2-e445-9627-9826-fcef774fffeeaffcd5b7"
 
 # The pixel loads only when the visitor's consent covers these.
 [customer_privacy]
