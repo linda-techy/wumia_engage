@@ -7,6 +7,8 @@ dependencies {
 
     implementation(project(":orchestrator"))
     implementation("io.micronaut:micronaut-management")          // /health
+    implementation("io.micronaut.micrometer:micronaut-micrometer-core")                 // engage_push_tokens
+    implementation("io.micronaut.micrometer:micronaut-micrometer-registry-prometheus")  // /prometheus
     implementation("io.micronaut.serde:micronaut-serde-jackson")
     implementation("io.micronaut.sql:micronaut-jdbc-hikari")
 

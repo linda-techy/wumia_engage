@@ -3,8 +3,15 @@ micronaut:
   application:
     name: engage-worker
   server:
-    # /health only; nothing else is served.
+    # /health and /prometheus only; nothing else is served.
     port: ${WORKER_PORT:8084}
+  metrics:
+    enabled: true
+    export:
+      prometheus:
+        enabled: true
+        descriptions: true
+        step: PT1M
 
 datasources:
   default:
@@ -22,8 +29,14 @@ engage:
   worker:
     # false stops every scheduled job (event dispatch, cascade tick, sweeper).
     jobs-enabled: ${WORKER_JOBS_ENABLED:true}
+  metrics:
+    # Bearer token for /prometheus (same value as ingest-api). Empty = 404.
+    token: ${METRICS_TOKEN:}
 
 endpoints:
+  prometheus:
+    enabled: true
+    sensitive: false        # guarded by MetricsAccessFilter (METRICS_TOKEN) instead
   health:
     enabled: true
     sensitive: false
