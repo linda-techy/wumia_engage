@@ -1,11 +1,14 @@
 {
   "name": "engage-shopify-app",
   "private": true,
-  "description": "Shopify app config for Engage: webhook subscriptions (Phase 1), theme extension (Phase 2).",
+  "description": "Shopify app config for Engage: webhook subscriptions (Phase 1), theme extension (Phase 2). `npm test` runs the storefront JS unit tests (P2-T04).",
   "scripts": {
-    "shopify": "shopify"
+    "shopify": "shopify",
+    "test": "vitest run"
   },
   "devDependencies": {
-    "@shopify/cli": "^3.94.3"
+    "@shopify/cli": "^3.94.3",
+    "jsdom": "26.1.0",
+    "vitest": "3.2.7"
   }
 }
