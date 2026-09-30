@@ -30,6 +30,14 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       # Integration tests skip themselves without config/local.env; unit tests run.
       - run: sh ./gradlew --no-daemon test
+      # Storefront JS unit tests (engage-push.js, P2-T04).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: engage-platform/shopify-extension/package-lock.json
+      - run: npm ci --no-audit --no-fund && npm test
+        working-directory: engage-platform/shopify-extension
 
   deploy:
     needs: test

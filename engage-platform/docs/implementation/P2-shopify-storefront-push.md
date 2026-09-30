@@ -114,7 +114,10 @@ ingest-api/src/main/java/in/brand/engage/ingest/storefront/SwBundle.java
 
 ---
 
-### ☐ P2-T04 — `engage-push.js`
+### ◐ P2-T04 — `engage-push.js`
+
+> **Unit tests done 2026-09-30; the manual matrix (T09) remains.** `shopify-extension/tests/engage-push.test.js`, Vitest 3.2 + jsdom 26 (pinned: the latest versions need Node 22), `npm test`, and now a step in the CI test job, so a failing test blocks the deploy. 18 tests: the 8 user agents (Android Chrome, desktop Chrome, Firefox, macOS Safari and installed iOS get the soft ask; iOS Safari in a tab, Instagram and Facebook get WhatsApp and log `ios_redirected_to_whatsapp`), plus iPadOS reporting itself as a Mac and a browser without push; the native prompt only after "Yes" in the same click; "Not now" remembered 14 days; a blocked browser left alone; a successful `/cart/add.js` opens the ask; the WhatsApp cart attributes; notify-me's waitlist payload. Mutation check: dropping the in-app test fails the Instagram and Facebook cases; writing `'1'` instead of `'yes'` fails the cart case. Bundle 5.3 KB gzipped (limit 12 KB).
+> - **The cart attribute is `_engage_wa_optin=yes`, not `=1`** as written below: `ConsentWriter` matches `'yes'`, and the test pins it so the two cannot drift.
 
 **Surfaces**
 | Surface | When the soft-ask shows | Copy leads with |
