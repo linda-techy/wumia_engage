@@ -19,7 +19,8 @@ public class InboxRepository {
     /** FILTERED: verified, but not an allowlisted customer. Acknowledged and never stored. */
     public enum Stored { NEW, DUPLICATE, FILTERED }
 
-    private static final int MAX_ATTEMPTS = 10;
+    /** After this many failed attempts an item is a dead letter and waits for a human. */
+    public static final int MAX_ATTEMPTS = 10;
 
     private final Db db;
     private final CustomerAllowlist allowlist;

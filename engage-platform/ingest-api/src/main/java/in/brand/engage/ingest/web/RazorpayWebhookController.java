@@ -4,6 +4,8 @@ import in.brand.engage.core.crypto.Hmacs;
 import in.brand.engage.core.razorpay.RazorpaySignatureVerifier;
 import in.brand.engage.ingest.config.EngageProperties;
 import in.brand.engage.ingest.inbox.InboxRepository;
+import in.brand.engage.ingest.metrics.IngestMetrics;
+import in.brand.engage.ingest.metrics.IngestMetrics.Result;
 import in.brand.engage.persistence.Db;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
@@ -33,11 +35,13 @@ public class RazorpayWebhookController {
     private final RazorpaySignatureVerifier verifier;
     private final InboxRepository inbox;
     private final String mode;
+    private final IngestMetrics metrics;
 
     public RazorpayWebhookController(RazorpaySignatureVerifier verifier, InboxRepository inbox,
-                                     EngageProperties.Razorpay razorpay) {
+                                     EngageProperties.Razorpay razorpay, IngestMetrics metrics) {
         this.verifier = verifier;
         this.inbox = inbox;
+        this.metrics = metrics;
         this.mode = razorpay.mode();
     }
 
@@ -48,6 +52,7 @@ public class RazorpayWebhookController {
         if (!verifier.verify(body, h.get("X-Razorpay-Signature"))) {
             LOG.warn("rejected Razorpay webhook: bad signature. Check RAZORPAY_WEBHOOK_SECRET is the "
                     + "webhook secret, not the API key secret.");
+            metrics.received("razorpay", null, Result.UNAUTHORIZED);
             return HttpResponse.unauthorized();
         }
         // x-razorpay-event-id is unique per event and is the dedupe key. If it
@@ -57,9 +62,14 @@ public class RazorpayWebhookController {
         try {
             var stored = inbox.store("razorpay", deliveryId, null, body);   // topic read from payload "event"
             LOG.info("razorpay[{}] event {} -> {}", mode, deliveryId, stored);
+            // The event name is read from the payload later; the counter labels it "all".
+            metrics.received("razorpay", "all", ShopifyWebhookController.result(stored));
             return HttpResponse.ok();
         } catch (Db.DbException e) {
-            if (e.sqlState() != null && e.sqlState().startsWith("22")) return HttpResponse.badRequest();
+            if (e.sqlState() != null && e.sqlState().startsWith("22")) {
+                metrics.received("razorpay", "all", Result.BAD_REQUEST);
+                return HttpResponse.badRequest();
+            }
             throw e;
         }
     }
