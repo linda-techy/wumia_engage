@@ -2,7 +2,7 @@
 
 **Weeks 1–2 · Owners: BE1, BE2 · Design:** [`technical/phase-1-core-platform.md`](../technical/phase-1-core-platform.md)
 
-## Status: ◐ built and verified; T01, T03, T04 done; T02, T05, T06 remain
+## Status: ◐ built and verified; T01, T03, T04, T05 done; T02, T06 remain
 
 What exists and has passed against PostgreSQL 16:
 
@@ -219,7 +219,17 @@ ingest-api/src/main/resources/sql/shopify_inventory.sql
 
 ---
 
-### ☐ P1-T05 — Housekeeping and metrics
+### ✓ P1-T05 — Housekeeping and metrics
+
+> **Built 2026-09-30.** `HousekeepingMetricsTest` (5): `/prometheus` shows all five metrics; a poison item (no handler, 10th attempt) drives `engage_inbox_dead_letters` to 1 and logs `inbox dead letter: source=… topic=… delivery_id=… last_error=…` at ERROR; pending and oldest-pending come from the inbox; the purge deletes only rows processed more than 7 days ago (pending and dead rows stay); `/prometheus` without the right bearer token is 401, and with no token configured 404. `./gradlew build` 279 tests.
+>
+> Where the build differs from the text below:
+> - **`/prometheus` is guarded by `METRICS_TOKEN`** (`Authorization: Bearer …`, constant-time; `MetricsAccessFilter`). nginx forwards every path on the dev host, so an open endpoint would be public. Blank token = 404 (fail closed), so the done-when `curl` needs `-H "Authorization: Bearer $METRICS_TOKEN"`.
+> - Gauges are refreshed from the database every 15 s (`InboxHousekeeping`, package `inbox`), not queried per scrape. Pending excludes dead letters.
+> - The dead-letter log line is written once, when an item fails its 10th attempt (`InboxProcessor`), not on every pass.
+> - `engage_webhook_received_total` labels are bounded: a rejected request is always `topic="other"` (Shopify's topic header is not covered by the HMAC), and Razorpay is `topic="all"` because its event name is read from the payload later. Results: `stored | duplicate | filtered | unauthorized | bad_request`.
+> - `engage_handler_seconds` publishes histogram buckets, so the p99 alert can be computed. Purge: 03:00 IST, batches of 10,000, one pod via `pg_try_advisory_xact_lock`.
+> - The worker has no metrics yet; `engage_push_tokens` (P2-T08) needs the same dependency there.
 
 **Jobs** (`@Scheduled`, IST cron, single-runner via `pg_try_advisory_lock`)
 - Delete `webhook_inbox` rows processed more than 7 days ago. Never delete unprocessed rows.

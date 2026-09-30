@@ -3,6 +3,8 @@ package in.brand.engage.ingest.web;
 import in.brand.engage.core.shopify.ShopifyWebhookVerifier;
 import in.brand.engage.ingest.config.EngageProperties;
 import in.brand.engage.ingest.inbox.InboxRepository;
+import in.brand.engage.ingest.metrics.IngestMetrics;
+import in.brand.engage.ingest.metrics.IngestMetrics.Result;
 import in.brand.engage.persistence.Db;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
@@ -30,11 +32,13 @@ public class ShopifyWebhookController {
     private final ShopifyWebhookVerifier verifier;
     private final InboxRepository inbox;
     private final String shopDomain;
+    private final IngestMetrics metrics;
 
     public ShopifyWebhookController(ShopifyWebhookVerifier verifier, InboxRepository inbox,
-                                    EngageProperties.Shopify shopify) {
+                                    EngageProperties.Shopify shopify, IngestMetrics metrics) {
         this.verifier = verifier;
         this.inbox = inbox;
+        this.metrics = metrics;
         this.shopDomain = shopify.shopDomain();
     }
 
@@ -49,13 +53,16 @@ public class ShopifyWebhookController {
 
         if (shop == null || !shop.equalsIgnoreCase(shopDomain)) {
             LOG.warn("rejected Shopify webhook: shop={} topic={} (expected shop {})", shop, topic, shopDomain);
+            metrics.received("shopify", topic, Result.UNAUTHORIZED);
             return HttpResponse.unauthorized();
         }
         if (!verifier.verify(body, h.get("X-Shopify-Hmac-Sha256"))) {
             LOG.warn("rejected Shopify webhook: shop={} topic={} (bad or missing HMAC)", shop, topic);
+            metrics.received("shopify", topic, Result.UNAUTHORIZED);
             return HttpResponse.unauthorized();
         }
         if (topic == null || deliveryId == null || body == null || body.length == 0) {
+            metrics.received("shopify", topic, Result.BAD_REQUEST);
             return HttpResponse.badRequest();
         }
         try {
@@ -66,11 +73,23 @@ public class ShopifyWebhookController {
             } else {
                 LOG.info("shopify {} {} -> {}", topic, deliveryId, stored);
             }
+            metrics.received("shopify", topic, result(stored));
             return HttpResponse.ok();
         } catch (Db.DbException e) {
             // 22xxx = malformed JSON. Retrying will not fix it, so do not ask Shopify to.
-            if (e.sqlState() != null && e.sqlState().startsWith("22")) return HttpResponse.badRequest();
+            if (e.sqlState() != null && e.sqlState().startsWith("22")) {
+                metrics.received("shopify", topic, Result.BAD_REQUEST);
+                return HttpResponse.badRequest();
+            }
             throw e;
         }
+    }
+
+    static Result result(InboxRepository.Stored stored) {
+        return switch (stored) {
+            case NEW -> Result.STORED;
+            case DUPLICATE -> Result.DUPLICATE;
+            case FILTERED -> Result.FILTERED;
+        };
     }
 }

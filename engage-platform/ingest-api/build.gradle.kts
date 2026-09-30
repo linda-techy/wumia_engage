@@ -9,6 +9,8 @@ dependencies {
     implementation(project(":core-domain"))
     implementation(project(":core-persistence"))
     implementation("io.micronaut:micronaut-management")          // /health
+    implementation("io.micronaut.micrometer:micronaut-micrometer-core")                 // P1-T05
+    implementation("io.micronaut.micrometer:micronaut-micrometer-registry-prometheus")  // /prometheus
     implementation("io.micronaut.serde:micronaut-serde-jackson")
     implementation("io.micronaut.sql:micronaut-jdbc-hikari")
     implementation("io.micronaut.flyway:micronaut-flyway")

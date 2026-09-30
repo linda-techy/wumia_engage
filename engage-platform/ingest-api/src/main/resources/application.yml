@@ -7,6 +7,14 @@ micronaut:
     port: ${INGEST_PORT:8080}
     # Shopify order payloads with many line items can be large.
     max-request-size: 2097152
+  # P1-T05: Micrometer, scraped at /prometheus (MetricsAccessFilter guards it).
+  metrics:
+    enabled: true
+    export:
+      prometheus:
+        enabled: true
+        descriptions: true
+        step: PT1M
 
 datasources:
   default:
@@ -34,6 +42,9 @@ engage:
     webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:}
     mode: ${RAZORPAY_MODE:test}
     match-window-minutes: ${RAZORPAY_MATCH_WINDOW_MINUTES:30}
+  metrics:
+    # Bearer token for /prometheus. Empty = the endpoint answers 404.
+    token: ${METRICS_TOKEN:}
   pixel:
     # Shared with the web pixel's settings (webPixelCreate). Public by nature:
     # it keeps out casual traffic only. Empty = /pixel/events answers 503.
@@ -43,6 +54,9 @@ engage:
     customer-allowlist-emails: ${CUSTOMER_ALLOWLIST_EMAILS:}
 
 endpoints:
+  prometheus:
+    enabled: true
+    sensitive: false        # guarded by MetricsAccessFilter (METRICS_TOKEN) instead
   health:
     enabled: true
     sensitive: false

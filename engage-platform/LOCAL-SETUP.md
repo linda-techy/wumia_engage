@@ -25,6 +25,7 @@ Time: about 30 minutes the first time.
 | `SHOPIFY_CLIENT_ID` | App **Client ID** | Same page (needed from Phase 2) | already in `config/local.env` |
 | `SHOPIFY_ADMIN_TOKEN` | Optional Admin API token (P1-T03: inventory item → variant) | Leave blank: ingest-api exchanges the Client ID and secret for a 24 h token itself (client credentials grant; app and store in the same Dev Dashboard organization). The app needs `read_inventory` and `read_products` approved on the store | blank |
 | `PIXEL_WRITE_KEY` | Web pixel intake key (Phase 2, P2-T06) | **You invent it** (long random); the same value goes into the pixel's settings when it is activated with `webPixelCreate`. Public by nature: it only keeps out casual traffic. Blank = `/pixel/events` answers 503 | blank until the pixel is activated |
+| `METRICS_TOKEN` | Bearer token for ingest-api `/prometheus` (P1-T05) | **You invent it** (long random); scrape with `Authorization: Bearer <token>`. Blank = `/prometheus` answers 404 | blank unless scraping |
 | `SHOPIFY_ADMIN_API_VERSION` | Admin API version | Same as the app's webhook `api_version` | `2026-07` |
 | `RAZORPAY_WEBHOOK_SECRET` | Webhook secret | **You invent it** and type the same value into Razorpay (§6.2) | already in `config/local.env` |
 | `RAZORPAY_MODE` | `test` or `live` | Start with `test` | `test` |
