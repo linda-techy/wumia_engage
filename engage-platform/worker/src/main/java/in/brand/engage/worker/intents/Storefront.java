@@ -24,6 +24,11 @@ public class Storefront {
         return base + "/cart";
     }
 
+    /** The product page, Shopify's default variant. */
+    public String product(String handle) {
+        return base + "/products/" + URLEncoder.encode(handle, StandardCharsets.UTF_8);
+    }
+
     /** The product page with the variant selected. */
     public String product(String handle, String variantId) {
         return base + "/products/" + URLEncoder.encode(handle, StandardCharsets.UTF_8)
