@@ -156,7 +156,18 @@ else showSoftAsk();
 
 ---
 
-### ☐ P2-T05 — Thank you page extension
+### ◐ P2-T05 — Thank you page extension
+
+> **Built 2026-09-30; the dev-store check needs the block placed, the checkout phone label edited, and network access allowed.** `SessionTokenVerifierTest` (7) with vectors signed independently by Python `hmac`: valid, guest (no `sub`), `exp`/`nbf` at ±10 s, wrong `aud`, wrong `dest`, `alg: none`, `alg: HS512`, wrong key, edited payload, malformed. `ThankYouOptInTest` (5): opt-in before `orders/create` kept and applied when the order lands; after it, applied at once to the order's buyer (a `phone` in the request is ignored); replay → one consent row; bad token, `alg: none`, unregistered copy or a bad order id records nothing; CORS only for `https://extensions.shopifycdn.com`.
+>
+> Where the build differs from the text below:
+> - **Consent model (decided 2026-09-30, "as most Indian D2C stores do"):** WhatsApp **order updates** go to the checkout phone on a **notice** basis, and **marketing** needs an explicit tap. Not pre-ticked boxes: those are not valid consent under DPDP s.6 and drive blocks that lower the WhatsApp quality rating.
+>   - `checkout_notice_v1` (V12, whatsapp, `{transactional}`, surface `checkout_notice`): the checkout phone field's label, set in Shopify admin → checkout language, must read exactly `Phone (for order and delivery updates on WhatsApp/SMS)`. From `CHECKOUT_NOTICE_SINCE` (blank = off; set it only after the label is live, since recording a notice that was never shown would be false evidence), each order with a phone grants WhatsApp transactional (`source='checkout_notice'`, evidence: order, phone source, text, `basis=dpdp_s7a_order_updates`, `pre_ticked=false`), **only if the person has no WhatsApp transactional record at all**: a STOP is never overridden by a later order. STOP handling is P4-T04. `CheckoutNoticeConsentTest` (4).
+>   - `ty_wa_v1` (V12, whatsapp, `{transactional,marketing}`, surface `thank_you`): the block's text, verbatim: `Get order updates, new arrivals and offers from WUMIKA on WhatsApp. Reply STOP anytime to opt out.` It is the explicit marketing opt-in.
+>   - Registered by migration V12 (like V7 for `push_v1`), not T07's psql seed. P2-T07 still covers `wa_v1` and `wa_inthread_v1`. Push is unchanged: the browser's own "Allow" is the consent and cannot be assumed.
+> - **Paths:** `core-domain/.../core/shopify/SessionTokenVerifier` (with a small strict JSON reader: no library), `ingest-api/.../web/ThankYouController`, logic in `push/ThankYouOptIns`.
+> - **Race:** the opt-in and the order webhook both take a per-order advisory lock (`ConsentWriter.lockOrder`), so an opt-in arriving mid-webhook is never left pending.
+> - **The ingest URL is an extension setting** (`ingest_url`) filled in the checkout editor, so one extension serves the dev and live apps. Without it the block renders nothing. 200 = consent recorded, 202 = waiting for the order.
 
 **Files**
 ```

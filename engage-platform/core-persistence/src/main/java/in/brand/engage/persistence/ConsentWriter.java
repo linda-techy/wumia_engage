@@ -65,8 +65,51 @@ public class ConsentWriter {
         return n;
     }
 
+    /**
+     * Order and delivery updates on WhatsApp, on the basis of the checkout
+     * notice ({@code checkout_notice_v1}: the phone field says the number gets
+     * order updates on WhatsApp/SMS). DPDP s.7(a): a number given for an order
+     * may be used for that order. Transactional only; marketing always needs a
+     * tap (cart checkbox, Thank you page).
+     *
+     * <p>Granted only when this person has no WhatsApp transactional record at
+     * all: a STOP (withdrawn) is never overridden by a later order, and an
+     * existing grant is not repeated. The caller decides whether the notice was
+     * live when the order was placed (CHECKOUT_NOTICE_SINCE).
+     *
+     * @return rows granted (0 or 1)
+     */
+    public int grantWhatsAppFromCheckoutNotice(Connection c, UUID identityId, String orderId, String phoneSource,
+                                               OffsetDateTime orderCreatedAt) throws SQLException {
+        return Sql.update(c, """
+                INSERT INTO consents (identity_id, channel, purpose, state, source, copy_version, evidence, occurred_at)
+                SELECT ?, 'whatsapp', 'transactional', 'granted', 'checkout_notice', v.version,
+                       jsonb_build_object('order_id', ?::text, 'phone_source', ?::text, 'copy_text', v.text,
+                                          'basis', 'dpdp_s7a_order_updates', 'pre_ticked', false),
+                       ?
+                  FROM consent_copy_versions v
+                 WHERE v.version = 'checkout_notice_v1' AND v.channel = 'whatsapp'
+                   AND NOT EXISTS (SELECT 1 FROM consents x
+                                    WHERE x.identity_id = ? AND x.channel = 'whatsapp'
+                                      AND x.purpose = 'transactional')""",
+                identityId, orderId, phoneSource, orderCreatedAt, identityId);
+    }
+
+    /**
+     * Serialises the two writers of one order's pending opt-ins: the order
+     * webhook applying them and the Thank you page recording one. Held to the
+     * end of the transaction, so whichever commits second sees the other's row.
+     */
+    public static void lockOrder(Connection c, String orderId) throws SQLException {
+        try (var ps = Sql.prepare(c, "SELECT pg_advisory_xact_lock(hashtextextended('order:' || ?, 0))", orderId);
+             var rs = ps.executeQuery()) {
+            rs.next();
+        }
+    }
+
     /** Thank-you-page opt-ins that arrived before the order webhook (phase-2 §6.2). */
     public int applyPendingOptIns(Connection c, UUID identityId, String orderId) throws SQLException {
+        lockOrder(c, orderId);
         int n = Sql.update(c, """
                 INSERT INTO consents (identity_id, channel, purpose, state, source, copy_version, evidence, occurred_at)
                 SELECT ?, p.channel, pur, 'granted', 'thank_you', v.version,

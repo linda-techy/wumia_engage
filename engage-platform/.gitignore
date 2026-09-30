@@ -25,3 +25,5 @@ node_modules/
 
 # Shopify CLI build output (rebuilt on every deploy)
 shopify-extension/extensions/*/dist/
+shopify-extension/extensions/*/shopify.d.ts
+shopify-extension/extensions/*/manifest.json

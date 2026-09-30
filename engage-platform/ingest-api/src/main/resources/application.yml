@@ -45,6 +45,10 @@ engage:
   metrics:
     # Bearer token for /prometheus. Empty = the endpoint answers 404.
     token: ${METRICS_TOKEN:}
+  consent:
+    # Date the checkout phone label started showing checkout_notice_v1's text
+    # (e.g. 2026-10-01). Empty = off: no order-update basis from the notice.
+    checkout-notice-since: ${CHECKOUT_NOTICE_SINCE:}
   pixel:
     # Shared with the web pixel's settings (webPixelCreate). Public by nature:
     # it keeps out casual traffic only. Empty = /pixel/events answers 503.
