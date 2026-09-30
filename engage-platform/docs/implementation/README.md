@@ -21,7 +21,7 @@ When a task and a design doc disagree, the task wins, because it was written aga
 |---|---|---|---|
 | 0 | [P0 — Prerequisites](P0-prerequisites.md) | 0–1 | ☐ Not started. **Start day 1**: external approvals set the critical path. |
 | 1 | [P1 — Core platform](P1-core-platform.md) | 1–2 | ◐ **Built and verified** (V1–V6, ingest-api). Gap tasks: T01 done; T03 done (inventory → `variant_restocked`, V9; verified on the dev store); T04 done (cancelled, paid, refunds, `price_dropped`, uninstall logged; the uninstall halt waits for P6-T02); T05 done (inbox housekeeping, `/prometheus` behind `METRICS_TOKEN`); T02, T06 open. |
-| 2 | [P2 — Shopify storefront + FCM push](P2-shopify-storefront-push.md) | 2–4 | ◐ T01–T03 done; first dev-store subscriber and a test push delivered. T04 built, JS unit tests done (18, in CI; device matrix in T09 remains); T06 built and active on wumika-dev (web pixel + `/pixel/events`; checkout check pending); T08 built (nightly dormant sweep, V11 views; gauge waits for worker metrics); T05, T09 open; T07 has `push_v1` only |
+| 2 | [P2 — Shopify storefront + FCM push](P2-shopify-storefront-push.md) | 2–4 | ◐ T01–T03 done; first dev-store subscriber and a test push delivered. T04 built, JS unit tests done (18, in CI; device matrix in T09 remains); T06 built and active on wumika-dev (web pixel + `/pixel/events`; checkout check pending); T08 built (nightly dormant sweep, V11 views; gauge waits for worker metrics); T05 built (Thank you page WhatsApp block, session-token verifier, V12 copy; dev-store check pending); T09 open; T07 has `push_v1` only |
 | 3 | [P3 — Policy engine + push sending](P3-policy-and-push.md) | 4–5 | ◐ T01–T06 done (policy engine, migration V8; templates as code; FCM adapter, real push delivered to a dev device; router + orchestrator; worker; signed click beacons, UTMs, ArchUnit). T07: all four intents built (`cart_recovery`, `back_in_stock`, `price_drop`, `browse_abandon`); dev-store checks for the last two pending |
 | 4 | [P4 — WhatsApp, SMS, orchestrator](P4-whatsapp-sms-orchestrator.md) | 5–7 | ☐ Blocked on Meta verification + DLT |
 | 5 | [P5 — Journeys](P5-journeys.md) | 7–9 | ☐ Blocked on the Razorpay spike (P0-T06) |
@@ -65,10 +65,11 @@ engage/
 | V9 | P1 gaps ✓ | `shipments`, `shipment_events`, `order_refunds`, `inventory_levels`, `variant_prices`; cancellation and refund columns on `orders`; `inventory_state.product_id` (added with P1-T03) |
 | V10 | P3-T07 ✓ | index on pixel events by `client_id` (browse_abandon session lookup). Built before the P2 views, so it took V10 and the planned P2–P7 migrations below moved up by one |
 | V11 | P2 ✓ | `push_prompt_funnel` view; `device_health` (stale/active/inactive) view, built with P2-T08 |
-| V12 | P4 | `wa_phone_numbers` + history (quality, tier); WhatsApp config keys |
-| V13 | P5 | journey parameter config keys with defaults; `profile_recompute()` |
-| V14 | P6 | `exports`, `operator_recovery_codes`, `pii_unmask_log` |
-| V15 | P7 | `holdout_lift_weekly`, `spend_by_intent_daily`; `email.daily_cap`; `consent_erasure_proofs` + `erase_identity()` |
+| V12 | P2-T05 ✓ | `ty_wa_v1` Thank you page WhatsApp copy (transactional). Built before P4, so the planned P4–P7 migrations below moved up by one more |
+| V13 | P4 | `wa_phone_numbers` + history (quality, tier); WhatsApp config keys |
+| V14 | P5 | journey parameter config keys with defaults; `profile_recompute()` |
+| V15 | P6 | `exports`, `operator_recovery_codes`, `pii_unmask_log` |
+| V16 | P7 | `holdout_lift_weekly`, `spend_by_intent_daily`; `email.daily_cap`; `consent_erasure_proofs` + `erase_identity()` |
 
 Migrations are forward-only. Never edit one that has run anywhere but your laptop. Fix forward with the next version.
 

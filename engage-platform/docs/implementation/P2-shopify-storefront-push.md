@@ -156,7 +156,15 @@ else showSoftAsk();
 
 ---
 
-### ☐ P2-T05 — Thank you page extension
+### ◐ P2-T05 — Thank you page extension
+
+> **Built 2026-09-30; the dev-store check needs the block placed and network access allowed.** `SessionTokenVerifierTest` (7) with vectors signed independently by Python `hmac`: valid, guest (no `sub`), `exp`/`nbf` at ±10 s, wrong `aud`, wrong `dest`, `alg: none`, `alg: HS512`, wrong key, edited payload, malformed. `ThankYouOptInTest` (5): opt-in before `orders/create` kept and applied when the order lands; after it, applied at once to the order's buyer (a `phone` in the request is ignored); replay → one consent row; bad token, `alg: none`, unregistered copy or a bad order id records nothing; CORS only for `https://extensions.shopifycdn.com`.
+>
+> Where the build differs from the text below:
+> - **`ty_wa_v1` is registered by migration V12** (like V7 for `push_v1`), not the psql seed of T07: channel `whatsapp`, purposes `{transactional}`, surface `thank_you`, text `Get dispatch, delivery and exchange updates from WUMIKA on WhatsApp.`, which the block shows verbatim. P2-T07 still covers `wa_v1` and `wa_inthread_v1`.
+> - **Paths:** `core-domain/.../core/shopify/SessionTokenVerifier` (with a small strict JSON reader: no library), `ingest-api/.../web/ThankYouController`, logic in `push/ThankYouOptIns`.
+> - **Race:** the opt-in and the order webhook both take a per-order advisory lock (`ConsentWriter.lockOrder`), so an opt-in arriving mid-webhook is never left pending.
+> - **The ingest URL is an extension setting** (`ingest_url`) filled in the checkout editor, so one extension serves the dev and live apps. Without it the block renders nothing. 200 = consent recorded, 202 = waiting for the order.
 
 **Files**
 ```

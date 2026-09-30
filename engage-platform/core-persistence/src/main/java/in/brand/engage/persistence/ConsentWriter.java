@@ -65,8 +65,21 @@ public class ConsentWriter {
         return n;
     }
 
+    /**
+     * Serialises the two writers of one order's pending opt-ins: the order
+     * webhook applying them and the Thank you page recording one. Held to the
+     * end of the transaction, so whichever commits second sees the other's row.
+     */
+    public static void lockOrder(Connection c, String orderId) throws SQLException {
+        try (var ps = Sql.prepare(c, "SELECT pg_advisory_xact_lock(hashtextextended('order:' || ?, 0))", orderId);
+             var rs = ps.executeQuery()) {
+            rs.next();
+        }
+    }
+
     /** Thank-you-page opt-ins that arrived before the order webhook (phase-2 §6.2). */
     public int applyPendingOptIns(Connection c, UUID identityId, String orderId) throws SQLException {
+        lockOrder(c, orderId);
         int n = Sql.update(c, """
                 INSERT INTO consents (identity_id, channel, purpose, state, source, copy_version, evidence, occurred_at)
                 SELECT ?, p.channel, pur, 'granted', 'thank_you', v.version,

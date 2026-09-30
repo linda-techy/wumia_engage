@@ -1,0 +1,25 @@
+# Thank you page: "Track this order on WhatsApp" (phase-2 §6.2, P2-T05).
+# Available on every plan. The merchant places the block in the checkout
+# editor (Thank you page) and fills in the Engage ingest URL there.
+# The consent text must match V12's ty_wa_v1 byte for byte.
+api_version = "2026-07"
+
+[[extensions]]
+name = "WhatsApp order updates"
+handle = "thankyou-whatsapp"
+type = "ui_extension"
+
+[[extensions.targeting]]
+module = "./src/ThankYou.jsx"
+target = "purchase.thank-you.block.render"
+
+[extensions.capabilities]
+# fetch() to ingest-api /shopify/thankyou/whatsapp-optin
+network_access = true
+
+[extensions.settings]
+[[extensions.settings.fields]]
+key = "ingest_url"
+type = "single_line_text_field"
+name = "Engage ingest URL"
+description = "e.g. https://engage-dev.wumika.com (no trailing slash)"
