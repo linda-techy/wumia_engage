@@ -93,6 +93,21 @@ class CheckoutNoticeConsentTest {
     }
 
     @Test
+    void a_cart_tick_already_covers_order_updates_so_the_notice_adds_nothing() throws Exception {
+        exec("""
+            INSERT INTO consent_copy_versions (version, channel, text, purposes, surface)
+            VALUES ('wa_v1', 'whatsapp', 'Send me order and delivery updates from Wumika on WhatsApp',
+                    '{transactional,marketing}', 'cart')
+            ON CONFLICT (version) DO NOTHING""");
+
+        order(true);
+
+        assertEquals("cart_attr", q("""
+                SELECT source FROM consent_current WHERE channel = 'whatsapp' AND purpose = 'transactional'"""));
+        assertEquals("0", q("SELECT count(*) FROM consents WHERE source = 'checkout_notice'"));
+    }
+
+    @Test
     void the_start_date_is_ist_midnight_or_an_instant_and_blank_is_off() {
         assertNull(ShopifyInboxHandler.noticeSince(" "));
         assertEquals(OffsetDateTime.parse("2026-10-01T00:00+05:30").toInstant(),
@@ -103,8 +118,18 @@ class CheckoutNoticeConsentTest {
 
     /* -------------------------------- helpers -------------------------------- */
 
+    /** The fixture order without its cart WhatsApp tick: only the checkout notice applies. */
     void orderCreated() throws Exception {
-        var body = Files.readAllBytes(Path.of("src/test/resources/fixtures/shopify_order_create.json"));
+        order(false);
+    }
+
+    void order(boolean withCartTick) throws Exception {
+        var json = Files.readString(Path.of("src/test/resources/fixtures/shopify_order_create.json"));
+        if (!withCartTick) {
+            json = json.replaceFirst("(?s)\"note_attributes\"\\s*:\\s*\\[.*?\\]", "\"note_attributes\": []");
+            assertFalse(json.contains("_engage_wa_optin"), "cart tick removed");
+        }
+        var body = json.getBytes(java.nio.charset.StandardCharsets.UTF_8);
         client.toBlocking().exchange(HttpRequest.POST("/webhooks/shopify", body)
                 .contentType(MediaType.APPLICATION_JSON)
                 .header("X-Shopify-Topic", "orders/create")

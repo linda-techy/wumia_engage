@@ -34,6 +34,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 class StorefrontSubscriberTest {
 
     static final String PUSH_COPY = "Get an alert when your size is back or your bag price drops.";
+    static final String PUSH_COPY_V2 = "Get order updates, and an alert when your size is back or your bag price drops.";
     static final String ALLOWLISTED_CUSTOMER = "7001";
 
     @Inject @Client("/") HttpClient client;
@@ -56,6 +57,10 @@ class StorefrontSubscriberTest {
                 INSERT INTO consent_copy_versions (version, channel, text, purposes, surface)
                 VALUES ('push_v1', 'push', '%s', '{marketing}', 'soft_ask')
                 ON CONFLICT (version) DO NOTHING""".formatted(PUSH_COPY));
+            st.execute("""
+                INSERT INTO consent_copy_versions (version, channel, text, purposes, surface)
+                VALUES ('push_v2', 'push', '%s', '{transactional,marketing}', 'soft_ask')
+                ON CONFLICT (version) DO NOTHING""".formatted(PUSH_COPY_V2));
             // An allowlisted customer as the customers/update webhook would leave them.
             var id = st.executeQuery("""
                 SELECT resolve_identity('[{"kind":"shopify_customer","value":"7001","verified":true},
@@ -141,6 +146,22 @@ class StorefrontSubscriberTest {
             SELECT evidence->>'copy_text' FROM consents WHERE identity_id = ? AND channel = 'push'""",
             allowlistedIdentity));
         assertEquals("soft_ask:add_to_cart", one("SELECT source FROM consents WHERE identity_id = ?", allowlistedIdentity));
+    }
+
+    @Test
+    void the_early_ask_with_push_v2_grants_order_updates_and_marketing() throws SQLException {
+        var body = register(anon(), "tok-early");
+        body.put("surface", "browse");
+        body.put("copyVersion", "push_v2");
+        body.put("copyText", PUSH_COPY_V2);
+
+        assertEquals(200, post(signedUri("/register", ALLOWLISTED_CUSTOMER), body));
+
+        assertEquals("browse", one("SELECT permission_source FROM devices WHERE fcm_token = 'tok-early'"));
+        assertEquals("marketing,transactional", one("""
+            SELECT string_agg(purpose::text, ',' ORDER BY purpose::text) FROM consent_current
+             WHERE identity_id = ? AND channel = 'push' AND state = 'granted'""", allowlistedIdentity));
+        assertEquals("soft_ask:browse", one("SELECT DISTINCT source FROM consents WHERE identity_id = ?", allowlistedIdentity));
     }
 
     @Test

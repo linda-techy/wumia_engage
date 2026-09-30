@@ -3,6 +3,7 @@
 # editor (Thank you page) and fills in the Engage ingest URL there.
 # The consent text must match V12's ty_wa_v1 byte for byte (covers offers too).
 api_version = "2026-07"
+uid = "ee40aeed-fe77-c534-2f51-77cf0a9448df15e7159e"
 
 [[extensions]]
 name = "WhatsApp updates and offers"
