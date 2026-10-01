@@ -27,6 +27,7 @@ Time: about 30 minutes the first time.
 | `PIXEL_WRITE_KEY` | Web pixel intake key (Phase 2, P2-T06) | **You invent it** (long random); the same value goes into the pixel's settings when it is activated with `webPixelCreate`. Public by nature: it only keeps out casual traffic. Blank = `/pixel/events` answers 503 | blank until the pixel is activated |
 | `METRICS_TOKEN` | Bearer token for ingest-api `/prometheus` (P1-T05) | **You invent it** (long random); scrape with `Authorization: Bearer <token>`. Blank = `/prometheus` answers 404 | blank unless scraping |
 | `CHECKOUT_NOTICE_SINCE` | Date the checkout phone label shows `checkout_notice_v1`'s text exactly (WhatsApp order updates on notice, V12) | Set only **after** editing the label in Shopify admin → checkout language. Blank = off | blank |
+| `COURIER_WEBHOOK_TOKEN` | Shiprocket tracking webhook token (P1-T02, ADR-005), sent as `x-api-key` | **You invent it**; paste it in Shiprocket → Settings → API → Webhooks, URL `https://<ingest host>/webhooks/courier`. Blank = every courier webhook is refused | blank |
 | `SHOPIFY_ADMIN_API_VERSION` | Admin API version | Same as the app's webhook `api_version` | `2026-07` |
 | `RAZORPAY_WEBHOOK_SECRET` | Webhook secret | **You invent it** and type the same value into Razorpay (§6.2) | already in `config/local.env` |
 | `RAZORPAY_MODE` | `test` or `live` | Start with `test` | `test` |

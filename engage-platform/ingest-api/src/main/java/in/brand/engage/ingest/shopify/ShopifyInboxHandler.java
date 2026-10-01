@@ -37,14 +37,16 @@ public class ShopifyInboxHandler implements InboxHandler {
     private final IdentityResolver identities;
     private final ConsentWriter consents;
     private final OffsetDateTime noticeSince;   // null = checkout notice not live
+    private final FulfillmentHandler fulfillments;
     private final EventWriter events;
     private final InventoryHandler inventory;
     private final PriceHandler prices;
     private final int matchWindowMinutes;
 
     public ShopifyInboxHandler(IdentityResolver identities, ConsentWriter consents, EventWriter events,
-                               InventoryHandler inventory, PriceHandler prices, EngageProperties.Razorpay razorpay,
-                               EngageProperties.Consent consent) {
+                               InventoryHandler inventory, PriceHandler prices, FulfillmentHandler fulfillments,
+                               EngageProperties.Razorpay razorpay, EngageProperties.Consent consent) {
+        this.fulfillments = fulfillments;
         this.identities = identities;
         this.noticeSince = noticeSince(consent.checkoutNoticeSince());
         this.consents = consents;
@@ -85,6 +87,7 @@ public class ShopifyInboxHandler implements InboxHandler {
             case "customers/create", "customers/update" -> customer(c, item);
             case "inventory_levels/update" -> inventory.handle(c, item);
             case "products/update" -> prices.handle(c, item);
+            case "fulfillments/create", "fulfillments/update" -> fulfillments.handle(c, item);
             case "app/uninstalled" -> uninstalled(c, item);
             default -> { /* acknowledged; other topics are consumed in later phases */ }
         }

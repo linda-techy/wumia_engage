@@ -1,0 +1,34 @@
+{
+  "awb": "19041424751540",
+  "courier_name": "Delhivery Surface",
+  "order_id": "1042_6012345678901",
+  "sr_order_id": 348456385,
+  "awb_assigned_date": "2026-09-20 09:31:00",
+  "is_return": 0,
+  "channel_id": 3422553,
+  "pod_status": "OTP Based Delivery",
+  "pod": "Not Available",
+  "current_status": "IN TRANSIT",
+  "current_status_id": 18,
+  "shipment_status": "IN TRANSIT",
+  "shipment_status_id": 18,
+  "current_timestamp": "20 09 2026 16:40:19",
+  "scans": [
+    {
+      "date": "2026-09-20 09:31:00",
+      "status": "X-UCI",
+      "activity": "Manifested - Manifest uploaded",
+      "location": "Kochi_Hub (Kerala)",
+      "sr-status": "5",
+      "sr-status-label": "MANIFEST GENERATED"
+    },
+    {
+      "date": "2026-09-20 16:40:19",
+      "status": "X-EV",
+      "activity": "In Transit - Shipment Recieved at Origin Center",
+      "location": "Kochi_Hub (Kerala)",
+      "sr-status": "18",
+      "sr-status-label": "IN TRANSIT"
+    }
+  ]
+}

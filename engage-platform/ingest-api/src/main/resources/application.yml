@@ -45,6 +45,10 @@ engage:
   metrics:
     # Bearer token for /prometheus. Empty = the endpoint answers 404.
     token: ${METRICS_TOKEN:}
+  courier:
+    # Shiprocket (ADR-005): the security token set in Shiprocket -> Settings ->
+    # API -> Webhooks, sent as x-api-key. Empty = every courier webhook is 401.
+    webhook-token: ${COURIER_WEBHOOK_TOKEN:}
   consent:
     # Date the checkout phone label started showing checkout_notice_v1's text
     # (e.g. 2026-10-01). Empty = off: no order-update basis from the notice.

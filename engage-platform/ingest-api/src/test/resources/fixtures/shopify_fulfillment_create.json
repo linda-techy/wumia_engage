@@ -1,0 +1,19 @@
+{
+  "id": 5123456789012,
+  "order_id": 6012345678901,
+  "status": "success",
+  "created_at": "2026-09-20T09:30:00+05:30",
+  "updated_at": "2026-09-20T09:30:00+05:30",
+  "service": "manual",
+  "shipment_status": null,
+  "tracking_company": "Delhivery",
+  "tracking_number": "19041424751540",
+  "tracking_numbers": ["19041424751540"],
+  "tracking_url": "https://shiprocket.co/tracking/19041424751540",
+  "tracking_urls": ["https://shiprocket.co/tracking/19041424751540"],
+  "email": "Priya.K@Example.com",
+  "name": "#1042.1",
+  "line_items": [
+    { "variant_id": 44581230001, "title": "Linen Kurta", "variant_title": "M", "quantity": 1 }
+  ]
+}
