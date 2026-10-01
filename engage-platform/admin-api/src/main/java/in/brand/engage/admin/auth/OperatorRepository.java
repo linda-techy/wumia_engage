@@ -120,7 +120,11 @@ public class OperatorRepository {
     public void setPassword(Connection c, UUID operatorId, String passwordHash) throws SQLException {
         Sql.update(c, """
                 UPDATE operators
-                   SET password_hash = ?, password_changed_at = now(), status = 'active',
+                   -- ver is the epoch second of this column: it must move even when two
+                   -- changes land in the same second, or old tokens and links survive.
+                   SET password_hash = ?,
+                       password_changed_at = GREATEST(now(), password_changed_at + interval '1 second'),
+                       status = 'active',
                        failed_logins = 0, locked_until = NULL, updated_at = now()
                  WHERE id = ?""", passwordHash, operatorId);
     }

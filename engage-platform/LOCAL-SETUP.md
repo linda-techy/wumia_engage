@@ -150,18 +150,37 @@ Health check, from another terminal:
 curl http://localhost:8081/health
 ```
 
-### Register the WhatsApp consent wording (once)
+### Consent wording
 
-A WhatsApp opt-in is recorded **only** if the exact wording the shopper saw is registered. An unregistered copy version grants nothing and logs a warning, by design. For local testing:
+A consent is recorded **only** if the exact wording the shopper saw is registered. An unregistered copy version grants nothing and logs a warning, by design. The wordings in use are registered by migrations (`push_v1` V7, `checkout_notice_v1`/`ty_wa_v1` V12, `push_v2` V13, `wa_v1`/`wa_inthread_v1` V14, `checkout_notice_v2` V15). A new wording is registered in the admin console (**Consent copy**, CONFIG_ADMIN) or by a new migration. Rows are immutable: new words = a new version.
 
-```sql
--- psql -h localhost -U postgres -d wumika_admin
-INSERT INTO consent_copy_versions (version, channel, text, purposes, surface) VALUES
- ('wa_v1', 'whatsapp', 'Send me order updates and offers from YOUR_BRAND on WhatsApp',
-  '{transactional,marketing}', 'cart');
+### Admin API (console backend, port 8083)
+
+Settings in `config/local.env`:
+
+| Key | What |
+|---|---|
+| `ADMIN_API_PORT` | 8083 |
+| `ADMIN_JWT_KEY_FILE` | RS256 signing key; created on first start at `config/admin-jwt.pem` (git-ignored) |
+| `ADMIN_MFA_KEY` | `openssl rand -hex 32` (64 hex characters). Encrypts operators' MFA secrets; the service refuses to start without it |
+| `ADMIN_BOOTSTRAP_EMAIL` | Your email. Used once, when the operators table is empty |
+
+```bash
+JAVA_HOME="$HOME/.jdks/jdk-25.0.4.1+1" ./gradlew.bat :admin-api:run --console=plain
+curl -s http://localhost:8083/health
 ```
 
-Use your real brand name and the exact words your cart checkbox will show. Changing the words later means a new version (`wa_v2`); rows are immutable.
+**First sign-in.** On a database with no operators, the log prints a one-time link: `Bootstrap OWNER created for … /set-password?token=…` (valid 24 h). Open it in the console to set a password (12+ characters). An OWNER must use MFA: the first sign-in asks you to scan a QR code with an authenticator app and confirm a code; after that, every sign-in is password + code. The link stops working once the password is set.
+
+| Port | Service |
+|---|---|
+| 8081 | ingest-api (`config/local.env`) |
+| 8082 | ingest-api against the dev store (`config/devstore.env`) |
+| 8083 | admin-api |
+| 8084 | worker (`/health`, `/prometheus`) |
+| 4200 | admin-ui dev server (`npm start` in `admin-ui/`, Node 24; proxies `/api` to 8083). See `admin-ui/README.md` |
+
+Endpoints (`/api`, problem+json errors): `auth/login`, `auth/mfa`, `auth/refresh`, `auth/logout`, `auth/me`, `auth/mfa/enrol`, `auth/mfa/confirm`, `auth/set-password`, `ingest/health`, `customers?q=`, `customers/{id}`, `customers/{id}/reveal` (ANALYST, audited), `payments/failures`, `consent-copy` (GET VIEWER, POST CONFIG_ADMIN).
 
 ---
 

@@ -46,8 +46,8 @@ engage/
 ├─ orchestrator/        P3 ◐  templates ✓, router + single-step orchestrator ✓; MessageOrchestrator, MessageRouter, cascades (P4), CapabilityService (P4)
 ├─ journeys/            P5    journey definitions: event → intent
 ├─ worker/              P3 ◐  event dispatch, tick, sweeper ✓; Micronaut app: event dispatch, cascade ticker, campaign executor, jobs
-├─ admin-api/           P6    Micronaut app: operators, RBAC, config, campaigns, reports
-├─ admin-ui/            P6    Angular 22
+├─ admin-api/           P6 ◐  Micronaut app: operators, RBAC, config, campaigns, reports. Console v0 built (auth + MFA, ingest health, customer 360 + reveal, payment failures, consent copy)
+├─ admin-ui/            P6 ◐  Angular 22. Console v0 built: sign-in + MFA (QR enrolment), ingest health, customer 360 + audited reveal, payment failures, consent copy
 ├─ shopify-extension/   P2    Shopify CLI app: theme app extension, web pixel, Thank-you extension
 ├─ templates/           P3 ✓  message templates as code (YAML), linted in CI
 └─ db/migration/        V1–V6 ✓, then one migration per phase (below)
