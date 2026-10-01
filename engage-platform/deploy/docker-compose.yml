@@ -4,8 +4,8 @@
 
 name: wumika
 
-# Dev shares the server with prod (deploy/prod): every service is capped so dev
-# can never starve prod of memory. The start scripts honour JAVA_OPTS.
+# Every service is memory-capped so one runaway container cannot take the box
+# down (1 vCPU / 3.9 GB). The start scripts honour JAVA_OPTS.
 x-jvm: &jvm
   JAVA_OPTS: "-XX:MaxRAMPercentage=60"
 
