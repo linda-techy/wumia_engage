@@ -37,6 +37,7 @@ public class ShopifyInboxHandler implements InboxHandler {
     private final IdentityResolver identities;
     private final ConsentWriter consents;
     private final OffsetDateTime noticeSince;   // null = checkout notice not live
+    private final String noticeVersion;
     private final FulfillmentHandler fulfillments;
     private final EventWriter events;
     private final InventoryHandler inventory;
@@ -49,6 +50,8 @@ public class ShopifyInboxHandler implements InboxHandler {
         this.fulfillments = fulfillments;
         this.identities = identities;
         this.noticeSince = noticeSince(consent.checkoutNoticeSince());
+        this.noticeVersion = consent.checkoutNoticeVersion() == null || consent.checkoutNoticeVersion().isBlank()
+                ? "checkout_notice_v2" : consent.checkoutNoticeVersion().strip();
         this.consents = consents;
         this.events = events;
         this.inventory = inventory;
@@ -262,7 +265,7 @@ public class ShopifyInboxHandler implements InboxHandler {
                             createdAt);
                     consents.applyPendingOptIns(c, identityId, orderId);
                     if (noticeSince != null && createdAt != null && !createdAt.isBefore(noticeSince)) {
-                        consents.grantWhatsAppFromCheckoutNotice(c, identityId, orderId, phone.source(), createdAt);
+                        consents.grantWhatsAppFromCheckoutNotice(c, identityId, orderId, phone.source(), createdAt, noticeVersion);
                     }
                 }
                 consents.syncShopifyEmailConsent(c, identityId, rs.getString("email_consent_state"),

@@ -14,7 +14,7 @@ Order updates reach opted-in customers on WhatsApp, fall back to DLT SMS when Wh
 |---|---|---|---|---|
 | P4-T01 | Meta webhook intake | BE1 | 1 d | P3 done |
 | P4-T02 | `WhatsAppCloudAdapter` + error classification | BE1 | 1.5 d | T01 |
-| P4-T03 | Template sync + V15 number health | BE1 | 1.5 d | T02 |
+| P4-T03 | Template sync + V16 number health | BE1 | 1.5 d | T02 |
 | P4-T04 | Status and inbound handling: spend, service window, STOP | BE1 | 2 d | T01, T02 |
 | P4-T05 | `CapabilityService` | BE1 | 1.5 d | T04 |
 | P4-T06 | `Msg91Adapter` + DLT registry + delivery reports | BE2 | 2 d | P3 done |
@@ -78,7 +78,7 @@ The router's generic "permanent → suppression" rule from P3-T05 must **not** a
 
 ### ☐ P4-T03 — Template sync + number health
 
-**Migration `V15__whatsapp_numbers.sql`**
+**Migration `V16__whatsapp_numbers.sql`**
 ```sql
 CREATE TABLE wa_phone_numbers (
     phone_number_id TEXT PRIMARY KEY,
@@ -126,6 +126,7 @@ UPDATE config_keys SET default_value = v.val FROM (VALUES
 - Resolve identity with `Key.waId` + `Key.phone` (STRONG: the number messaged us).
 - `profiles.wa_window_until = message time + 24 h`. Capability `CAPABLE`.
 - STOP regex from phase-4 §3, plus `START`/`shuru karo` to resubscribe (writes a grant with source `wa_start_reply` and the message id as evidence).
+- **WhatsApp marketing is opt-out (decided 2026-10-01, `checkout_notice_v2`), so these are not optional:** every marketing template carries Meta's "Stop promotions" quick reply (or a "Reply STOP" line), which withdraws `whatsapp/marketing` only and keeps order updates; marketing frequency stays low (start at 2 a week, config); watch the number's quality rating daily (P4-T03) and halt marketing on a drop to medium (`halt.marketing`).
 - STOP: withdraw WhatsApp transactional and marketing, withdraw marketing on push and email, cancel live cascades with `outcome='stopped'`, and send **one** confirmation as a service message through the router (`isReply=true`). The confirmation is free inside the window it just opened.
 - Quick-reply payloads map to events (`wa_optin_yes`, `ndr_reschedule`, `fit_ok`, …).
 

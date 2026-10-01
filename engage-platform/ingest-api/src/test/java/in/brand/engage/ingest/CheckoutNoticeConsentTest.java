@@ -37,6 +37,7 @@ class CheckoutNoticeConsentTest {
     @Inject @Client("/") HttpClient client;
     @Inject InboxProcessor processor;
     @Inject DataSource dataSource;
+    @Inject in.brand.engage.persistence.ConsentWriter consents;
 
     @BeforeEach
     void clean() throws SQLException {
@@ -54,18 +55,36 @@ class CheckoutNoticeConsentTest {
                 VALUES ('checkout_notice_v1', 'whatsapp', 'Phone (for order and delivery updates on WhatsApp/SMS)',
                         '{transactional}', 'checkout_notice')
                 ON CONFLICT (version) DO NOTHING""");
+            st.execute("""
+                INSERT INTO consent_copy_versions (version, channel, text, purposes, surface)
+                VALUES ('checkout_notice_v2', 'whatsapp', 'Phone (for order updates and offers on WhatsApp/SMS)',
+                        '{transactional,marketing}', 'checkout_notice')
+                ON CONFLICT (version) DO NOTHING""");
         }
     }
 
     @Test
-    void an_order_placed_after_the_notice_went_live_gets_order_updates_only() throws Exception {
+    void an_order_placed_after_the_notice_went_live_gets_order_updates_and_offers_opt_out() throws Exception {
         orderCreated();
 
-        assertEquals("whatsapp|transactional|granted|checkout_notice_v1|dpdp_s7a_order_updates|false", q("""
-                SELECT concat_ws('|', channel, purpose, state, copy_version, evidence->>'basis', evidence->>'pre_ticked')
+        assertEquals("whatsapp|marketing|granted|checkout_notice_v2|notice_opt_out|false,"
+                + "whatsapp|transactional|granted|checkout_notice_v2|dpdp_s7a_order_updates|false", q("""
+                SELECT string_agg(concat_ws('|', channel, purpose, state, copy_version, evidence->>'basis',
+                                            evidence->>'affirmative_action'), ',' ORDER BY purpose DESC)
                   FROM consents WHERE source = 'checkout_notice'"""));
-        assertEquals("0", q("SELECT count(*) FROM consents WHERE channel = 'whatsapp' AND purpose = 'marketing'"),
-                "a notice never counts as a marketing opt-in");
+    }
+
+    @Test
+    void the_v1_notice_covers_order_updates_only() throws Exception {
+        orderCreated();
+        exec("DELETE FROM consents");
+        var identity = q("SELECT identity_id::text FROM orders WHERE id = '" + ORDER + "'");
+
+        try (Connection c = dataSource.getConnection()) {
+            assertEquals(1, consents.grantWhatsAppFromCheckoutNotice(c, UUID.fromString(identity), ORDER, "shipping",
+                    OffsetDateTime.parse("2026-09-19T15:24:11+05:30"), "checkout_notice_v1"));
+        }
+        assertEquals("transactional", q("SELECT string_agg(purpose::text, ',') FROM consents"));
     }
 
     @Test
@@ -73,23 +92,26 @@ class CheckoutNoticeConsentTest {
         orderCreated();
         orderCreated();
 
-        assertEquals("1", q("SELECT count(*) FROM consents WHERE source = 'checkout_notice'"));
+        assertEquals("2", q("SELECT count(*) FROM consents WHERE source = 'checkout_notice'"), "one row per purpose, once");
     }
 
     @Test
-    void a_stop_is_never_overridden_by_a_later_order() throws Exception {
+    void a_stop_for_offers_is_never_overridden_by_a_later_order() throws Exception {
         orderCreated();
         exec("""
             INSERT INTO consents (identity_id, channel, purpose, state, source, occurred_at)
-            SELECT identity_id, 'whatsapp', 'transactional', 'withdrawn', 'wa_stop_reply', now()
+            SELECT identity_id, 'whatsapp', 'marketing', 'withdrawn', 'wa_stop_reply', now()
               FROM orders WHERE id = '%s'""".formatted(ORDER));
         exec("DELETE FROM orders WHERE id = '" + ORDER + "'");      // the same buyer orders again
 
         orderCreated();
 
         assertEquals("withdrawn", q("""
-                SELECT state FROM consent_current WHERE channel = 'whatsapp' AND purpose = 'transactional'"""));
-        assertEquals("1", q("SELECT count(*) FROM consents WHERE source = 'checkout_notice'"));
+                SELECT state FROM consent_current WHERE channel = 'whatsapp' AND purpose = 'marketing'"""));
+        assertEquals("granted", q("""
+                SELECT state FROM consent_current WHERE channel = 'whatsapp' AND purpose = 'transactional'"""),
+                "order updates continue: only offers were stopped");
+        assertEquals("2", q("SELECT count(*) FROM consents WHERE source = 'checkout_notice'"));
     }
 
     @Test
