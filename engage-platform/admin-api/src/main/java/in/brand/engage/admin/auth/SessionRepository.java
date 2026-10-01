@@ -102,6 +102,13 @@ public class SessionRepository {
         });
     }
 
+    /** Every live session of one operator (a password was set or changed). */
+    public void revokeAllFor(Connection c, UUID operatorId, String reason) throws SQLException {
+        Sql.update(c, """
+                UPDATE operator_sessions SET revoked_at = now(), revoked_reason = ?
+                 WHERE operator_id = ? AND revoked_at IS NULL""", reason, operatorId);
+    }
+
     /** In the caller's transaction (logout writes its audit row with it). */
     public void revokeFamily(Connection c, UUID familyId, String reason) throws SQLException {
         revokeFamilyIn(c, familyId, reason);

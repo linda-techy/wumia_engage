@@ -37,6 +37,12 @@ public class AuthService {
     /** Roles that may never sign in on a password alone. */
     static final Set<String> ABOVE_ANALYST = Set.of("CAMPAIGN_EDIT", "CAMPAIGN_SEND", "CONFIG_ADMIN", "OWNER");
     static final Duration MFA_TOKEN_TTL = Duration.ofMinutes(5);
+    static final Duration ENROL_TOKEN_TTL = Duration.ofMinutes(15);
+    static final int MIN_PASSWORD = 12;
+    static final String ISSUER = "Engage";
+
+    /** What an authenticator app needs: the otpauth URI (QR) and the secret, Base64. */
+    public record Enrolment(String provisioningUri, String secret) {}
 
     /** A signed-in operator: the access token for the body, the refresh token for the cookie. */
     public record Signed(String accessToken, Operator operator, String refreshToken) {}
@@ -87,7 +93,10 @@ public class AuthService {
         }
         if (!operator.active()) throw Problems.unauthorized("invalid email or password");
         if (!operator.mfaEnrolled() && operator.roles().stream().anyMatch(ABOVE_ANALYST::contains)) {
-            throw Problems.forbidden("MFA enrolment required for this role");
+            // No session, but a token that can do one thing: enrol MFA. Without
+            // it a new OWNER could never sign in to enrol in the first place.
+            throw Problems.forbidden("mfa-enrolment-required", "MFA enrolment required for this role",
+                    Map.of("enrolToken", tokens.issuePurpose(operator.id(), "mfa-enrol", Map.of(), ENROL_TOKEN_TTL)));
         }
         if (operator.mfaEnrolled()) {
             return new LoginResult(tokens.issuePurpose(operator.id(), "mfa", Map.of(), MFA_TOKEN_TTL), null);
@@ -108,7 +117,7 @@ public class AuthService {
                 .filter(o -> !o.locked() && o.mfaEnrolled() && o.mfaSecretEnc() != null)
                 .orElseThrow(() -> Problems.unauthorized("invalid code"));
 
-        var secret = SecretBox.decrypt(SecretBox.keyFromHex(properties.mfaKey()), operator.mfaSecretEnc());
+        var secret = SecretBox.decrypt(mfaKey(), operator.mfaSecretEnc());
         var step = matchedStep(secret, code, Instant.now());
         if (step == null) {
             operators.recordFailedLogin(id);
@@ -149,6 +158,83 @@ public class AuthService {
             audit.record(c, ref.operatorId(), "auth.logout", "operator", ref.operatorId().toString(), null, null);
             return null;
         });
+    }
+
+    /** The operator an enrolment-only token was issued to (login's 403 for an unenrolled admin). */
+    public UUID enrolee(String enrolToken) {
+        try {
+            return UUID.fromString(String.valueOf(tokens.verifyPurpose(enrolToken, "mfa-enrol").get("sub")));
+        } catch (Tokens.InvalidToken | IllegalArgumentException e) {
+            throw Problems.unauthorized("enrolment link expired; sign in again");
+        }
+    }
+
+    /**
+     * Stage a new TOTP secret. Not active until {@link #confirmEnrolment}: a
+     * secret nobody proved they hold must not count as MFA.
+     */
+    public Enrolment startEnrolment(UUID operatorId) {
+        var operator = operators.findById(operatorId).orElseThrow(() -> Problems.unauthorized("not authenticated"));
+        var secret = Totp.generateSecret();
+        db.inTx(c -> {
+            operators.stageMfaSecret(c, operatorId, SecretBox.encrypt(mfaKey(), secret));
+            audit.record(c, operatorId, "auth.mfa_enrol_started", "operator", operatorId.toString(), null, null);
+            return null;
+        });
+        return new Enrolment(Totp.provisioningUri(ISSUER, operator.email(), secret),
+                java.util.Base64.getEncoder().encodeToString(secret));
+    }
+
+    public void confirmEnrolment(UUID operatorId, String code) {
+        var operator = operators.findById(operatorId).orElseThrow(() -> Problems.unauthorized("not authenticated"));
+        if (operator.mfaSecretEnc() == null) throw Problems.badRequest("start enrolment first");
+        var secret = SecretBox.decrypt(mfaKey(), operator.mfaSecretEnc());
+        var step = matchedStep(secret, code, Instant.now());
+        if (step == null) throw Problems.unauthorized("invalid code");
+        lastUsedStep.merge(operatorId, step, Math::max);   // this code is now spent for sign-in too
+        db.inTx(c -> {
+            operators.setMfaSecret(c, operatorId, operator.mfaSecretEnc());
+            audit.record(c, operatorId, "auth.mfa_enrolled", "operator", operatorId.toString(), null, null);
+            return null;
+        });
+    }
+
+    /**
+     * Set a password from a one-time link (bootstrap owner, invites). The link
+     * names the operator's {@code ver} at issue; setting the password moves
+     * {@code ver}, so the link dies with its first use, and every session of
+     * that operator is revoked.
+     */
+    public void setPassword(String linkToken, String password) {
+        Map<String, Object> claims;
+        try {
+            claims = tokens.verifyPurpose(linkToken, "set-password");
+        } catch (Tokens.InvalidToken e) {
+            throw Problems.unauthorized("this link has expired or was already used");
+        }
+        UUID id;
+        try {
+            id = UUID.fromString(String.valueOf(claims.get("sub")));
+        } catch (IllegalArgumentException e) {
+            throw Problems.unauthorized("this link has expired or was already used");
+        }
+        var operator = operators.findById(id)
+                .filter(o -> String.valueOf(o.ver()).equals(String.valueOf(claims.get("pwd"))))
+                .orElseThrow(() -> Problems.unauthorized("this link has expired or was already used"));
+        if (password == null || password.length() < MIN_PASSWORD) {
+            throw Problems.badRequest("password must be at least " + MIN_PASSWORD + " characters");
+        }
+        var hash = hasher.hash(password.toCharArray());
+        db.inTx(c -> {
+            operators.setPassword(c, id, hash);
+            sessions.revokeAllFor(c, id, "password_set");
+            audit.record(c, id, "auth.password_set", "operator", operator.id().toString(), null, null);
+            return null;
+        });
+    }
+
+    private byte[] mfaKey() {
+        return SecretBox.keyFromHex(properties.mfaKey());
     }
 
     private Signed signIn(Operator operator, String userAgent) {

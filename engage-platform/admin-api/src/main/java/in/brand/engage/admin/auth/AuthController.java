@@ -76,6 +76,40 @@ public class AuthController {
         return HttpResponse.noContent().cookie(cookie("", Duration.ZERO));
     }
 
+    @Serdeable
+    public record EnrolRequest(@Nullable String enrolToken) {}
+
+    @Serdeable
+    public record ConfirmRequest(String code, @Nullable String enrolToken) {}
+
+    @Serdeable
+    public record SetPasswordRequest(String token, String password) {}
+
+    /** Signed in (bearer), or with the enrolment-only token from login's 403. */
+    @Post("/mfa/enrol")
+    public Map<String, Object> enrol(@Nullable @Body EnrolRequest body) {
+        var enrolment = auth.startEnrolment(enrolee(body == null ? null : body.enrolToken()));
+        return Map.of("provisioningUri", enrolment.provisioningUri(), "secret", enrolment.secret());
+    }
+
+    @Post("/mfa/confirm")
+    public HttpResponse<?> confirm(@Body ConfirmRequest body) {
+        if (body == null || body.code() == null) throw Problems.badRequest("code is required");
+        auth.confirmEnrolment(enrolee(body.enrolToken()), body.code());
+        return HttpResponse.noContent();
+    }
+
+    @Post("/set-password")
+    public HttpResponse<?> setPassword(@Body SetPasswordRequest body) {
+        if (body == null || body.token() == null) throw Problems.badRequest("token and password are required");
+        auth.setPassword(body.token(), body.password());
+        return HttpResponse.noContent();
+    }
+
+    private java.util.UUID enrolee(@Nullable String enrolToken) {
+        return enrolToken != null && !enrolToken.isBlank() ? auth.enrolee(enrolToken) : current.id();
+    }
+
     @Get("/me")
     public Map<String, Object> me() {
         var operator = operators.findById(current.id()).orElseThrow(() -> Problems.unauthorized("not authenticated"));
