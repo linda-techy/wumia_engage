@@ -1,0 +1,57 @@
+# Staging (P1-T06). Same images and shape as dev, two differences:
+#   - Postgres is managed (RDS, ap-south-1, ADR-004): no db container here.
+#     DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD come from .env.
+#   - .env is rendered from AWS SSM Parameter Store by render-env.sh at deploy
+#     time (never baked into an image, never committed).
+# Migrations run as the `migrate` job before any service starts.
+
+name: wumika-staging
+
+services:
+  migrate:
+    image: wumika/ingest-api:${IMAGE_TAG:-staging}
+    command: ["migrate"]
+    restart: "no"
+    env_file: .env
+
+  ingest:
+    image: wumika/ingest-api:${IMAGE_TAG:-staging}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      INGEST_PORT: "8081"
+      FLYWAY_ON_STARTUP: "false"
+      ENDPOINTS_HEALTH_DETAILS_VISIBLE: NEVER
+    ports:
+      - "127.0.0.1:8081:8081"   # TLS terminates in front (nginx or the load balancer)
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  admin:
+    image: wumika/admin-api:${IMAGE_TAG:-staging}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      ADMIN_API_PORT: "8083"
+      ADMIN_JWT_KEY_FILE: /keys/admin-jwt.pem
+    volumes:
+      - ./keys:/keys
+    ports:
+      - "127.0.0.1:8083:8083"   # not public until admin login + MFA ship
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    image: wumika/worker:${IMAGE_TAG:-staging}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      WORKER_PORT: "8084"
+      FIREBASE_SERVICE_ACCOUNT_FILE: /secrets/firebase-service-account.json
+    volumes:
+      - ./secrets/firebase-service-account.json:/secrets/firebase-service-account.json:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully

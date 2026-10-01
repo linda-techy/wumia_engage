@@ -257,7 +257,9 @@ ingest-api/src/main/resources/sql/shopify_inventory.sql
 
 ---
 
-### ☐ P1-T06 — Staging deployment
+### ◐ P1-T06 — Staging deployment
+
+> **Prepared 2026-10-01; provisioning waits for an AWS decision (account, spend).** Ready: **migrations as a job** (`ingest-api migrate` runs Flyway and exits; checked on a fresh database: 15 applied, a second run 0), now also how **dev** deploys (`migrate` service, every service `depends_on` it with `service_completed_successfully`, `FLYWAY_ON_STARTUP=false`); `deploy/staging/docker-compose.yml` for a managed database (no `db` container, `IMAGE_TAG`); `deploy/staging/render-env.sh` renders `.env` from SSM `/wumika/staging/*` (mode 600, values never printed); `deploy/staging/README.md` with the provisioning steps (RDS ap-south-1, host with a narrow instance role, SSM parameters, HTTPS URL, a separate `wumikaEngage-staging` Shopify app, Razorpay **Test Mode** webhook, Shiprocket test account only) and the done-when queries. Both compose files pass `docker compose config`. Images keep the existing Dockerfile (installDist), not Jib.
 
 1. Container image with Jib or the Micronaut Docker plugin.
 2. Managed Postgres 16 in `ap-south-1`. Flyway runs as a separate job before the app (`08-deployment-and-ops.md`), and `FLYWAY_ON_STARTUP=false` in staging.

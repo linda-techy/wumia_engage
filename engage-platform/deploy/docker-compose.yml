@@ -20,6 +20,22 @@ services:
       interval: 5s
       retries: 12
 
+  # Migrations as a job (P1-T06, 08-deployment-and-ops.md): the ingest image run
+  # as `ingest-api migrate` applies Flyway and exits. Every service waits for it
+  # to finish successfully; a failed migration stops the deploy before any
+  # service starts on a schema it does not expect. Same shape on staging.
+  migrate:
+    image: wumika/ingest-api:dev
+    command: ["migrate"]
+    restart: "no"
+    env_file: .env
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+    depends_on:
+      db:
+        condition: service_healthy
+
   ingest:
     image: wumika/ingest-api:dev
     restart: unless-stopped
@@ -28,8 +44,8 @@ services:
       DB_HOST: db
       DB_PORT: "5432"
       INGEST_PORT: "8081"
-      # ingest-api owns the schema; on dev it migrates on start.
-      FLYWAY_ON_STARTUP: "true"
+      # The migrate job owns the schema; services never migrate on startup.
+      FLYWAY_ON_STARTUP: "false"
       # /health is public through nginx; its details name the JDBC URL.
       ENDPOINTS_HEALTH_DETAILS_VISIBLE: NEVER
     ports:
@@ -37,6 +53,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   admin:
     image: wumika/admin-api:dev
@@ -56,9 +74,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      # Restarts until ingest has applied the migrations it expects.
-      ingest:
-        condition: service_started
+      migrate:
+        condition: service_completed_successfully
 
   worker:
     image: wumika/worker:dev
@@ -81,9 +98,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      # Restarts until ingest has applied the migrations it expects (V8).
-      ingest:
-        condition: service_started
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   pgdata:
