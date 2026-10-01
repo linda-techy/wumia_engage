@@ -178,7 +178,7 @@ curl -s http://localhost:8083/health
 | 8082 | ingest-api against the dev store (`config/devstore.env`) |
 | 8083 | admin-api |
 | 8084 | worker (`/health`, `/prometheus`) |
-| 4200 | admin-ui dev server (`ng serve`, proxies `/api` to 8083) |
+| 4200 | admin-ui dev server (`npm start` in `admin-ui/`, Node 24; proxies `/api` to 8083). See `admin-ui/README.md` |
 
 Endpoints (`/api`, problem+json errors): `auth/login`, `auth/mfa`, `auth/refresh`, `auth/logout`, `auth/me`, `auth/mfa/enrol`, `auth/mfa/confirm`, `auth/set-password`, `ingest/health`, `customers?q=`, `customers/{id}`, `customers/{id}/reveal` (ANALYST, audited), `payments/failures`, `consent-copy` (GET VIEWER, POST CONFIG_ADMIN).
 

@@ -38,6 +38,14 @@ jobs:
           cache-dependency-path: engage-platform/shopify-extension/package-lock.json
       - run: npm ci --no-audit --no-fund && npm test
         working-directory: engage-platform/shopify-extension
+      # Admin console (Angular 22 needs Node 22.22+/24): unit tests and a production build.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: engage-platform/admin-ui/package-lock.json
+      - run: npm ci --no-audit --no-fund && npx ng test --watch=false && npx ng build
+        working-directory: engage-platform/admin-ui
 
   deploy:
     needs: test
