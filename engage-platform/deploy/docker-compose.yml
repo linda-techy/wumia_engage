@@ -4,6 +4,11 @@
 
 name: wumika
 
+# Dev shares the server with prod (deploy/prod): every service is capped so dev
+# can never starve prod of memory. The start scripts honour JAVA_OPTS.
+x-jvm: &jvm
+  JAVA_OPTS: "-XX:MaxRAMPercentage=60"
+
 services:
   db:
     image: postgres:16-alpine
@@ -14,6 +19,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - pgdata:/var/lib/postgresql/data
+    mem_limit: 256m
     # No published port: only the services on this network reach the database.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
@@ -29,7 +35,9 @@ services:
     command: ["migrate"]
     restart: "no"
     env_file: .env
+    mem_limit: 256m
     environment:
+      <<: *jvm
       DB_HOST: db
       DB_PORT: "5432"
     depends_on:
@@ -40,7 +48,9 @@ services:
     image: wumika/ingest-api:dev
     restart: unless-stopped
     env_file: .env
+    mem_limit: 384m
     environment:
+      <<: *jvm
       DB_HOST: db
       DB_PORT: "5432"
       INGEST_PORT: "8081"
@@ -60,7 +70,9 @@ services:
     image: wumika/admin-api:dev
     restart: unless-stopped
     env_file: .env
+    mem_limit: 320m
     environment:
+      <<: *jvm
       DB_HOST: db
       DB_PORT: "5432"
       ADMIN_API_PORT: "8083"
@@ -81,7 +93,9 @@ services:
     image: wumika/worker:dev
     restart: unless-stopped
     env_file: .env
+    mem_limit: 384m
     environment:
+      <<: *jvm
       DB_HOST: db
       DB_PORT: "5432"
       WORKER_PORT: "8084"
