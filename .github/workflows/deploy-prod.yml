@@ -1,0 +1,84 @@
+name: Deploy prod
+
+# Production runs on the same server as dev, in /opt/wumika-prod (deploy/prod).
+# Every push to `main` is tested and built; it is deployed only after a
+# required reviewer approves the `production` environment (GitHub -> Settings
+# -> Environments -> production -> Required reviewers). Same SSH secrets as dev.
+#
+# Rollback: images are also tagged with the commit, so on the server
+#   cd /opt/wumika-prod && IMAGE_TAG=<old sha7> docker compose up -d
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: engage-platform
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+      - uses: gradle/actions/setup-gradle@v4
+      - run: sh ./gradlew --no-daemon test
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: engage-platform/shopify-extension/package-lock.json
+      - run: npm ci --no-audit --no-fund && npm test
+        working-directory: engage-platform/shopify-extension
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build images
+        run: |
+          for m in ingest-api admin-api worker; do
+            docker build --build-arg MODULE=$m -t wumika/$m:prod -t wumika/$m:${GITHUB_SHA::7} .
+          done
+          docker save wumika/ingest-api:prod wumika/admin-api:prod wumika/worker:prod \
+                      wumika/ingest-api:${GITHUB_SHA::7} wumika/admin-api:${GITHUB_SHA::7} wumika/worker:${GITHUB_SHA::7} \
+            | gzip > images.tar.gz
+
+      - name: SSH key
+        run: |
+          install -d -m 700 ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          echo "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+
+      - name: Ship and start
+        env:
+          TARGET: deploy@${{ secrets.DEPLOY_HOST }}
+        run: |
+          scp images.tar.gz deploy/prod/docker-compose.yml deploy/prod/backup.sh "$TARGET:/opt/wumika-prod/"
+          ssh "$TARGET" 'set -e
+            cd /opt/wumika-prod
+            test -f .env || { echo "/opt/wumika-prod/.env missing: see deploy/.env.example"; exit 1; }
+            chmod 750 backup.sh
+            gunzip -c images.tar.gz | docker load
+            rm images.tar.gz
+            docker compose up -d --remove-orphans'
+
+      - name: Health check
+        run: |
+          for i in $(seq 1 30); do
+            curl -fsS https://engage.wumika.com/health && exit 0
+            sleep 5
+          done
+          echo "prod ingest-api did not become healthy"; exit 1

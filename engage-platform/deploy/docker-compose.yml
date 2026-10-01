@@ -4,6 +4,11 @@
 
 name: wumika
 
+# Dev shares the server with prod (deploy/prod): every service is capped so dev
+# can never starve prod of memory. The start scripts honour JAVA_OPTS.
+x-jvm: &jvm
+  JAVA_OPTS: "-XX:MaxRAMPercentage=60"
+
 services:
   db:
     image: postgres:16-alpine
@@ -14,22 +19,43 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - pgdata:/var/lib/postgresql/data
+    mem_limit: 256m
     # No published port: only the services on this network reach the database.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       retries: 12
 
+  # Migrations as a job (P1-T06, 08-deployment-and-ops.md): the ingest image run
+  # as `ingest-api migrate` applies Flyway and exits. Every service waits for it
+  # to finish successfully; a failed migration stops the deploy before any
+  # service starts on a schema it does not expect. Same shape on staging.
+  migrate:
+    image: wumika/ingest-api:dev
+    command: ["migrate"]
+    restart: "no"
+    env_file: .env
+    mem_limit: 256m
+    environment:
+      <<: *jvm
+      DB_HOST: db
+      DB_PORT: "5432"
+    depends_on:
+      db:
+        condition: service_healthy
+
   ingest:
     image: wumika/ingest-api:dev
     restart: unless-stopped
     env_file: .env
+    mem_limit: 384m
     environment:
+      <<: *jvm
       DB_HOST: db
       DB_PORT: "5432"
       INGEST_PORT: "8081"
-      # ingest-api owns the schema; on dev it migrates on start.
-      FLYWAY_ON_STARTUP: "true"
+      # The migrate job owns the schema; services never migrate on startup.
+      FLYWAY_ON_STARTUP: "false"
       # /health is public through nginx; its details name the JDBC URL.
       ENDPOINTS_HEALTH_DETAILS_VISIBLE: NEVER
     ports:
@@ -37,12 +63,16 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   admin:
     image: wumika/admin-api:dev
     restart: unless-stopped
     env_file: .env
+    mem_limit: 320m
     environment:
+      <<: *jvm
       DB_HOST: db
       DB_PORT: "5432"
       ADMIN_API_PORT: "8083"
@@ -56,15 +86,16 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      # Restarts until ingest has applied the migrations it expects.
-      ingest:
-        condition: service_started
+      migrate:
+        condition: service_completed_successfully
 
   worker:
     image: wumika/worker:dev
     restart: unless-stopped
     env_file: .env
+    mem_limit: 384m
     environment:
+      <<: *jvm
       DB_HOST: db
       DB_PORT: "5432"
       WORKER_PORT: "8084"
@@ -81,9 +112,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      # Restarts until ingest has applied the migrations it expects (V8).
-      ingest:
-        condition: service_started
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   pgdata:

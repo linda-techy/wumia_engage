@@ -1,3 +1,0 @@
-# Shell scripts run on Linux (server, Docker build): never CRLF.
-*.sh text eol=lf
-gradlew text eol=lf

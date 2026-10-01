@@ -1,0 +1,99 @@
+# Production on the same server as dev (decided 2026-10-01: no staging).
+# Lives at /opt/wumika-prod next to its own .env (live values, mode 600).
+# Separate from dev in everything that matters: compose project, database
+# container and volume, credentials, ports, domain (engage.wumika.com).
+# CI (deploy-prod.yml) copies this file and the images here after approval.
+
+name: wumika-prod
+
+x-jvm: &jvm
+  # The start script honours JAVA_OPTS: size the heap from the container limit.
+  JAVA_OPTS: "-XX:MaxRAMPercentage=60"
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pgdata-prod:/var/lib/postgresql/data
+    mem_limit: 512m
+    # No published port: only this project's services reach it.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      retries: 12
+
+  migrate:
+    image: wumika/ingest-api:${IMAGE_TAG:-prod}
+    command: ["migrate"]
+    restart: "no"
+    env_file: .env
+    environment:
+      <<: *jvm
+      DB_HOST: db
+      DB_PORT: "5432"
+    mem_limit: 256m
+    depends_on:
+      db:
+        condition: service_healthy
+
+  ingest:
+    image: wumika/ingest-api:${IMAGE_TAG:-prod}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      <<: *jvm
+      DB_HOST: db
+      DB_PORT: "5432"
+      INGEST_PORT: "9081"
+      FLYWAY_ON_STARTUP: "false"
+      ENDPOINTS_HEALTH_DETAILS_VISIBLE: NEVER
+    ports:
+      - "127.0.0.1:9081:9081"       # nginx: engage.wumika.com -> here (dev uses 8081)
+    mem_limit: 512m
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  admin:
+    image: wumika/admin-api:${IMAGE_TAG:-prod}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      <<: *jvm
+      DB_HOST: db
+      DB_PORT: "5432"
+      ADMIN_API_PORT: "9083"
+      ADMIN_JWT_KEY_FILE: /keys/admin-jwt.pem
+    volumes:
+      - ./keys:/keys
+    ports:
+      - "127.0.0.1:9083:9083"       # SSH tunnel only, as on dev
+    mem_limit: 384m
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    image: wumika/worker:${IMAGE_TAG:-prod}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      <<: *jvm
+      DB_HOST: db
+      DB_PORT: "5432"
+      WORKER_PORT: "9084"
+      FIREBASE_SERVICE_ACCOUNT_FILE: /secrets/firebase-service-account.json
+    volumes:
+      - ./secrets/firebase-service-account.json:/secrets/firebase-service-account.json:ro
+    mem_limit: 640m
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata-prod:
