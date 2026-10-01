@@ -377,7 +377,8 @@ engage/
 ├─ channels/             ChannelAdapter + WhatsAppCloud, Fcm, Ses, Msg91
 ├─ journeys/             journey definitions + durable state machine
 ├─ ingest-api/           webhooks: Shopify, WhatsApp, courier, storefront SDK
-├─ admin-api/            auth, RBAC, campaigns, config, reporting
+├─ admin-api/            auth, RBAC, campaigns, config, reporting   (v0 built: auth+MFA, ingest health,
+│                        customer 360 + audited reveal, payment failures, consent copy)
 ├─ worker/               journey ticker, cascade ticker, campaign executor
 └─ admin-ui/             Angular 22
 ```

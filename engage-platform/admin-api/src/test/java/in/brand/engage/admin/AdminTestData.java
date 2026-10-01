@@ -84,6 +84,53 @@ public class AdminTestData {
         return (String) body.get("accessToken");
     }
 
+    public void insertFailedPayment(String identityId, String paymentId, long amountPaise, String method,
+                                    String errorSource, String errorReason, String matchMethod, String checkoutToken) {
+        db.inTx(c -> {
+            if (checkoutToken != null) {
+                Sql.update(c, "INSERT INTO checkouts (token, identity_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
+                        checkoutToken, UUID.fromString(identityId));
+            }
+            return Sql.update(c, """
+                    INSERT INTO payment_attempts (gateway_payment_id, status, amount_paise, currency, method, phone,
+                                                  error_source, error_reason, identity_id, checkout_token, match_method,
+                                                  gateway_created_at, received_at)
+                    VALUES (?, 'failed', ?, 'INR', ?, '918606572870', ?, ?, ?, ?, ?, now() - interval '3 seconds', now())""",
+                    paymentId, amountPaise, method, errorSource, errorReason, UUID.fromString(identityId),
+                    checkoutToken, matchMethod);
+        });
+    }
+
+    public void deleteConsentCopy(String version) {
+        db.inTx(c -> {
+            Sql.update(c, "DELETE FROM consents WHERE copy_version = ?", version);
+            return Sql.update(c, "DELETE FROM consent_copy_versions WHERE version = ?", version);
+        });
+    }
+
+    public String loginAsConfigAdmin(io.micronaut.http.client.HttpClient client) {
+        return loginWithMfa(client, "config@example.com", "CONFIG_ADMIN");
+    }
+
+    public String loginAsCampaignEditor(io.micronaut.http.client.HttpClient client) {
+        return loginWithMfa(client, "campaigns@example.com", "CAMPAIGN_EDIT");
+    }
+
+    /** A role above ANALYST: enrol a TOTP secret, then password + code. */
+    public String loginWithMfa(io.micronaut.http.client.HttpClient client, String email, String role) {
+        var id = createOperator(email, "hunter2hunter2", role);
+        var secret = in.brand.engage.core.crypto.Totp.generateSecret();
+        var key = in.brand.engage.core.crypto.SecretBox.keyFromHex("0123456789abcdef".repeat(4));
+        enrolMfa(id, in.brand.engage.core.crypto.SecretBox.encrypt(key, secret));
+        var first = client.toBlocking().retrieve(io.micronaut.http.HttpRequest.POST("/api/auth/login",
+                java.util.Map.of("email", email, "password", "hunter2hunter2")), java.util.Map.class);
+        var second = client.toBlocking().retrieve(io.micronaut.http.HttpRequest.POST("/api/auth/mfa",
+                java.util.Map.of("mfaToken", first.get("mfaToken"),
+                        "code", in.brand.engage.core.crypto.Totp.code(secret, java.time.Instant.now()))),
+                java.util.Map.class);
+        return (String) second.get("accessToken");
+    }
+
     public void cleanAdminTables() {
         db.inTx(c -> {
             try (var st = c.createStatement(); var rs = st.executeQuery("select current_database()")) {

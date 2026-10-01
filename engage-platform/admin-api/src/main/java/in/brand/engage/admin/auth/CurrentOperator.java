@@ -37,8 +37,14 @@ public class CurrentOperator {
         return roles;
     }
 
+    /**
+     * OWNER holds everything. Every role includes reading (VIEWER): in
+     * docs/03-auth-and-rbac.md each role is "+" on top of the read screens.
+     * Nothing else is implied: a campaign role is not CONFIG_ADMIN or ANALYST.
+     */
     public boolean has(String role) {
-        return roles.contains(role) || roles.contains("OWNER");
+        if (roles.contains(role) || roles.contains("OWNER")) return true;
+        return "VIEWER".equals(role) && !roles.isEmpty();
     }
 
     /** 401 when not signed in, 403 when signed in without the role. */
