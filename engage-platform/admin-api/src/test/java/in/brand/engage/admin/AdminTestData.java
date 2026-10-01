@@ -21,6 +21,69 @@ public class AdminTestData {
         this.hasher = hasher;
     }
 
+    /** Runs {@code sql} only on a database whose name ends in {@code _test}. */
+    private void onTestDb(String sql) {
+        db.inTx(c -> {
+            try (var st = c.createStatement(); var rs = st.executeQuery("select current_database()")) {
+                rs.next();
+                assertTrue(rs.getString(1).endsWith("_test"), "refusing to clean " + rs.getString(1));
+                st.execute(sql);
+            }
+            return null;
+        });
+    }
+
+    public void truncateInbox() {
+        onTestDb("TRUNCATE webhook_inbox");
+    }
+
+    public void insertInboxRow(String source, String deliveryId, String topic, boolean processed, String lastError) {
+        db.inTx(c -> Sql.update(c, """
+                INSERT INTO webhook_inbox (source, delivery_id, topic, payload, processed_at, last_error, attempts)
+                VALUES (?, ?, ?, '{}'::jsonb, CASE WHEN ? THEN now() END, ?,
+                        CASE WHEN CAST(? AS text) IS NULL THEN 0 ELSE 3 END)""",
+                source, deliveryId, topic, processed, lastError, lastError));
+    }
+
+    public void truncateCustomerTables() {
+        onTestDb("""
+                TRUNCATE identities, identity_keys, profiles, consents, orders, checkouts, payment_attempts,
+                         devices, shipments, shipment_events CASCADE""");
+    }
+
+    /** An identity with an email and a phone key (normalised 91XXXXXXXXXX). */
+    public String createIdentity(String email, String phone) {
+        return db.inTx(c -> {
+            var id = UUID.randomUUID();
+            Sql.update(c, "INSERT INTO identities (id) VALUES (?)", id);
+            Sql.update(c, "INSERT INTO identity_keys (identity_id, kind, value, verified) VALUES (?, 'email', ?, true)", id, email);
+            Sql.update(c, "INSERT INTO identity_keys (identity_id, kind, value, verified) VALUES (?, 'phone', ?, false)", id, phone);
+            Sql.update(c, "INSERT INTO profiles (identity_id, attrs) VALUES (?, '{\"first_name\":\"Mary\",\"city\":\"Kochi\"}')", id);
+            return id.toString();
+        });
+    }
+
+    public String loginAsViewer(io.micronaut.http.client.HttpClient client) {
+        return loginAs(client, "viewer@example.com", "VIEWER");
+    }
+
+    public String loginAsAnalyst(io.micronaut.http.client.HttpClient client) {
+        return loginAs(client, "analyst@example.com", "ANALYST");
+    }
+
+    /** Creates the operator if absent (password "hunter2hunter2") and returns an access token. */
+    public String loginAs(io.micronaut.http.client.HttpClient client, String email, String role) {
+        boolean exists = db.inTx(c -> {
+            try (var ps = Sql.prepare(c, "SELECT 1 FROM operators WHERE email = ?", email); var rs = ps.executeQuery()) {
+                return rs.next();
+            }
+        });
+        if (!exists) createOperator(email, "hunter2hunter2", role);
+        var body = client.toBlocking().retrieve(io.micronaut.http.HttpRequest.POST("/api/auth/login",
+                java.util.Map.of("email", email, "password", "hunter2hunter2")), java.util.Map.class);
+        return (String) body.get("accessToken");
+    }
+
     public void cleanAdminTables() {
         db.inTx(c -> {
             try (var st = c.createStatement(); var rs = st.executeQuery("select current_database()")) {
