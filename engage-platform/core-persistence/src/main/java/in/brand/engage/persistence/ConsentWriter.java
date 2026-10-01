@@ -66,33 +66,36 @@ public class ConsentWriter {
     }
 
     /**
-     * Order and delivery updates on WhatsApp, on the basis of the checkout
-     * notice ({@code checkout_notice_v1}: the phone field says the number gets
-     * order updates on WhatsApp/SMS). DPDP s.7(a): a number given for an order
-     * may be used for that order. Transactional only; marketing always needs a
-     * tap (cart checkbox, Thank you page).
+     * WhatsApp on the basis of the checkout notice: the phone field's label
+     * says what the number is used for ({@code checkout_notice_v1}: order
+     * updates; {@code checkout_notice_v2}: order updates and offers). One row
+     * per purpose the notice names. Order updates rest on DPDP s.7(a); offers
+     * are opt-out (basis {@code notice_opt_out}, no affirmative action), the
+     * common Indian D2C approach chosen 2026-10-01.
      *
-     * <p>Granted only when this person has no WhatsApp transactional record at
-     * all: a STOP (withdrawn) is never overridden by a later order, and an
-     * existing grant is not repeated. The caller decides whether the notice was
-     * live when the order was placed (CHECKOUT_NOTICE_SINCE).
+     * <p>Per purpose, granted only when this person has no WhatsApp record for
+     * it at all: a STOP (withdrawn) is never overridden by a later order, and
+     * an existing grant is not repeated. The caller decides whether the notice
+     * was live when the order was placed (CHECKOUT_NOTICE_SINCE).
      *
-     * @return rows granted (0 or 1)
+     * @return rows granted
      */
     public int grantWhatsAppFromCheckoutNotice(Connection c, UUID identityId, String orderId, String phoneSource,
-                                               OffsetDateTime orderCreatedAt) throws SQLException {
+                                               OffsetDateTime orderCreatedAt, String noticeVersion) throws SQLException {
         return Sql.update(c, """
                 INSERT INTO consents (identity_id, channel, purpose, state, source, copy_version, evidence, occurred_at)
-                SELECT ?, 'whatsapp', 'transactional', 'granted', 'checkout_notice', v.version,
+                SELECT ?, 'whatsapp', pur, 'granted', 'checkout_notice', v.version,
                        jsonb_build_object('order_id', ?::text, 'phone_source', ?::text, 'copy_text', v.text,
-                                          'basis', 'dpdp_s7a_order_updates', 'pre_ticked', false),
+                                          'basis', CASE pur WHEN 'transactional' THEN 'dpdp_s7a_order_updates'
+                                                            ELSE 'notice_opt_out' END,
+                                          'affirmative_action', false, 'pre_ticked', false),
                        ?
                   FROM consent_copy_versions v
-                 WHERE v.version = 'checkout_notice_v1' AND v.channel = 'whatsapp'
+                 CROSS JOIN LATERAL unnest(v.purposes) AS pur
+                 WHERE v.version = ? AND v.channel = 'whatsapp' AND v.surface = 'checkout_notice'
                    AND NOT EXISTS (SELECT 1 FROM consents x
-                                    WHERE x.identity_id = ? AND x.channel = 'whatsapp'
-                                      AND x.purpose = 'transactional')""",
-                identityId, orderId, phoneSource, orderCreatedAt, identityId);
+                                    WHERE x.identity_id = ? AND x.channel = 'whatsapp' AND x.purpose = pur)""",
+                identityId, orderId, phoneSource, orderCreatedAt, noticeVersion, identityId);
     }
 
     /**
