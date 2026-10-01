@@ -257,15 +257,9 @@ ingest-api/src/main/resources/sql/shopify_inventory.sql
 
 ---
 
-### ◐ P1-T06 — Staging deployment → dev + prod on one server
+### ◐ P1-T06 — Staging → production on AWS (later)
 
-> **Revised 2026-10-01 (owner's decision): no staging. Dev and prod share the one Linux server, which is rebuilt first** (it once ran a crypto-miner and was never reinstalled). Built, not yet deployed:
-> - **Migrations as a job** for both: `ingest-api migrate` runs Flyway and exits (fresh database: 15 applied; re-run: 0). Every service `depends_on` it (`service_completed_successfully`); `FLYWAY_ON_STARTUP=false`.
-> - **Prod** (`deploy/prod/docker-compose.yml`): project `wumika-prod` in `/opt/wumika-prod`, its own Postgres container, volume and credentials, ports 9081/9083, `engage.wumika.com`. Deploys from `main` through the `production` GitHub environment (required reviewer) via `.github/workflows/deploy-prod.yml`; images also tagged with the commit for one-line rollback.
-> - **Memory caps** on every container (dev about 1.6 GB, prod about 2.3 GB, heap = 60% of the cap via `JAVA_OPTS`), so dev can never starve prod. The box has 1 vCPU / 3.9 GB: upgrade to 2 vCPU / 8 GB recommended.
-> - **Backups** (`deploy/prod/backup.sh`, 02:00 IST cron): `pg_dump -Fc`, checked with `pg_restore --list`, encrypted with `age` to a public key (private key off the server), copied off-server with `rclone` to `BACKUP_REMOTE`; 7 days local, 30 remote.
-> - **`deploy/server-setup.sh`** rewritten for a fresh OS (updates, unattended-upgrades, fail2ban, Docker, both folders and domains, ufw, backup cron); **`deploy/REBUILD.md`** is the checklist (rebuild, new deploy key, secret rotation, prod go-live). Both scripts pass shellcheck; both compose files pass `docker compose config`.
-> - The original plan below (managed Postgres in ap-south-1, a secret manager) is superseded.
+> **Decided 2026-10-01: no staging; production goes to AWS later; the existing server stays dev only.** Done now and kept: **migrations as a job** (`ingest-api migrate` runs Flyway and exits; fresh database 15 applied, re-run 0), which is how dev deploys (`migrate` service first, every service `depends_on` it, `FLYWAY_ON_STARTUP=false`; first deploy verified 2026-10-01), and **memory caps** on every dev container (heap = 60% of the cap). `deploy/server-setup.sh` is rewritten for a fresh OS and `deploy/REBUILD.md` is the dev-server rebuild checklist (recommended: the box once ran a miner). A same-server prod setup was built and then removed the same day when AWS was chosen. The AWS plan below (managed Postgres in ap-south-1, secret manager, migrate job before rollout, public HTTPS URL) stands for when production is due.
 
 1. Container image with Jib or the Micronaut Docker plugin.
 2. Managed Postgres 16 in `ap-south-1`. Flyway runs as a separate job before the app (`08-deployment-and-ops.md`), and `FLYWAY_ON_STARTUP=false` in staging.
