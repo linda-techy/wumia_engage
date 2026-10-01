@@ -81,7 +81,8 @@ tasks.withType<Test>().configureEach {
         val env = readEnvFile(envFile).toMutableMap()
         env["DB_NAME"] = env["TEST_DB_NAME"] ?: "engage_test"
         // Deterministic test keys: never the operator's real ones.
-        env["ADMIN_MFA_KEY"] = "0123456789abcdef0123456789abcdef"
+        // 64 hex = 32 bytes: SecretBox.keyFromHex accepts nothing shorter.
+        env["ADMIN_MFA_KEY"] = "0123456789abcdef".repeat(4)
         env["ADMIN_JWT_KEY_FILE"] = layout.buildDirectory.file("test-admin-jwt.pem").get().asFile.absolutePath
         env["ADMIN_BOOTSTRAP_EMAIL"] = ""
         // -1 binds to a random free port: tests must not fight the running

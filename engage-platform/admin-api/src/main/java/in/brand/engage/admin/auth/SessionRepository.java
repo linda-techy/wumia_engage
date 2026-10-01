@@ -57,17 +57,54 @@ public class SessionRepository {
     }
 
     public Issued issue(UUID operatorId, UUID familyId, String userAgent) {
+        return db.inTx(c -> issue(c, operatorId, familyId, userAgent));
+    }
+
+    /** In the caller's transaction, so a login and its audit row commit together. */
+    public Issued issue(Connection c, UUID operatorId, UUID familyId, String userAgent) throws SQLException {
         var raw = new byte[32];
         random.nextBytes(raw);
         var token = Base64.getUrlEncoder().withoutPadding().encodeToString(raw);
+        var sessionId = UUID.randomUUID();
+        Sql.update(c, """
+                INSERT INTO operator_sessions (id, operator_id, family_id, refresh_hash, user_agent, expires_at)
+                VALUES (?, ?, ?, ?, ?, now() + interval '%d days')""".formatted(REFRESH_TTL.toDays()),
+                sessionId, operatorId, familyId, sha256(token), userAgent);
+        return new Issued(sessionId, familyId, operatorId, token);
+    }
+
+    /**
+     * Whether an access token's session may still be used: not revoked and not
+     * expired. A rotated session stays usable until its access token expires
+     * (15 min); revocation (logout, reuse, password change) ends it at once.
+     */
+    public boolean isLive(UUID sessionId) {
+        return sessionById(sessionId)
+                .map(s -> !s.revoked() && s.expiresAt().isAfter(OffsetDateTime.now()))
+                .orElse(false);
+    }
+
+    /** Which family and operator a refresh token belongs to. */
+    public record SessionRef(UUID familyId, UUID operatorId) {}
+
+    /** The family and operator of a known refresh token (rotated or not). */
+    public Optional<SessionRef> refOf(String presented) {
+        if (presented == null || presented.isBlank()) return Optional.empty();
+        var hash = sha256(presented);
         return db.inTx(c -> {
-            var sessionId = UUID.randomUUID();
-            Sql.update(c, """
-                    INSERT INTO operator_sessions (id, operator_id, family_id, refresh_hash, user_agent, expires_at)
-                    VALUES (?, ?, ?, ?, ?, now() + interval '%d days')""".formatted(REFRESH_TTL.toDays()),
-                    sessionId, operatorId, familyId, sha256(token), userAgent);
-            return new Issued(sessionId, familyId, operatorId, token);
+            try (var ps = Sql.prepare(c,
+                    "SELECT family_id, operator_id FROM operator_sessions WHERE refresh_hash = ?", hash);
+                 var rs = ps.executeQuery()) {
+                return rs.next()
+                        ? Optional.of(new SessionRef(rs.getObject(1, UUID.class), rs.getObject(2, UUID.class)))
+                        : Optional.<SessionRef>empty();
+            }
         });
+    }
+
+    /** In the caller's transaction (logout writes its audit row with it). */
+    public void revokeFamily(Connection c, UUID familyId, String reason) throws SQLException {
+        revokeFamilyIn(c, familyId, reason);
     }
 
     public Issued rotate(String presented) {
