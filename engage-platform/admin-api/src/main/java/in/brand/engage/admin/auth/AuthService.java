@@ -240,6 +240,7 @@ public class AuthService {
     private Signed signIn(Operator operator, String userAgent) {
         return db.inTx(c -> {
             var issued = sessions.issue(c, operator.id(), UUID.randomUUID(), userAgent);
+            in.brand.engage.persistence.Sql.update(c, "UPDATE operators SET last_login_at = now() WHERE id = ?", operator.id());
             audit.record(c, operator.id(), "auth.login", "operator", operator.id().toString(), null, null);
             var access = tokens.issueAccess(operator.id(), operator.roles(), issued.sessionId(), operator.ver());
             return new Signed(access, operator, issued.refreshToken());

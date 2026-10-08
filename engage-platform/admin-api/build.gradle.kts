@@ -19,6 +19,7 @@ dependencies {
     runtimeOnly("org.yaml:snakeyaml")
 
     testImplementation("io.micronaut:micronaut-http-client")
+    testImplementation("com.tngtech.archunit:archunit-junit5:1.5.1")   // ControllerRolesTest
 }
 
 application {

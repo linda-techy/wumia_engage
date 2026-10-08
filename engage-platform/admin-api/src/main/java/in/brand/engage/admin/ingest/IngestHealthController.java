@@ -1,6 +1,8 @@
 package in.brand.engage.admin.ingest;
 
 import in.brand.engage.admin.auth.CurrentOperator;
+import in.brand.engage.admin.auth.RequiresRole;
+import in.brand.engage.admin.auth.Role;
 import in.brand.engage.persistence.Db;
 import in.brand.engage.persistence.Sql;
 import in.brand.engage.persistence.SqlFiles;
@@ -40,9 +42,9 @@ public class IngestHealthController {
         this.current = current;
     }
 
+    @RequiresRole(Role.VIEWER)
     @Get("/health")
     public IngestHealth health() {
-        current.require("VIEWER");
         return db.inTx(c -> {
             var topics = new ArrayList<TopicHealth>();
             try (var ps = Sql.prepare(c, SqlFiles.get("ingest_health.sql")); var rs = ps.executeQuery()) {
