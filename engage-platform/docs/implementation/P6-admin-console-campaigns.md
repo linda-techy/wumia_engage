@@ -25,12 +25,12 @@ Operators log in with MFA, see the system's health, halt it in an incident, chan
 
 ### ☑ P6-T01 — Auth, RBAC, audit
 
-> **Done 2026-10-08.** Login, MFA, sessions, audit and `BootstrapOwner` came with admin console v0 (merge `86e79f7`). This task added the rest: `@RequiresRole(Role.X)` on every controller method, enforced by an `@Around` interceptor and by `ControllerRolesTest` (ArchUnit), which fails the build when a public method in a `@Controller` has neither `@RequiresRole` nor `@PublicEndpoint("reason")`. It also added the per-IP sign-in limit, `/.well-known/jwks.json`, and operator management. `:admin-api:test`: 59 tests; `OperatorTest` has 9.
+> **Done 2026-10-08.** Login, MFA, sessions, audit and `BootstrapOwner` came with admin console v0 (merge `86e79f7`). This task added the rest: `@RequiresRole(Role.X)` on every controller method, enforced by an `@Around` interceptor and by `ControllerRolesTest` (ArchUnit), which fails the build when a public method in a `@Controller` has neither `@RequiresRole` nor `@PublicEndpoint("reason")`. It also added the per-IP sign-in limit, `/.well-known/jwks.json`, and operator management. `:admin-api:test`: 69 tests (`OperatorTest` 9, `ClientIpTest` 3).
 >
 > Where the build differs from the text below:
 > - **No micronaut-security.** Auth is the v0 hand-rolled filter plus nimbus-jose-jwt. `RequiresRole` is an interceptor around `CurrentOperator.require`, and any role implies VIEWER.
 > - **The key comes from `ADMIN_JWT_KEY_FILE`**, not `ADMIN_JWT_PRIVATE_KEY_FILE`. Tokens carry `kid` = the RFC 7638 thumbprint of the public key, and JWKS publishes that key alone, never the private parts.
-> - **The per-IP limit is 30 sign-in attempts per 10 minutes**, counted in memory per instance and keyed by `X-Real-IP` (set by the reverse proxy), else the remote address. Above the limit, sign-in answers 429 `too-many-attempts`.
+> - **The per-IP limit is 30 sign-in attempts per 10 minutes**, counted in memory per instance and keyed by `X-Real-IP` only when the peer is loopback or private (our nginx, the Docker bridge), else the peer address: a forged header from anywhere else is ignored. Above the limit, sign-in answers 429 `too-many-attempts`.
 > - **Operators** (`/api/operators`, OWNER only): list, invite (returns a 72 h set-password link for the owner to pass on; nothing is emailed), roles, disable, and reset (clears MFA, revokes sessions, returns a new link). The last active OWNER cannot lose OWNER or be disabled (an advisory lock serialises the check), and no one can disable themselves. `operators.last_login_at` is now set at sign-in.
 > - Refresh cookie path is `/api/auth`: the console serves the API under `/api`.
 

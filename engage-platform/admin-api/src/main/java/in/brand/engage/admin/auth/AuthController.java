@@ -165,9 +165,18 @@ public class AuthController {
 
     /** nginx sets X-Real-IP to the peer it saw; without nginx (local, tests) the socket's address. */
     static String clientIp(HttpRequest<?> request) {
-        var real = request.getHeaders().get("X-Real-IP");
-        if (real != null && !real.isBlank()) return real.strip();
-        return request.getRemoteAddress().getAddress().getHostAddress();
+        return clientIp(request.getRemoteAddress().getAddress(), request.getHeaders().get("X-Real-IP"));
+    }
+
+    /**
+     * X-Real-IP only from our own proxy: a loopback or private peer (nginx on
+     * the host, the Docker bridge). From anyone else the header is forgeable,
+     * and honouring it would give every request a fresh limit bucket.
+     */
+    static String clientIp(java.net.InetAddress peer, @Nullable String realIp) {
+        boolean viaProxy = peer.isLoopbackAddress() || peer.isSiteLocalAddress();
+        if (viaProxy && realIp != null && !realIp.isBlank()) return realIp.strip();
+        return peer.getHostAddress();
     }
 
     @Nullable
