@@ -20,7 +20,10 @@ import io.micronaut.http.annotation.Post;
 import io.micronaut.http.annotation.Put;
 import io.micronaut.scheduling.TaskExecutors;
 import io.micronaut.scheduling.annotation.ExecuteOn;
+import io.micronaut.serde.ObjectMapper;
 import io.micronaut.serde.annotation.Serdeable;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Duration;
@@ -65,15 +68,17 @@ public class OperatorController {
     private final Tokens tokens;
     private final PasswordHasher hasher;
     private final SessionRepository sessions;
+    private final ObjectMapper json;
 
     public OperatorController(Db db, CurrentOperator current, AuditLog audit, Tokens tokens, PasswordHasher hasher,
-                              SessionRepository sessions) {
+                              SessionRepository sessions, ObjectMapper json) {
         this.db = db;
         this.current = current;
         this.audit = audit;
         this.tokens = tokens;
         this.hasher = hasher;
         this.sessions = sessions;
+        this.json = json;
     }
 
     @RequiresRole(Role.OWNER)
@@ -114,7 +119,7 @@ public class OperatorController {
                     newId, email, body.fullName().strip(), placeholder);
             setRoles(c, newId, roles, actor);
             audit.record(c, actor, "operator.invite", "operator", newId.toString(), null,
-                    "{\"email\":\"" + email + "\",\"roles\":\"" + String.join(",", roles) + "\"}");
+                    toJson(Map.of("email", email, "roles", roles)));
             return newId;
         });
         return HttpResponse.created(Map.of("id", id.toString(), "setPasswordLink", link(id)));
@@ -132,7 +137,7 @@ public class OperatorController {
             Sql.update(c, "DELETE FROM operator_roles WHERE operator_id = ?", operatorId);
             setRoles(c, operatorId, roles, actor);
             audit.record(c, actor, "operator.roles", "operator", operatorId.toString(),
-                    "{\"roles\":\"" + String.join(",", before) + "\"}", "{\"roles\":\"" + String.join(",", roles) + "\"}");
+                    toJson(Map.of("roles", before)), toJson(Map.of("roles", roles)));
             return null;
         });
         return Map.of("id", operatorId.toString(), "roles", roles);
@@ -232,6 +237,14 @@ public class OperatorController {
              var rs = ps.executeQuery()) {
             rs.next();
             if (rs.getLong(1) == 0) throw Problems.conflict("last-owner", "there must always be at least one active OWNER");
+        }
+    }
+
+    private String toJson(Object value) {
+        try {
+            return json.writeValueAsString(value);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
         }
     }
 

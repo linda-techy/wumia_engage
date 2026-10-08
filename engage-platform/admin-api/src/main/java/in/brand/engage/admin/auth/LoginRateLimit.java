@@ -28,8 +28,8 @@ public class LoginRateLimit {
         return w.count() <= MAX;
     }
 
-    /** Tests only. */
-    void reset() {
+    /** Tests only: one test class signs in more than 30 times. */
+    public void reset() {
         windows.clear();
     }
 }

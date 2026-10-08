@@ -18,9 +18,9 @@ public class RoleInterceptor implements MethodInterceptor<Object, Object> {
 
     @Override
     public Object intercept(MethodInvocationContext<Object, Object> context) {
-        var role = context.enumValue(RequiresRole.class, Role.class)
-                .orElseThrow(() -> new IllegalStateException("@RequiresRole without a role on " + context));
-        current.require(role.name());
+        var roles = context.enumValues(RequiresRole.class, Role.class);
+        if (roles.length == 0) throw new IllegalStateException("@RequiresRole without a role on " + context);
+        current.requireAny(java.util.Arrays.stream(roles).map(Role::name).toList());
         return context.proceed();
     }
 }

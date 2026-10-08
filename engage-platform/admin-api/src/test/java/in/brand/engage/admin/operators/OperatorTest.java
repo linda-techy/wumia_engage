@@ -3,6 +3,7 @@ package in.brand.engage.admin.operators;
 import static org.junit.jupiter.api.Assertions.*;
 
 import in.brand.engage.admin.AdminTestData;
+import in.brand.engage.admin.auth.LoginRateLimit;
 import io.micronaut.core.type.Argument;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.client.HttpClient;
@@ -26,24 +27,14 @@ class OperatorTest {
 
     @Inject @Client("/") HttpClient client;
     @Inject AdminTestData data;
-    @Inject in.brand.engage.admin.auth.LoginRateLimit loginLimit;
+    @Inject LoginRateLimit loginLimit;
 
     String owner;
 
     @BeforeEach void reset() {
         data.cleanAdminTables();
-        loginLimitReset();
+        loginLimit.reset();
         owner = data.loginWithMfa(client, "owner@example.com", "OWNER");
-    }
-
-    void loginLimitReset() {
-        try {
-            var m = loginLimit.getClass().getDeclaredMethod("reset");
-            m.setAccessible(true);
-            m.invoke(loginLimit);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException(e);
-        }
     }
 
     int status(Runnable call) {
