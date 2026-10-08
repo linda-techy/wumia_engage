@@ -47,7 +47,9 @@ npm run api:generate                # openapi-generator → src/app/core/api
 | GET | `/config/{key}/history` | `ANALYST` | Full version history with actor and reason |
 | POST | `/config/{key}` | `CONFIG_ADMIN` | `CRITICAL` keys create a proposal |
 | POST | `/config/proposals/{id}/approve` | `CONFIG_ADMIN` | Must differ from proposer |
-| DELETE | `/config/proposals/{id}` | `CONFIG_ADMIN` | Withdraw |
+| POST | `/config/proposals/{id}/reject` | `CONFIG_ADMIN` | Must differ from proposer; optional `{reason}` |
+| DELETE | `/config/proposals/{id}` | `CONFIG_ADMIN` | Withdraw (proposer only) |
+| GET | `/config/snapshots/{id}` | any | The resolved config a send was decided under |
 | GET | `/halt` | any | Halts in force, with actor, reason and since |
 | POST | `/halt` | `CAMPAIGN_SEND` or `CONFIG_ADMIN` | Kill switch `{scope: channel\|marketing\|journey, selector, reason}`. Immediate, uncached, no approval. Pauses RUNNING and SCHEDULED campaigns on the scope |
 | DELETE | `/halt/{scope}/{selector}?reason=` | `CONFIG_ADMIN` | Release. Follows the key's risk tier; paused campaigns stay paused |

@@ -14,7 +14,7 @@ Order updates reach opted-in customers on WhatsApp, fall back to DLT SMS when Wh
 |---|---|---|---|---|
 | P4-T01 | Meta webhook intake | BE1 | 1 d | P3 done |
 | P4-T02 | `WhatsAppCloudAdapter` + error classification | BE1 | 1.5 d | T01 |
-| P4-T03 | Template sync + V17 number health | BE1 | 1.5 d | T02 |
+| P4-T03 | Template sync + V18 number health | BE1 | 1.5 d | T02 |
 | P4-T04 | Status and inbound handling: spend, service window, STOP | BE1 | 2 d | T01, T02 |
 | P4-T05 | `CapabilityService` | BE1 | 1.5 d | T04 |
 | P4-T06 | `Msg91Adapter` + DLT registry + delivery reports | BE2 | 2 d | P3 done |
@@ -78,7 +78,7 @@ The router's generic "permanent → suppression" rule from P3-T05 must **not** a
 
 ### ☐ P4-T03 — Template sync + number health
 
-**Migration `V17__whatsapp_numbers.sql`**
+**Migration `V18__whatsapp_numbers.sql`**
 ```sql
 CREATE TABLE wa_phone_numbers (
     phone_number_id TEXT PRIMARY KEY,

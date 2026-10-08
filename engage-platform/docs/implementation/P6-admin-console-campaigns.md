@@ -19,7 +19,7 @@ Operators log in with MFA, see the system's health, halt it in an incident, chan
 | P6-T05 | Segment DSL → SQL compiler | BE1 | 2 d | T01 |
 | P6-T06 | Campaigns: estimate, approve, arm, executor | BE1 | 3 d | T05 |
 | P6-T07 | Angular 22 admin UI | FE | 8 d (parallel from T01) | T01–T06 endpoints |
-| P6-T08 | Exports, PII masking, recovery codes (V19) | BE2 | 1.5 d | T01 |
+| P6-T08 | Exports, PII masking, recovery codes (V20) | BE2 | 1.5 d | T01 |
 
 ---
 
@@ -102,7 +102,36 @@ admin-api/src/main/java/in/brand/engage/admin/operators/BootstrapOwner.java   # 
 
 ---
 
-### ☐ P6-T03 — Config API
+### ☑ P6-T03 — Config API
+
+> **Done 2026-10-08.** `ConfigTest` (8) covers the three named tests:
+> - CRITICAL self-approval answers 409 `four-eyes`.
+> - An approved value dated 3 s ahead is absent from `config_current` until its start and in force after it, with no further write.
+> - A "Diwali week" cap with `effectiveTo` reverts to the previous value on its own.
+>
+> `ConfigValuesTest` (6) covers validation. `:admin-api:test`: 94 tests.
+>
+> Where the build differs from the text below:
+> - **V17 fills `json_schema`**, which was NULL for every key, so "validated against `json_schema`" had nothing to check:
+>   - WhatsApp marketing ≤ 2/day and ≤ 7/week;
+>   - push ≤ 10/day;
+>   - email ≤ 14/week;
+>   - holdouts 0–50 %;
+>   - FCM TTL 60 s–28 days;
+>   - stale-token days 1–365;
+>   - budgets and the approval threshold ≤ ₹10 lakh;
+>   - Meta rates ≤ ₹10.
+>
+>   These are sanity bounds, apart from Meta's per-user limit. Change them by migration. The validator supports `type`, `minimum`, `maximum`, `enum`, `pattern`, `minLength` and `maxLength`. **Any other keyword fails the write (500)** rather than being ignored.
+> - **One pending proposal per key and selector** (a V17 partial unique index; the API answers 409 `proposal-pending`). Two pending proposals for the same setting would let a reviewer approve a stale diff.
+> - **No backdating:** `effectiveFrom` more than a minute in the past is 400, because snapshots already taken would no longer match history. A proposal whose start passes while it waits takes effect on approval. One whose `effectiveTo` has passed cannot be approved (409 `window-passed`).
+> - **Endpoints beyond the text:**
+>   - `POST /api/config/proposals/{id}/reject` (another operator, optional reason).
+>   - `DELETE /api/config/proposals/{id}` (proposer only). `decided_by` stays NULL, because the four-eyes CHECK forbids the proposer there.
+>   - `GET /api/config/{key}/history` (ANALYST).
+> - **Approval inserts the version with `changed_by` = proposer and `approved_by` = approver.** It re-validates the value against the current schema, in case the schema tightened while the proposal waited.
+> - **Writes need CONFIG_ADMIN and the key's `min_role`**, and approval needs the same. `halt.*` keys answer 409 `use-halt`: halts go through `/api/halt`, which pauses campaigns and needs no approval.
+> - Policy picks up a future start or an end within its 30 s cache expiry (`ConfigResolver`); kill switches remain uncached.
 
 - `GET /config` → every `config_keys` row with its effective value (current version or `default_value`), the version that set it, and pending proposals.
 - `POST /config/{key}` `{selector, value, effectiveFrom?, effectiveTo?, reason}`:
@@ -120,7 +149,7 @@ admin-api/src/main/java/in/brand/engage/admin/operators/BootstrapOwner.java   # 
 
 - `GET/POST /consent-copy` (`CONFIG_ADMIN` to create; rows immutable, V4 trigger). Shows the grant count per version. Replaces the P2-T07 seed file for new versions.
 - `GET /templates` joins `templates` and `wa_templates`: requested vs approved category (mismatch flagged), status, quality.
-- `GET /inspector?phone=` → exact match on the normalised number (`Msisdn`), returns masked identifiers, every `cascade_runs` row with its `cascade_attempts`, and every `sends` row with `decision`. Each lookup writes a `pii_unmask_log` row (V19) with the operator and reason.
+- `GET /inspector?phone=` → exact match on the normalised number (`Msisdn`), returns masked identifiers, every `cascade_runs` row with its `cascade_attempts`, and every `sends` row with `decision`. Each lookup writes a `pii_unmask_log` row (V20) with the operator and reason.
 
 ---
 
@@ -191,7 +220,7 @@ Structure, auth handling and the composer from `06-admin-ui-angular.md`. Signals
 
 ### ☐ P6-T08 — Exports, PII, recovery codes
 
-**Migration `V19__admin_security.sql`**
+**Migration `V20__admin_security.sql`**
 ```sql
 CREATE TABLE operator_recovery_codes (
     operator_id UUID NOT NULL REFERENCES operators(id) ON DELETE CASCADE,

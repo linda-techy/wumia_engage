@@ -70,10 +70,11 @@ engage/
 | V14 | P2-T07 ✓ | `wa_v1` (cart checkbox) and `wa_inthread_v1` (wa.me message) WhatsApp copy, both incl. offers |
 | V15 | P2 ✓ | `checkout_notice_v2`: the checkout phone label names offers too (WhatsApp marketing opt-out, decided 2026-10-01) |
 | V16 | P6-T02 ✓ | dashboard views (`dash_sends_24h`, `dash_spend_today`, `dash_capability`, `dash_consent_daily`, `dash_journey_health`, `dash_push_devices`, `dash_wa_templates`) and an index on `sends.created_at`. Built before P4, so the planned P4–P7 migrations below moved up by one more |
-| V17 | P4 | `wa_phone_numbers` + history (quality, tier); WhatsApp config keys |
-| V18 | P5 | journey parameter config keys with defaults; `profile_recompute()` |
-| V19 | P6 | `exports`, `operator_recovery_codes`, `pii_unmask_log` |
-| V20 | P7 | `holdout_lift_weekly`, `spend_by_intent_daily`; `email.daily_cap`; `consent_erasure_proofs` + `erase_identity()` |
+| V17 | P6-T03 ✓ | `json_schema` bounds on every config key (WhatsApp marketing ≤ 2/day, holdouts ≤ 50 %, FCM TTL ≤ 28 days, …); one pending proposal per key and selector. Built before P4: the planned P4–P7 migrations below moved up by one more |
+| V18 | P4 | `wa_phone_numbers` + history (quality, tier); WhatsApp config keys |
+| V19 | P5 | journey parameter config keys with defaults; `profile_recompute()` |
+| V20 | P6 | `exports`, `operator_recovery_codes`, `pii_unmask_log` |
+| V21 | P7 | `holdout_lift_weekly`, `spend_by_intent_daily`; `email.daily_cap`; `consent_erasure_proofs` + `erase_identity()` |
 
 Migrations are forward-only. Never edit one that has run anywhere but your laptop. Fix forward with the next version.
 
