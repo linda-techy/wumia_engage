@@ -1,6 +1,8 @@
 package in.brand.engage.admin.payments;
 
 import in.brand.engage.admin.auth.CurrentOperator;
+import in.brand.engage.admin.auth.RequiresRole;
+import in.brand.engage.admin.auth.Role;
 import in.brand.engage.persistence.Db;
 import in.brand.engage.persistence.Sql;
 import in.brand.engage.persistence.SqlFiles;
@@ -43,9 +45,9 @@ public class PaymentsController {
         this.current = current;
     }
 
+    @RequiresRole(Role.VIEWER)
     @Get("/failures")
     public Failures failures() {
-        current.require("VIEWER");
         return db.inTx(c -> {
             var report = new ArrayList<ReportRow>();
             try (var ps = Sql.prepare(c, SqlFiles.get("payment_failure_report.sql")); var rs = ps.executeQuery()) {

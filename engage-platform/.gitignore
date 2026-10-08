@@ -27,3 +27,6 @@ node_modules/
 shopify-extension/extensions/*/dist/
 shopify-extension/extensions/*/shopify.d.ts
 shopify-extension/extensions/*/manifest.json
+
+# One-time admin bootstrap links fetched from a server log (credentials)
+config/*bootstrap-link*.txt

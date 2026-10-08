@@ -48,7 +48,10 @@ npm run api:generate                # openapi-generator → src/app/core/api
 | POST | `/config/{key}` | `CONFIG_ADMIN` | `CRITICAL` keys create a proposal |
 | POST | `/config/proposals/{id}/approve` | `CONFIG_ADMIN` | Must differ from proposer |
 | DELETE | `/config/proposals/{id}` | `CONFIG_ADMIN` | Withdraw |
-| POST | `/config/halt` | `CONFIG_ADMIN` | Kill switch. Immediate, uncached. |
+| GET | `/halt` | any | Halts in force, with actor, reason and since |
+| POST | `/halt` | `CAMPAIGN_SEND` or `CONFIG_ADMIN` | Kill switch `{scope: channel\|marketing\|journey, selector, reason}`. Immediate, uncached, no approval. Pauses RUNNING and SCHEDULED campaigns on the scope |
+| DELETE | `/halt/{scope}/{selector}?reason=` | `CONFIG_ADMIN` | Release. Follows the key's risk tier; paused campaigns stay paused |
+| GET | `/dashboard` | any | Spend vs budget, 24 h sends by reason, journey health, consent, capability, push and template health (one poll) |
 
 ```http
 POST /api/config/cap.whatsapp.marketing.1d

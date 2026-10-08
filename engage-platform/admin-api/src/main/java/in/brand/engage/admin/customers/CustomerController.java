@@ -2,6 +2,8 @@ package in.brand.engage.admin.customers;
 
 import in.brand.engage.admin.audit.AuditLog;
 import in.brand.engage.admin.auth.CurrentOperator;
+import in.brand.engage.admin.auth.RequiresRole;
+import in.brand.engage.admin.auth.Role;
 import in.brand.engage.admin.web.Problems;
 import in.brand.engage.persistence.Db;
 import io.micronaut.core.annotation.Nullable;
@@ -37,17 +39,17 @@ public class CustomerController {
         this.audit = audit;
     }
 
+    @RequiresRole(Role.VIEWER)
     @Get
     public Map<String, Object> lookup(@Nullable @QueryValue String q) {
-        current.require("VIEWER");
         var key = CustomerQueries.normalise(q).orElseThrow(() -> Problems.notFound("no customer matches exactly"));
         var id = db.inTx(c -> queries.lookup(c, key)).orElseThrow(() -> Problems.notFound("no customer matches exactly"));
         return Map.of("identityId", id.toString());
     }
 
+    @RequiresRole(Role.VIEWER)
     @Get("/{id}")
     public Map<String, Object> view(@PathVariable String id) {
-        current.require("VIEWER");
         var identity = parse(id);
         return db.inTx(c -> {
             if (!queries.exists(c, identity)) throw Problems.notFound("no such customer");
@@ -55,9 +57,9 @@ public class CustomerController {
         });
     }
 
+    @RequiresRole(Role.ANALYST)
     @Post("/{id}/reveal")
     public Map<String, Object> reveal(@PathVariable String id) {
-        current.require("ANALYST");
         var identity = parse(id);
         var operator = current.id();
         return db.inTx(c -> {

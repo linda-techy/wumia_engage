@@ -2,6 +2,8 @@ package in.brand.engage.admin.consent;
 
 import in.brand.engage.admin.audit.AuditLog;
 import in.brand.engage.admin.auth.CurrentOperator;
+import in.brand.engage.admin.auth.RequiresRole;
+import in.brand.engage.admin.auth.Role;
 import in.brand.engage.admin.web.Problems;
 import in.brand.engage.persistence.Db;
 import in.brand.engage.persistence.Sql;
@@ -54,9 +56,9 @@ public class ConsentCopyController {
         this.audit = audit;
     }
 
+    @RequiresRole(Role.VIEWER)
     @Get
     public List<CopyVersion> list() {
-        current.require("VIEWER");
         return db.inTx(c -> {
             var out = new ArrayList<CopyVersion>();
             try (var ps = Sql.prepare(c, SqlFiles.get("consent_copy_list.sql")); var rs = ps.executeQuery()) {
@@ -70,9 +72,9 @@ public class ConsentCopyController {
         });
     }
 
+    @RequiresRole(Role.CONFIG_ADMIN)
     @Post
     public HttpResponse<?> register(@Body Register body) {
-        current.require("CONFIG_ADMIN");
         var v = validate(body);
         var operator = current.id();
         db.inTx(c -> {

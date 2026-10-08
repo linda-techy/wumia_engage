@@ -48,11 +48,26 @@ public class Tokens {
 
     private final RSAPrivateKey privateKey;
     private final RSAPublicKey publicKey;
+    private final com.nimbusds.jose.jwk.RSAKey publicJwk;
 
     public Tokens(AdminProperties properties) {
         var keyPair = loadOrCreate(Path.of(properties.jwtKeyFile()));
         this.privateKey = (RSAPrivateKey) keyPair.getPrivate();
         this.publicKey = (RSAPublicKey) keyPair.getPublic();
+        try {
+            this.publicJwk = new com.nimbusds.jose.jwk.RSAKey.Builder(publicKey)
+                    .keyUse(com.nimbusds.jose.jwk.KeyUse.SIGNATURE)
+                    .algorithm(JWSAlgorithm.RS256)
+                    .keyIDFromThumbprint()
+                    .build();
+        } catch (JOSEException e) {
+            throw new IllegalStateException("cannot derive the key id", e);
+        }
+    }
+
+    /** The public key as a JWK Set: what /.well-known/jwks.json serves. Never the private half. */
+    public Map<String, Object> jwks() {
+        return new com.nimbusds.jose.jwk.JWKSet(publicJwk).toJSONObject(true);
     }
 
     public String issueAccess(UUID operatorId, List<String> roles, UUID sessionId, int ver) {
@@ -103,7 +118,7 @@ public class Tokens {
 
     private String sign(JWTClaimsSet claims) {
         try {
-            var jwt = new SignedJWT(new JWSHeader(JWSAlgorithm.RS256), claims);
+            var jwt = new SignedJWT(new JWSHeader.Builder(JWSAlgorithm.RS256).keyID(publicJwk.getKeyID()).build(), claims);
             jwt.sign(new RSASSASigner(privateKey));
             return jwt.serialize();
         } catch (JOSEException e) {

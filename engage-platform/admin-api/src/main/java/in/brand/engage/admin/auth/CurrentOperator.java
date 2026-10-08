@@ -52,4 +52,10 @@ public class CurrentOperator {
         id();
         if (!has(role)) throw Problems.forbidden("requires " + role);
     }
+
+    /** As {@link #require}, satisfied by any one of {@code roles}. */
+    public void requireAny(List<String> roles) {
+        id();
+        if (roles.stream().noneMatch(this::has)) throw Problems.forbidden("requires " + String.join(" or ", roles));
+    }
 }

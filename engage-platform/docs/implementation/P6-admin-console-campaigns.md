@@ -19,11 +19,20 @@ Operators log in with MFA, see the system's health, halt it in an incident, chan
 | P6-T05 | Segment DSL → SQL compiler | BE1 | 2 d | T01 |
 | P6-T06 | Campaigns: estimate, approve, arm, executor | BE1 | 3 d | T05 |
 | P6-T07 | Angular 22 admin UI | FE | 8 d (parallel from T01) | T01–T06 endpoints |
-| P6-T08 | Exports, PII masking, recovery codes (V18) | BE2 | 1.5 d | T01 |
+| P6-T08 | Exports, PII masking, recovery codes (V19) | BE2 | 1.5 d | T01 |
 
 ---
 
-### ☐ P6-T01 — Auth, RBAC, audit
+### ☑ P6-T01 — Auth, RBAC, audit
+
+> **Done 2026-10-08.** Login, MFA, sessions, audit and `BootstrapOwner` came with admin console v0 (merge `86e79f7`). This task added the rest: `@RequiresRole(Role.X)` on every controller method, enforced by an `@Around` interceptor and by `ControllerRolesTest` (ArchUnit), which fails the build when a public method in a `@Controller` has neither `@RequiresRole` nor `@PublicEndpoint("reason")`. It also added the per-IP sign-in limit, `/.well-known/jwks.json`, and operator management. `:admin-api:test`: 69 tests (`OperatorTest` 9, `ClientIpTest` 3).
+>
+> Where the build differs from the text below:
+> - **No micronaut-security.** Auth is the v0 hand-rolled filter plus nimbus-jose-jwt. `RequiresRole` is an interceptor around `CurrentOperator.require`, and any role implies VIEWER.
+> - **The key comes from `ADMIN_JWT_KEY_FILE`**, not `ADMIN_JWT_PRIVATE_KEY_FILE`. Tokens carry `kid` = the RFC 7638 thumbprint of the public key, and JWKS publishes that key alone, never the private parts.
+> - **The per-IP limit is 30 sign-in attempts per 10 minutes**, counted in memory per instance and keyed by `X-Real-IP` only when the peer is loopback or private (our nginx, the Docker bridge), else the peer address: a forged header from anywhere else is ignored. Above the limit, sign-in answers 429 `too-many-attempts`.
+> - **Operators** (`/api/operators`, OWNER only): list, invite (returns a 72 h set-password link for the owner to pass on; nothing is emailed), roles, disable, and reset (clears MFA, revokes sessions, returns a new link). The last active OWNER cannot lose OWNER or be disabled (an advisory lock serialises the check), and no one can disable themselves. `operators.last_login_at` is now set at sign-in.
+> - Refresh cookie path is `/api/auth`: the console serves the API under `/api`.
 
 **Files**
 ```
@@ -54,7 +63,35 @@ admin-api/src/main/java/in/brand/engage/admin/operators/BootstrapOwner.java   # 
 
 ---
 
-### ☐ P6-T02 — Kill switches + dashboard
+### ☑ P6-T02 — Kill switches + dashboard
+
+> **Done 2026-10-08.** `HaltTest.halting_marketing_blocks_the_next_marketing_decision_within_two_seconds_and_utility_continues` runs the real `PolicyEngine` in the admin-api test context: halt marketing through `POST /api/halt`, and the next marketing decision is `MARKETING_HALTED` while utility is `Allow`. The two-second budget is not a waiting game: `KillSwitch` reads `config_current` uncached on every decision, on every instance. `:admin-api:test`: 80 tests (`HaltTest` 8, `DashboardTest` 3).
+>
+> Where the build differs from the text below:
+> - **Endpoints:**
+>   - `GET /api/halt` (VIEWER): every halt in force, with who set it and why, for the console header.
+>   - `POST /api/halt` `{scope, selector, reason}`.
+>   - `DELETE /api/halt/{scope}/{selector}?reason=`.
+>
+>   07-api-contract's `POST /config/halt` (CONFIG_ADMIN) is superseded: this task's text lets CAMPAIGN_SEND halt too. `@RequiresRole` now takes several roles, any one of which suffices.
+> - **Selectors:**
+>   - channel: a channel name or `*`;
+>   - marketing: `*` only;
+>   - journey: a journey key or `*`.
+>
+>   Halting what is already halted writes nothing and answers 200 with `alreadyHalted: true`. A new halt answers 201. Releasing what is not halted is 404.
+> - **SCHEDULED campaigns are paused too**, not only RUNNING ones. A campaign that started during the halt would otherwise push its whole audience into blocked sends. Each pause is audited as `campaign.pause`. Releasing a halt leaves them paused, because resuming is a campaign action (P6-T06).
+> - **A release follows the key's risk tier.** The V8 halt keys are GUARDED, so CONFIG_ADMIN releases directly. A CRITICAL halt key would answer 409 `approval-required` until the P6-T03 proposals exist.
+> - **The dashboard is one read:** `GET /api/dashboard` over the **V16** views (README, Migrations). It returns:
+>   - spend today against each `budget.*.daily_paise`;
+>   - sends in the last 24 h by status and policy reason;
+>   - journey health (entered, succeeded, exhausted, failed, and stalled = live runs more than 15 minutes overdue);
+>   - consent grants and withdrawals per IST day and source over 30 days;
+>   - capability distribution;
+>   - push devices by browser and state, plus the 7-day prompt funnel;
+>   - WhatsApp template status and category mismatches.
+> - **Not yet on the dashboard:** WhatsApp number quality and tier (the number table arrives with P4), and the weekly trend of the UNKNOWN capability share, which needs a history `channel_capability` does not keep.
+> - Audit `before`/`after` JSON is now serialised, not concatenated, in the halt and operator endpoints. A reason containing quotes is stored verbatim.
 
 - `POST /halt` `{scope: channel|marketing|journey, selector, reason}` → a `config_versions` row for `halt.*` = `true`, **no approval needed** (P3-T02). Allowed for `CAMPAIGN_SEND` and `CONFIG_ADMIN`.
 - `DELETE /halt/...` (un-halt) follows the key's normal risk tier and needs `CONFIG_ADMIN`.
@@ -83,7 +120,7 @@ admin-api/src/main/java/in/brand/engage/admin/operators/BootstrapOwner.java   # 
 
 - `GET/POST /consent-copy` (`CONFIG_ADMIN` to create; rows immutable, V4 trigger). Shows the grant count per version. Replaces the P2-T07 seed file for new versions.
 - `GET /templates` joins `templates` and `wa_templates`: requested vs approved category (mismatch flagged), status, quality.
-- `GET /inspector?phone=` → exact match on the normalised number (`Msisdn`), returns masked identifiers, every `cascade_runs` row with its `cascade_attempts`, and every `sends` row with `decision`. Each lookup writes a `pii_unmask_log` row (V18) with the operator and reason.
+- `GET /inspector?phone=` → exact match on the normalised number (`Msisdn`), returns masked identifiers, every `cascade_runs` row with its `cascade_attempts`, and every `sends` row with `decision`. Each lookup writes a `pii_unmask_log` row (V19) with the operator and reason.
 
 ---
 
@@ -154,7 +191,7 @@ Structure, auth handling and the composer from `06-admin-ui-angular.md`. Signals
 
 ### ☐ P6-T08 — Exports, PII, recovery codes
 
-**Migration `V18__admin_security.sql`**
+**Migration `V19__admin_security.sql`**
 ```sql
 CREATE TABLE operator_recovery_codes (
     operator_id UUID NOT NULL REFERENCES operators(id) ON DELETE CASCADE,
