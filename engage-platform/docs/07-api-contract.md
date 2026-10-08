@@ -137,6 +137,8 @@ Journey *definitions* are code and are not editable through the API. Their *conf
 | GET | `/customers/lookup?phone=` | `VIEWER` | Exact match only. No wildcard browse. |
 | GET | `/customers/{id}` | `VIEWER` | 360: profile, consent timeline, sends, orders |
 | POST | `/customers/{id}/unmask` | `ANALYST` | Returns full PII, writes an audit row |
+| POST | `/inspector` | `ANALYST` | `{phone, reason}`: runs, attempts and sends for one exact number, masked. Writes `pii_unmask_log`; counts toward the unmask limit |
+| GET | `/templates` | any | Registry templates with Meta state per language; category mismatches flagged |
 | POST | `/customers/{id}/suppress` | `CAMPAIGN_SEND` | Manual suppression |
 | POST | `/customers/{id}/erase` | `OWNER` | DPDP erasure; cascades, irreversible |
 
@@ -160,7 +162,7 @@ The consent timeline is the most useful view on this screen during a complaint: 
 |---|---|
 | `/auth/login` | 5 per account per 15 min, 20 per IP per 15 min |
 | `/exports` | 3 per operator per day |
-| `/customers/*/unmask` | 50 per operator per day |
+| `/customers/*/unmask`, `/inspector` | 50 per operator per day |
 | Everything else | 600 per operator per minute |
 
 The unmask limit is deliberate. An operator legitimately needs to see a customer's number to resolve a complaint; an operator who needs 500 in a day is exporting your list one record at a time.

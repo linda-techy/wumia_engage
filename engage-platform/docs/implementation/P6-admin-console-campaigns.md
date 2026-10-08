@@ -19,7 +19,7 @@ Operators log in with MFA, see the system's health, halt it in an incident, chan
 | P6-T05 | Segment DSL → SQL compiler | BE1 | 2 d | T01 |
 | P6-T06 | Campaigns: estimate, approve, arm, executor | BE1 | 3 d | T05 |
 | P6-T07 | Angular 22 admin UI | FE | 8 d (parallel from T01) | T01–T06 endpoints |
-| P6-T08 | Exports, PII masking, recovery codes (V20) | BE2 | 1.5 d | T01 |
+| P6-T08 | Exports, PII masking, recovery codes (migration) | BE2 | 1.5 d | T01 |
 
 ---
 
@@ -145,11 +145,23 @@ admin-api/src/main/java/in/brand/engage/admin/operators/BootstrapOwner.java   # 
 
 ---
 
-### ☐ P6-T04 — Copy registry, templates, journey inspector
+### ☑ P6-T04 — Copy registry, templates, journey inspector
+
+> **Done 2026-10-08.** `:admin-api:test`: 99 tests (`InspectorTest` 4, `TemplatesTest` 1).
+>
+> Where the build differs from the text below:
+> - **Consent copy** was already built in admin console v0 (`GET/POST /api/consent-copy`, grant count per version, CONFIG_ADMIN to create). Nothing new here.
+> - **The inspector is `POST /api/inspector {phone, reason}`**, not `GET ?phone=`: a number in a URL lands in proxy logs and browser history. It needs **ANALYST**, the same tier as the v0 customer reveal, because a phone number goes in and a person's whole message history comes out.
+>   - It accepts any common format (`Msisdn.normalise`) and follows an identity merge to the survivor.
+>   - It returns the identity id, the phone and emails masked, cascade runs with their attempts, and the last 200 sends with `decision` as JSON.
+>   - A reason of 5+ characters is required. Every lookup writes `pii_unmask_log`, **a miss included**, because probing numbers is the pattern to catch.
+>   - The 07-api-contract limit of **50 per operator per 24 h** counts that log and answers 429 `unmask-limit`.
+> - **`GET /api/templates`** (VIEWER): `templates` with each language's Meta state from `wa_templates`, plus `categoryMismatch` per language and per template. Read-only: templates change in code and sync from Meta (P4).
+> - **V18 is `pii_unmask_log` only**, taken from the planned admin-security migration, which keeps exports and recovery codes (P6-T08). Planned migrations no longer carry numbers (README, Migrations).
 
 - `GET/POST /consent-copy` (`CONFIG_ADMIN` to create; rows immutable, V4 trigger). Shows the grant count per version. Replaces the P2-T07 seed file for new versions.
 - `GET /templates` joins `templates` and `wa_templates`: requested vs approved category (mismatch flagged), status, quality.
-- `GET /inspector?phone=` → exact match on the normalised number (`Msisdn`), returns masked identifiers, every `cascade_runs` row with its `cascade_attempts`, and every `sends` row with `decision`. Each lookup writes a `pii_unmask_log` row (V20) with the operator and reason.
+- `GET /inspector?phone=` → exact match on the normalised number (`Msisdn`), returns masked identifiers, every `cascade_runs` row with its `cascade_attempts`, and every `sends` row with `decision`. Each lookup writes a `pii_unmask_log` row (V18) with the operator and reason.
 
 ---
 
@@ -220,7 +232,7 @@ Structure, auth handling and the composer from `06-admin-ui-angular.md`. Signals
 
 ### ☐ P6-T08 — Exports, PII, recovery codes
 
-**Migration `V20__admin_security.sql`**
+**Migration `V<next>__admin_security.sql`**
 ```sql
 CREATE TABLE operator_recovery_codes (
     operator_id UUID NOT NULL REFERENCES operators(id) ON DELETE CASCADE,
@@ -241,16 +253,9 @@ CREATE TABLE exports (
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     expires_at   TIMESTAMPTZ NOT NULL DEFAULT now() + interval '24 hours'
 );
-
-CREATE TABLE pii_unmask_log (
-    id          BIGSERIAL PRIMARY KEY,
-    operator_id UUID NOT NULL REFERENCES operators(id),
-    identity_id UUID,
-    field       TEXT NOT NULL,                   -- phone | email | address
-    reason      TEXT NOT NULL,
-    at          TIMESTAMPTZ NOT NULL DEFAULT now()
-);
 ```
+
+`pii_unmask_log` was built in **V18** with P6-T04 (append-only, a miss logged with `identity_id` NULL).
 
 - Phones and emails are masked in every API response by default (`Msisdn.mask`). Unmasking is one field at a time, needs a reason, and writes `pii_unmask_log`.
 - Exports: `ANALYST`+, 5 per operator per day, PII only for `OWNER` with a reason. Files expire after 24 hours.
