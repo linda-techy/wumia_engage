@@ -214,7 +214,39 @@ admin-api/src/main/java/in/brand/engage/admin/segments/Predicates.java          
 
 ---
 
-### ☐ P6-T06 — Campaigns
+### ☑ P6-T06 — Campaigns
+
+> **Done 2026-10-09.** The five named tests:
+> - `CampaignTest`: the author cannot approve their own campaign; a WhatsApp campaign's recipients hold no `UNKNOWN` (or `INCAPABLE`) identity, and the picker and the server refuse a PENDING or RED template.
+> - `CampaignExecutorTest`: a pause stops the run within one batch; an immediate second pass after a full bucket dispatches at most 1; the budget cap pauses the run.
+>
+> Also tested: a push dry run shows `STALE_TOKENS` as its own bucket, and a follow-up campaign's run waits at step 1. Totals: admin-api 115 tests, worker 48, orchestrator 49.
+>
+> How it is built, and where it differs from the text below:
+> - **A campaign is a cascade, through the one door.**
+>   - `CampaignCascades` (orchestrator) is a `CascadeDefinitionSource`: `campaign:<id>` becomes the campaign's channel and template, then the optional follow-up step after `follow_up_after_minutes` (V20).
+>   - A push click is already a success signal (`PushClicks` → `onSignal`), so the follow-up reaches only non-clickers.
+>   - Priority is `LOW_INTENT`: a campaign yields to every journey.
+>   - Code-defined intents always win over a source.
+> - **Templates stay in code.** Two reviewed campaign push templates: `push_campaign_new_arrivals_v1` and `push_campaign_festive_edit_v1`. A campaign supplies only variables: ≤ 20, `url` must be https.
+>   - WhatsApp campaigns can be built, estimated and approved, but cannot send until P4 brings the adapter and synced templates.
+> - **Audience:** `CampaignAudience` is one SQL query shared by the dry run and arming, so they cannot disagree. It produces:
+>   - the campaign holdout, a stable hash of identity and campaign;
+>   - campaign exclusions: push `STALE_TOKENS`; WhatsApp `WA_CAPABILITY_UNKNOWN` and `WA_INCAPABLE`;
+>   - everyone else, who goes to the policy engine.
+> - **Dry run:** the real `PolicyEngine.decide()` per identity, serial and synchronous. It refuses more than 100,000 people (422) until it moves to a job. The breakdown has `willReceive`, `costPaise`, `holdout`, `excluded`, `blocked` and `deferred` by reason. The follow-up step's cost is not estimated yet.
+> - **Approval:** required for WhatsApp in either step, or when the estimate exceeds `approval.required_above_paise`. Approval re-runs the dry run. The author is refused with 409 `four-eyes`, even with CAMPAIGN_SEND.
+> - **Start (arm):** needs READY, an estimate under 24 h old, approval if required, and no marketing or channel halt (409 `halted`).
+>   - It freezes the audience in one `INSERT … SELECT`: treatment `pending`, holdout `skipped`, exclusions left out.
+>   - It records the config snapshot and creates the rate bucket. Capacity is one batch (≤ 100), refilled at `send_rate_per_minute`.
+>   - `scheduledAt` in the future gives SCHEDULED; the executor promotes it.
+> - **Executor (worker, every 2 s):** per RUNNING campaign, under `FOR UPDATE SKIP LOCKED`:
+>   - **Budget:** spend so far, plus this batch at the WhatsApp marketing rate, never passes `budget_cap_paise`. At the cap the campaign is PAUSED with `paused_reason = budget_cap`, and resume refuses that (409).
+>   - **Tokens and claims:** take tokens, claim that many `pending` recipients, and `dispatch()` each with intent `campaign:<id>` and subject = identity.
+>   - **Recipient state** comes from step 0's attempt: sent, blocked or failed with the reason. A deferred recipient stays `claimed` with `deferred:<reason>`, because the orchestrator owns the retry.
+>   - **Crash recovery:** a claim older than 10 minutes with no outcome returns to pending. Re-dispatch is idempotent: one live run per intent and identity.
+>   - **Completion:** when nothing is left, the campaign is COMPLETED with recipient counts in `stats`.
+> - **Defaults:** WhatsApp campaigns need a budget cap. Rates: push 5,000/min (max 10,000), WhatsApp 600/min (max 1,000). Holdout 0–50 %. Push TTL 12 h, capped at 48 h. Follow-up 1 h to 3 days later, on the other channel.
 
 Lifecycle and rules from `05-campaigns.md` and phase-6 §4–5.
 

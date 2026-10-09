@@ -73,6 +73,7 @@ engage/
 | V17 | P6-T03 ✓ | `json_schema` bounds on every config key (WhatsApp marketing ≤ 2/day, holdouts ≤ 50 %, FCM TTL ≤ 28 days, …); one pending proposal per key and selector. Built before P4: the planned P4–P7 migrations below moved up by one more |
 | V18 | P6-T04 ✓ | `pii_unmask_log` (append-only), for the journey inspector; taken from the planned P6 admin-security migration |
 | V19 | P6-T05 ✓ | `order_lines` and `products` (type, tags, size option) for segment predicates, written by ingest from order and `products/update` payloads, backfilled from the inbox's 7 days |
+| V20 | P6-T06 ✓ | campaign follow-up step (`follow_up_channel`, `follow_up_template_key`, `follow_up_after_minutes`), `ttl_seconds`, `paused_reason`; an index for summing a campaign's spend |
 | next | P4 | `wa_phone_numbers` + history (quality, tier); WhatsApp config keys |
 | next | P5 | journey parameter config keys with defaults; `profile_recompute()` |
 | next | P6-T08 | `exports`, `operator_recovery_codes` |

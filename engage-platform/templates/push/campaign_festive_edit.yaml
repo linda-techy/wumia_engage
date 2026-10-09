@@ -1,0 +1,11 @@
+# Campaign (P6-T06): a festive edit (Onam, Pongal, Diwali), the INDIA-PLAYBOOK
+# §4 launch shape: push carries the volume, WhatsApp follows up.
+key: push_campaign_festive_edit_v1
+channel: push
+category: marketing
+cooldown: P1D
+locales:
+  en:      { title: "The {{festival}} edit is here", body: "Pieces picked for {{festival}}. Explore the edit." }
+  hi-Latn: { title: "{{festival}} edit aa gaya", body: "{{festival}} ke liye chune hue pieces. Edit dekhiye." }
+vars: [festival, url, image]
+samples: { festival: "Onam" }

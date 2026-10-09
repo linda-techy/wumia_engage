@@ -93,9 +93,11 @@ Definitions are JSON (`{all|any: [...]}`, `{not: {...}}`, `{field, op, value}`),
 
 | Method | Path | Role | Notes |
 |---|---|---|---|
-| GET | `/campaigns` | `VIEWER` | Filter by status, channel, creator |
+| GET | `/campaigns` | `VIEWER` | Latest 200 |
+| GET | `/campaigns/templates?channel=` | `VIEWER` | The picker: push = active marketing; WhatsApp = APPROVED marketing, quality not RED. Enforced on write too |
+| GET | `/campaigns/{id}` | `VIEWER` | With estimate, recipient counts by state, `approvalRequired` |
 | POST | `/campaigns` | `CAMPAIGN_EDIT` | Creates `DRAFT` |
-| PATCH | `/campaigns/{id}` | `CAMPAIGN_EDIT` | `DRAFT`/`READY` only; clears the estimate |
+| PATCH | `/campaigns/{id}` | `CAMPAIGN_EDIT` | `DRAFT`/`READY`/`PENDING_APPROVAL` only; back to `DRAFT`, clears estimate and approval |
 | POST | `/campaigns/{id}/estimate` | `CAMPAIGN_EDIT` | Full dry run |
 | GET | `/campaigns/{id}/estimate` | `VIEWER` | Last estimate + staleness flag |
 | POST | `/campaigns/{id}/approve` | `CAMPAIGN_SEND` | Four-eyes; re-estimates |
