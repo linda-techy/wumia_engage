@@ -34,6 +34,9 @@ engage:
     # adapter: WhatsApp sends are recorded as no_adapter, nothing leaves.
     graph-version: ${WA_GRAPH_VERSION:v23.0}
     phone-number-id: ${WA_PHONE_NUMBER_ID:}
+    # The WhatsApp Business Account: template sync, number quality, submitting
+    # templates. Empty = none of that runs.
+    business-account-id: ${WA_BUSINESS_ACCOUNT_ID:}
     access-token: ${WA_ACCESS_TOKEN:}
   metrics:
     # Bearer token for /prometheus (same value as ingest-api). Empty = 404.

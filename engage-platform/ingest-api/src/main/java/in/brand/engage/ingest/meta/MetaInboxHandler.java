@@ -107,9 +107,113 @@ public class MetaInboxHandler implements InboxHandler {
                 statuses(c, item.deliveryId());
                 inbound(c, item.deliveryId());
             }
-            // Template status/quality and number quality: P4-T03.
-            default -> LOG.info("meta webhook topic {} acknowledged; not handled yet", item.topic());
+            case "message_template_status_update" -> templateStatus(c, item.deliveryId());
+            case "message_template_quality_update" -> templateQuality(c, item.deliveryId());
+            case "phone_number_quality_update" -> numberQuality(c, item.deliveryId());
+            default -> LOG.info("meta webhook topic {} acknowledged; nothing to do", item.topic());
         }
+    }
+
+    /* ---------------------- templates and numbers (P4-T03) ---------------------- */
+
+    private static final Set<String> WA_STATUSES = Set.of("APPROVED", "PENDING", "REJECTED", "PAUSED", "DISABLED");
+
+    /** APPROVED, REJECTED, PAUSED, DISABLED…: mirrored per Meta name and language; PAUSED/DISABLED pause ours. */
+    private void templateStatus(Connection c, String deliveryId) throws SQLException {
+        for (var v : values(c, deliveryId)) {
+            var event = String.valueOf(v.get("event"));
+            var status = switch (event) {
+                case "REINSTATED" -> "APPROVED";
+                case "FLAGGED" -> null;                      // a warning: quality, not status
+                case "PENDING_DELETION" -> "DISABLED";
+                default -> WA_STATUSES.contains(event) ? event : null;
+            };
+            if (status == null) continue;
+            var name = v.get("name");
+            var lang = v.get("language");
+            int n = Sql.update(c, """
+                    UPDATE wa_templates SET status = ?, rejected_reason = CASE WHEN ? = 'REJECTED' THEN ? END, synced_at = now()
+                     WHERE provider_name = ? AND language = ?""", status, status, v.get("reason"), name, lang);
+            if (n == 0) LOG.info("template {} ({}) is {} at Meta but not synced here yet; the next sync adds it", name, lang, status);
+            if (status.equals("PAUSED") || status.equals("DISABLED")) pauseOurs(c, name, lang, "status " + status);
+            if (status.equals("REJECTED")) LOG.error("WhatsApp template {} ({}) was REJECTED: {}", name, lang, v.get("reason"));
+        }
+    }
+
+    /** RED pauses our template at once, before the next decision. */
+    private void templateQuality(Connection c, String deliveryId) throws SQLException {
+        for (var v : values(c, deliveryId)) {
+            var q = String.valueOf(v.get("quality")).toUpperCase(Locale.ROOT);
+            var quality = Set.of("GREEN", "YELLOW", "RED").contains(q) ? q : "UNKNOWN";
+            Sql.update(c, "UPDATE wa_templates SET quality = ?, synced_at = now() WHERE provider_name = ? AND language = ?",
+                    quality, v.get("name"), v.get("language"));
+            if (quality.equals("RED")) pauseOurs(c, v.get("name"), v.get("language"), "quality RED");
+        }
+    }
+
+    private static void pauseOurs(Connection c, String name, String language, String why) throws SQLException {
+        int n = Sql.update(c, """
+                UPDATE templates SET status = 'paused', updated_at = now()
+                 WHERE status = 'active' AND key IN (SELECT key FROM wa_templates WHERE provider_name = ? AND language = ?)""",
+                name, language);
+        if (n > 0) LOG.error("WhatsApp template {} ({}) paused: {}", name, language, why);
+    }
+
+    /**
+     * Number quality and tier. FLAGGED (quality dropped) is an incident: logged as
+     * an error and recorded as a {@code wa_number_flagged} event for the dashboard.
+     */
+    private void numberQuality(Connection c, String deliveryId) throws SQLException {
+        for (var v : values(c, deliveryId)) {
+            var display = v.get("display");
+            var event = String.valueOf(v.get("event"));
+            var quality = switch (event) {
+                case "FLAGGED" -> "RED";
+                case "UNFLAGGED" -> "GREEN";
+                default -> null;
+            };
+            int n = Sql.update(c, """
+                    UPDATE wa_phone_numbers SET quality = COALESCE(?, quality),
+                           messaging_tier = COALESCE(?, messaging_tier), updated_at = now()
+                     WHERE display_number = ? OR display_number = '+' || ?""", quality, v.get("tier"), display, display);
+            if (n == 0) {
+                Sql.update(c, """
+                        INSERT INTO wa_phone_numbers (phone_number_id, display_number, quality, messaging_tier)
+                        VALUES (?, ?, COALESCE(?, 'UNKNOWN'), ?) ON CONFLICT DO NOTHING""",
+                        "display:" + display, display, quality, v.get("tier"));
+            }
+            Sql.update(c, """
+                    INSERT INTO wa_phone_number_history (phone_number_id, quality, messaging_tier, event, observed_at)
+                    SELECT phone_number_id, quality, messaging_tier, ?, now() FROM wa_phone_numbers
+                     WHERE display_number = ? OR display_number = '+' || ? OR phone_number_id = ?
+                    ON CONFLICT DO NOTHING""", event, display, display, "display:" + display);
+            if (event.equals("FLAGGED") || event.equals("DOWNGRADE")) {
+                LOG.error("WhatsApp number {} quality event {}: consider halting marketing now", display, event);
+                events.write(c, null, "wa_number_flagged", "meta", "wa_number:" + deliveryId + ":" + display,
+                        Map.<String, Object>of("display", String.valueOf(display), "event", event));
+            }
+        }
+    }
+
+    /** The {@code value} of every change in a template or number webhook, flattened to strings. */
+    private static List<Map<String, String>> values(Connection c, String deliveryId) throws SQLException {
+        var out = new ArrayList<Map<String, String>>();
+        try (var ps = Sql.prepare(c, """
+                SELECT v.v->>'event' AS event, v.v->>'message_template_name' AS name,
+                       v.v->>'message_template_language' AS language, v.v->>'reason' AS reason,
+                       COALESCE(v.v->>'new_quality_score', v.v->>'quality_score') AS quality,
+                       v.v->>'display_phone_number' AS display, v.v->>'current_limit' AS tier
+                  FROM webhook_inbox i
+                 CROSS JOIN LATERAL jsonb_path_query(i.payload, '$.entry[*].changes[*].value') AS v(v)
+                 WHERE i.source = 'meta' AND i.delivery_id = ?""", deliveryId);
+             var rs = ps.executeQuery()) {
+            while (rs.next()) {
+                var m = new HashMap<String, String>();
+                for (var col : List.of("event", "name", "language", "reason", "quality", "display", "tier")) m.put(col, rs.getString(col));
+                out.add(m);
+            }
+        }
+        return out;
     }
 
     /* ------------------------------ statuses ------------------------------ */

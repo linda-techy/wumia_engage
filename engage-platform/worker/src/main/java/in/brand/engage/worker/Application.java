@@ -11,6 +11,10 @@ public final class Application {
     private Application() {}
 
     public static void main(String[] args) {
+        if (WaCommands.handles(args)) {            // one-off WhatsApp commands: wa-check, wa-sync, wa-submit
+            WaCommands.run(args);
+            return;
+        }
         Micronaut.run(Application.class, args);
     }
 }

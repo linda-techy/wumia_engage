@@ -33,12 +33,24 @@ public record CascadeDefinition(String intentKey, Priority priority, List<Step> 
      * @param alternateTemplates other copy the intent may pick with {@code vars.template}, e.g. a
      *                           version without a size for one-size products. Anything not listed
      *                           here is ignored, so an intent can never send an arbitrary template.
+     * @param reply              a reply inside the WhatsApp service window the customer just opened
+     *                           (the STOP confirmation): policy lets it through without an opt-in
      */
     public record Step(Channel channel, String templateKey, Duration ttl, boolean highUrgency,
-                       boolean allowStaleDevices, Duration waitAfter, List<String> alternateTemplates) {
+                       boolean allowStaleDevices, Duration waitAfter, List<String> alternateTemplates, boolean reply) {
 
         public Step {
             alternateTemplates = List.copyOf(alternateTemplates);
+        }
+
+        public Step(Channel channel, String templateKey, Duration ttl, boolean highUrgency, boolean allowStaleDevices,
+                    Duration waitAfter, List<String> alternateTemplates) {
+            this(channel, templateKey, ttl, highUrgency, allowStaleDevices, waitAfter, alternateTemplates, false);
+        }
+
+        /** A free-form WhatsApp reply inside the window the customer opened. */
+        public static Step whatsappReply(String templateKey) {
+            return new Step(Channel.WHATSAPP, templateKey, Duration.ofHours(1), false, false, Duration.ZERO, List.of(), true);
         }
 
         public static Step push(String templateKey, Duration ttl) {
@@ -46,17 +58,17 @@ public record CascadeDefinition(String intentKey, Priority priority, List<Step> 
         }
 
         public Step urgent() {
-            return new Step(channel, templateKey, ttl, true, allowStaleDevices, waitAfter, alternateTemplates);
+            return new Step(channel, templateKey, ttl, true, allowStaleDevices, waitAfter, alternateTemplates, reply);
         }
 
         public Step staleDevicesAllowed() {
-            return new Step(channel, templateKey, ttl, highUrgency, true, waitAfter, alternateTemplates);
+            return new Step(channel, templateKey, ttl, highUrgency, true, waitAfter, alternateTemplates, reply);
         }
 
         public Step orTemplate(String alternate) {
             var all = new java.util.ArrayList<>(alternateTemplates);
             all.add(alternate);
-            return new Step(channel, templateKey, ttl, highUrgency, allowStaleDevices, waitAfter, all);
+            return new Step(channel, templateKey, ttl, highUrgency, allowStaleDevices, waitAfter, all, reply);
         }
 
         /** The template for these vars: a listed alternate if {@code vars.template} names one, else the step's own. */

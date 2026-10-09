@@ -25,9 +25,11 @@ public class WorkerJobs {
     private final CampaignExecutor campaigns;
     private final CapabilityService capability;
     private final Db db;
+    private final java.util.Optional<WhatsAppTemplates> whatsappTemplates;
 
     public WorkerJobs(EventDispatcher events, DefaultOrchestrator orchestrator, CampaignExecutor campaigns,
-                      CapabilityService capability, Db db) {
+                      CapabilityService capability, Db db, java.util.Optional<WhatsAppTemplates> whatsappTemplates) {
+        this.whatsappTemplates = whatsappTemplates;
         this.events = events;
         this.orchestrator = orchestrator;
         this.campaigns = campaigns;
@@ -78,5 +80,18 @@ public class WorkerJobs {
         } catch (RuntimeException e) {
             LOG.error("capability recheck failed", e);
         }
+    }
+
+    /** Every 30 minutes, when a WhatsApp Business Account is configured: Meta's verdicts and number quality (P4-T03). */
+    @Scheduled(fixedDelay = "30m", initialDelay = "1m")
+    void syncWhatsAppTemplates() {
+        whatsappTemplates.ifPresent(t -> {
+            try {
+                var r = t.sync();
+                if (r.mismatches() > 0 || r.paused() > 0) LOG.warn("WhatsApp template sync: {}", r);
+            } catch (RuntimeException e) {
+                LOG.error("WhatsApp template sync failed", e);
+            }
+        });
     }
 }

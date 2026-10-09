@@ -169,6 +169,54 @@ class MetaInboxTest {
                 "START on WhatsApp does not re-subscribe other channels");
     }
 
+    /* ------------------------ templates and numbers ------------------------ */
+
+    static String change(String field, String value) {
+        return """
+                {"object":"whatsapp_business_account","entry":[{"id":"W","changes":[{"field":"%s","value":%s}]}]}"""
+                .formatted(field, value);
+    }
+
+    void waTemplateRow() throws SQLException {
+        exec("""
+                INSERT INTO wa_templates (key, language, provider_name, requested_category, approved_category, status, quality)
+                VALUES ('order_shipped_v1', 'en', 'order_shipped_v1', 'utility', 'utility', 'APPROVED', 'GREEN')
+                ON CONFLICT (provider_name, language) DO UPDATE SET status = 'APPROVED', quality = 'GREEN'""");
+    }
+
+    @Test
+    void a_red_quality_webhook_pauses_the_template_before_the_next_decision() throws Exception {
+        waTemplateRow();
+        send(change("message_template_quality_update", """
+                {"previous_quality_score":"GREEN","new_quality_score":"RED","message_template_id":1,
+                 "message_template_name":"order_shipped_v1","message_template_language":"en"}"""));
+        assertEquals("RED", q("SELECT quality FROM wa_templates WHERE provider_name = 'order_shipped_v1' AND language = 'en'"));
+        assertEquals("paused", q("SELECT status FROM templates WHERE key = 'order_shipped_v1'"));
+    }
+
+    @Test
+    void a_rejection_is_recorded_with_its_reason() throws Exception {
+        waTemplateRow();
+        send(change("message_template_status_update", """
+                {"event":"REJECTED","message_template_id":1,"message_template_name":"order_shipped_v1",
+                 "message_template_language":"en","reason":"INCORRECT_CATEGORY"}"""));
+        assertEquals("REJECTED|INCORRECT_CATEGORY",
+                q("SELECT status || '|' || rejected_reason FROM wa_templates WHERE provider_name = 'order_shipped_v1'"));
+    }
+
+    @Test
+    void a_flagged_number_is_recorded_with_history_and_raised() throws Exception {
+        exec("""
+                INSERT INTO wa_phone_numbers (phone_number_id, display_number, quality, messaging_tier)
+                VALUES ('PN1', '919000000000', 'GREEN', 'TIER_1K') ON CONFLICT (phone_number_id) DO UPDATE SET quality = 'GREEN'""");
+        exec("DELETE FROM wa_phone_number_history WHERE phone_number_id = 'PN1'");
+        send(change("phone_number_quality_update", """
+                {"display_phone_number":"919000000000","event":"FLAGGED","current_limit":"TIER_1K"}"""));
+        assertEquals("RED", q("SELECT quality FROM wa_phone_numbers WHERE phone_number_id = 'PN1'"));
+        assertEquals("FLAGGED", q("SELECT event FROM wa_phone_number_history WHERE phone_number_id = 'PN1'"));
+        assertEquals("1", q("SELECT count(*) FROM events WHERE name = 'wa_number_flagged'"));
+    }
+
     void exec(String sql) throws SQLException {
         try (Connection c = dataSource.getConnection(); var st = c.createStatement()) {
             var rs = st.executeQuery("select current_database()");

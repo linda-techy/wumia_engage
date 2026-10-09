@@ -9,6 +9,8 @@ java { toolchain { languageVersion = JavaLanguageVersion.of(25) } }
 dependencies {
     api(project(":policy"))
     api(project(":channels"))
+    // WaManagementClient (P4-T03): the WhatsApp Business Management API, JSON via Micronaut.
+    implementation("io.micronaut.serde:micronaut-serde-jackson")
     implementation("org.slf4j:slf4j-api")
     implementation("org.yaml:snakeyaml")                  // templates/*.yaml
 
