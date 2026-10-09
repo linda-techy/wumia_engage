@@ -7,12 +7,14 @@ import { Problem } from '../../core/api/models';
 import { AuthService } from '../../core/auth/auth.service';
 import { problemDetail } from '../../shared/format';
 
-type Step = 'credentials' | 'mfa' | 'enrol';
+type Step = 'credentials' | 'mfa' | 'recovery' | 'enrol' | 'codes';
 
 /**
  * Sign-in in up to three steps. Password first; then the authenticator code
  * when MFA is set up; or, for a role that must use MFA but has not set it up
- * (a new OWNER), enrolment with a QR code, then sign in again.
+ * (a new OWNER), enrolment with a QR code, then sign in again. Confirming
+ * enrolment shows ten recovery codes once; any one can stand in for the
+ * authenticator at sign-in.
  */
 @Component({
   selector: 'app-login',
@@ -51,8 +53,32 @@ type Step = 'credentials' | 'mfa' | 'enrol';
                 <input inputmode="numeric" autocomplete="one-time-code" [formField]="codeForm.code" class="input tracking-widest" />
               </label>
               <button type="submit" class="btn-primary w-full" [disabled]="busy()">Verify</button>
+              <button type="button" class="w-full text-sm text-slate-600 underline" (click)="useRecovery()">Lost your phone? Use a recovery code</button>
               <button type="button" class="w-full text-sm text-slate-600 underline" (click)="restart()">Start again</button>
             </form>
+          }
+          @case ('recovery') {
+            <form (submit)="verifyRecovery($event)" novalidate class="space-y-4">
+              <label class="block text-sm">
+                <span class="mb-1 block font-medium">One of your recovery codes</span>
+                <input autocomplete="off" placeholder="XXXXX-XXXXX" [formField]="recoveryForm.code" class="input font-mono tracking-widest" />
+              </label>
+              <p class="text-xs text-slate-500">Each code works once. Afterwards, set up your authenticator again and get new codes.</p>
+              <button type="submit" class="btn-primary w-full" [disabled]="busy()">Sign in</button>
+              <button type="button" class="w-full text-sm text-slate-600 underline" (click)="restart()">Start again</button>
+            </form>
+          }
+          @case ('codes') {
+            <div class="space-y-4">
+              <p class="text-sm">Two-step sign-in is on. Save these recovery codes somewhere safe, away from your phone. Each one signs you in once if you lose it. <strong>They are shown only now.</strong></p>
+              <ul class="grid grid-cols-2 gap-2 rounded bg-slate-50 p-3 font-mono text-sm" aria-label="Recovery codes">
+                @for (c of recoveryCodes(); track c) {
+                  <li>{{ c }}</li>
+                }
+              </ul>
+              <button type="button" class="btn w-full" (click)="copyCodes()">{{ copied() ? 'Copied' : 'Copy all' }}</button>
+              <button type="button" class="btn-primary w-full" (click)="codesSaved()">I have saved them</button>
+            </div>
           }
           @case ('enrol') {
             <div class="space-y-4">
@@ -92,6 +118,8 @@ export default class Login {
   readonly notice = signal<string | null>(null);
   readonly qr = signal<string | null>(null);
   readonly manualKey = signal<string | null>(null);
+  readonly recoveryCodes = signal<string[]>([]);
+  readonly copied = signal(false);
 
   #mfaToken = '';
   #enrolToken = '';
@@ -111,12 +139,24 @@ export default class Login {
     pattern(p.code, /^\d{6}$/);
   });
 
+  readonly recovery = signal({ code: '' });
+  readonly recoveryForm = form(this.recovery, (p) => {
+    required(p.code, { message: 'Enter a recovery code' });
+    pattern(p.code, /^[0-9A-Za-z][0-9A-Za-z \-]{8,12}[0-9A-Za-z]$/, { message: 'A code looks like XXXXX-XXXXX' });
+  });
+
   subtitle(): string {
-    return this.step() === 'credentials'
-      ? 'Sign in to the console'
-      : this.step() === 'mfa'
-        ? 'Two-step sign-in'
-        : 'Set up two-step sign-in';
+    switch (this.step()) {
+      case 'credentials':
+        return 'Sign in to the console';
+      case 'mfa':
+      case 'recovery':
+        return 'Two-step sign-in';
+      case 'codes':
+        return 'Your recovery codes';
+      default:
+        return 'Set up two-step sign-in';
+    }
   }
 
   async signIn(event: Event): Promise<void> {
@@ -159,13 +199,42 @@ export default class Login {
     event.preventDefault();
     await submit(this.codeForm, async () => {
       await this.#run(async () => {
-        await this.#auth.confirmEnrolment(this.code().code, this.#enrolToken);
+        const codes = await this.#auth.confirmEnrolment(this.code().code, this.#enrolToken);
         this.#enrolToken = '';
         this.creds.update((c) => ({ ...c, password: '' }));
-        this.#goTo('credentials');
-        this.notice.set('Two-step sign-in is on. Sign in with your password and the next code.');
+        this.qr.set(null);
+        this.manualKey.set(null);
+        this.recoveryCodes.set(codes);
+        this.#goTo(codes.length ? 'codes' : 'credentials');
       });
     });
+  }
+
+  async verifyRecovery(event: Event): Promise<void> {
+    event.preventDefault();
+    await submit(this.recoveryForm, async () => {
+      await this.#run(async () => {
+        await this.#auth.mfa(this.#mfaToken, this.recovery().code);
+        await this.#done();
+      });
+    });
+  }
+
+  useRecovery(): void {
+    this.recovery.set({ code: '' });
+    this.#goTo('recovery');
+  }
+
+  async copyCodes(): Promise<void> {
+    await navigator.clipboard.writeText(this.recoveryCodes().join('\n'));
+    this.copied.set(true);
+  }
+
+  codesSaved(): void {
+    this.recoveryCodes.set([]);
+    this.copied.set(false);
+    this.#goTo('credentials');
+    this.notice.set('Two-step sign-in is on. Sign in with your password and the next code.');
   }
 
   restart(): void {
