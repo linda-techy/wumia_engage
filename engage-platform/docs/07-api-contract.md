@@ -76,6 +76,19 @@ POST /api/config/cap.whatsapp.marketing.1d
 
 `reason` is required by the schema. A config change without a stated reason is not accepted, because six months later the reason is the only part anyone needs.
 
+## Segments
+
+| Method | Path | Role | Notes |
+|---|---|---|---|
+| GET | `/segments/fields` | `VIEWER` | The predicate whitelist: field, operators, value kind, availability |
+| GET | `/segments`, `/segments/{id}` | `VIEWER` | With definition and last size |
+| POST | `/segments/preview` | `CAMPAIGN_EDIT` | `{definition}` → `{size}`; nothing saved. 10 s limit, else 422 |
+| POST | `/segments` | `CAMPAIGN_EDIT` | `{name, description?, definition}`; sized and audited; names unique (case-insensitive) |
+| PUT | `/segments/{id}` | `CAMPAIGN_EDIT` | Re-sized and audited with before/after |
+| POST | `/segments/{id}/size` | `CAMPAIGN_EDIT` | Recount |
+
+Definitions are JSON (`{all|any: [...]}`, `{not: {...}}`, `{field, op, value}`), compiled on the server; the browser never sends SQL.
+
 ## Campaigns
 
 | Method | Path | Role | Notes |

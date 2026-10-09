@@ -43,7 +43,7 @@ class ShopifyLifecycleTest {
             rs.next();
             assertTrue(rs.getString(1).endsWith("_test"), "refusing to clean " + rs.getString(1));
             st.execute("""
-                TRUNCATE webhook_inbox, events, orders, order_refunds, variant_prices, conversions, checkouts, carts,
+                TRUNCATE webhook_inbox, events, orders, order_refunds, variant_prices, products, conversions, checkouts, carts,
                          consents, pending_optins, identity_keys, profiles, identities CASCADE""");
         }
     }
@@ -142,6 +142,46 @@ class ShopifyLifecycleTest {
 
         assertEquals("0", q("SELECT count(*) FROM variant_prices WHERE variant_id = '44581230001'"));
         assertEquals("true", q("SELECT bool_and(processed_at IS NOT NULL)::text FROM webhook_inbox"));
+    }
+
+    /* ----------------------- segment sources (P6-T05) ----------------------- */
+
+    @Test
+    void an_orders_lines_are_written_once_whichever_order_topic_arrives_first() throws Exception {
+        send("orders/paid", fixture("shopify_order_create.json"));
+        send("orders/create", fixture("shopify_order_create.json"));
+        send("orders/create", fixture("shopify_order_create.json"));          // Shopify re-sends
+
+        assertEquals("1", q("SELECT count(*) FROM order_lines WHERE order_id = '" + ORDER + "'"));
+        assertEquals("8801|44581230001|M|1|129900", q("""
+                SELECT product_id || '|' || variant_id || '|' || variant_title || '|' || quantity || '|' || price_paise
+                  FROM order_lines WHERE order_id = '%s'""".formatted(ORDER)));
+    }
+
+    @Test
+    void a_products_type_tags_and_size_option_are_kept_and_a_late_update_never_wins() throws Exception {
+        send("products/update", catalogProduct("Kurta", " Cotton, Festive ", "2026-09-21T10:00:00Z"));
+        send("products/update", catalogProduct("Dress", "old", "2026-09-20T10:00:00Z"));   // older, arrives late
+
+        assertEquals("kurta|{cotton,festive}|1|linen-kurta", q("""
+                SELECT product_type || '|' || tags::text || '|' || size_position || '|' || handle
+                  FROM products WHERE product_id = '8801'"""));
+    }
+
+    @Test
+    void customer_tags_are_kept_lower_case_on_the_profile() throws Exception {
+        send("customers/update", fixture("shopify_customer_update.json"));
+
+        assertEquals("[\"vip\", \"ethnic\"]",
+                q("SELECT attrs->>'shopify_tags' FROM profiles WHERE jsonb_exists(attrs, 'shopify_tags')"));
+    }
+
+    static String catalogProduct(String type, String tags, String updatedAt) {
+        return """
+            {"id": 8801, "title": "Linen Kurta", "handle": "linen-kurta", "product_type": "%s", "tags": "%s",
+             "updated_at": "%s",
+             "options": [{"name": "Size", "position": 1, "values": ["S", "M"]}, {"name": "Colour", "position": 2}],
+             "variants": [{"id": 44581230001, "title": "M", "price": "1299.00"}]}""".formatted(type, tags, updatedAt);
     }
 
     /* ------------------------------- uninstall ------------------------------- */

@@ -26,6 +26,6 @@
   "shipping_address": { "phone": "+91 98765 43210", "city": "Kochi", "province_code": "KL", "zip": "682024" },
   "billing_address": { "phone": "9876543210" },
   "line_items": [
-    { "variant_id": 44581230001, "title": "Linen Kurta", "variant_title": "M", "quantity": 1, "price": "1299.00" }
+    { "id": 15001, "product_id": 8801, "variant_id": 44581230001, "title": "Linen Kurta", "variant_title": "M", "quantity": 1, "price": "1299.00" }
   ]
 }

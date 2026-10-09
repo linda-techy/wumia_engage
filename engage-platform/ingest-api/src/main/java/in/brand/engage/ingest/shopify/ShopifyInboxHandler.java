@@ -89,7 +89,10 @@ public class ShopifyInboxHandler implements InboxHandler {
             case "carts/create", "carts/update" -> cart(c, item);
             case "customers/create", "customers/update" -> customer(c, item);
             case "inventory_levels/update" -> inventory.handle(c, item);
-            case "products/update" -> prices.handle(c, item);
+            case "products/update" -> {
+                Sql.update(c, SqlFiles.get("shopify_product_upsert.sql"), item.deliveryId());
+                prices.handle(c, item);
+            }
             case "fulfillments/create", "fulfillments/update" -> fulfillments.handle(c, item);
             case "app/uninstalled" -> uninstalled(c, item);
             default -> { /* acknowledged; other topics are consumed in later phases */ }
@@ -235,6 +238,8 @@ public class ShopifyInboxHandler implements InboxHandler {
                     orderId, rs.getString("order_number"), identityId, cartToken, checkoutToken, phone.value(),
                     phone.source(), email, total.value(), rs.getString("financial_status"),
                     textArray(rs, "gateway_names"), noteAttributes, createdAt, orderId);
+
+            Sql.update(c, SqlFiles.get("shopify_order_lines.sql"), orderId, item.deliveryId());
 
             if (checkoutToken != null) {
                 Sql.update(c, """
@@ -397,14 +402,23 @@ public class ShopifyInboxHandler implements InboxHandler {
 
             Sql.update(c, """
                     UPDATE profiles
-                       SET attrs = attrs || jsonb_strip_nulls(jsonb_build_object('first_name', ?::text)),
+                       SET attrs = attrs || jsonb_strip_nulls(jsonb_build_object('first_name', ?::text))
+                                         || jsonb_build_object('shopify_tags', to_jsonb(CAST(? AS text[]))),
                            updated_at = now()
-                     WHERE identity_id = ?""", rs.getString("first_name"), identityId);
+                     WHERE identity_id = ?""", rs.getString("first_name"), tags(rs.getString("tags")), identityId);
             consents.syncShopifyEmailConsent(c, identityId, rs.getString("email_consent_state"),
                     "customer:" + customerId, Sql.timestamp(rs, "email_consent_at"));
             events.write(c, identityId, "customer_updated", "shopify", "shopify:" + item.deliveryId(),
                     Map.of("customer_id", customerId));
         }
+    }
+
+    /** Shopify's comma-separated customer tags, lower-cased and trimmed (segments: shopify_tag). */
+    static String[] tags(String raw) {
+        if (raw == null) return new String[0];
+        return java.util.Arrays.stream(raw.split(","))
+                .map(t -> t.strip().toLowerCase(java.util.Locale.ROOT))
+                .filter(t -> !t.isEmpty()).distinct().toArray(String[]::new);
     }
 
     private static String[] textArray(ResultSet rs, String column) throws SQLException {

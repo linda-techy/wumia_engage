@@ -8,6 +8,7 @@ SELECT p->>'id'                                                  AS customer_id,
        lower(NULLIF(p->>'email', ''))                            AS email,
        NULLIF(p->>'phone', '')                                   AS phone_raw,
        NULLIF(p->>'first_name', '')                              AS first_name,
+       p->>'tags'                                                AS tags,   -- "vip, ethnic"
        NULLIF(p->'email_marketing_consent'->>'state', '')        AS email_consent_state,
        NULLIF(p->'sms_marketing_consent'->>'state', '')          AS sms_consent_state,
        -- The time of the choice, not of processing (see shopify_order.sql).

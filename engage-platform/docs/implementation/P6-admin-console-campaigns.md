@@ -165,7 +165,37 @@ admin-api/src/main/java/in/brand/engage/admin/operators/BootstrapOwner.java   # 
 
 ---
 
-### ☐ P6-T05 — Segment DSL
+### ☑ P6-T05 — Segment DSL
+
+> **Done 2026-10-09.** `SegmentCompilerTest` (6) covers the named checks:
+> - `KL'); DROP TABLE identities; --` is a bind parameter and absent from the SQL text;
+> - an unknown field, an operator such as `>= 0 OR 1=1 --`, or an unavailable field is 400;
+> - depth > 5 or more than 30 predicates is 400;
+> - values are typed.
+>
+> `SegmentTest` (5) runs the phase-6 example on fixture data: one identity matches. The lookalikes that must not match are a recent buyer, a northern buyer, a dress buyer, a cancelled order and a non-buyer. `:admin-api:test`: 110 tests; `:ingest-api:test`: 86.
+>
+> Where the build differs from the text below:
+> - **The §3 example uses `bought_product_type`, not `bought_collection`.** Collection membership is in no Shopify webhook payload; it needs an Admin API collection sync.
+> - **Unavailable fields are listed but refused with a 400 that says what is missing:**
+>   - `bought_collection`;
+>   - `city_tier` (needs a city-to-tier map; `city` and `state` work);
+>   - `aov_band` and `net_margin_band` (need the P5 profile job).
+>
+>   A predicate over empty data would silently size an audience at 0.
+> - **New data (V19, ingest):**
+>   - `order_lines`, from every order topic; whichever arrives first writes them.
+>   - `products` (type, tags, which option is the size), from `products/update`, where Shopify's `updated_at` wins.
+>   - Customer tags into `profiles.attrs.shopify_tags`.
+>
+>   All values are lower-cased. The migration backfills from the inbox's 7 days of payloads; older orders have no lines.
+> - **Fields:** `orders_count`, `last_order_at` (`older_than` / `within`), `bought_product_type`, `bought_product`, `bought_size`, `shopify_tag`, `state`, `city`, `has_open_cart`, `cart_value` (₹), `waitlisted_variant`, `waitlisted_product`, `push_reachable`, `wa_capable`, and `wa|push|email|sms_marketing`. Their meanings:
+>   - Cancelled orders are not purchases.
+>   - An open cart has items, is unconverted, and was touched within 30 days.
+>   - `push_reachable` means a fresh token (`device_health`).
+>   - No capability row counts as `UNKNOWN`.
+>   - Merged identities are always excluded.
+> - **Endpoints:** `/api/segments` with `fields`, `preview`, save, edit and resize (see 07-api-contract). Counting and saving need CAMPAIGN_EDIT, because sizes probe the customer base. A count over 10 s answers 422 `segment-too-slow`.
 
 **Files**
 ```
