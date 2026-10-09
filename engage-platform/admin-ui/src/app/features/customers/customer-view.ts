@@ -38,15 +38,28 @@ const KEY_LABELS: Record<string, string> = {
           <h1 class="text-2xl font-semibold">{{ name() || 'Customer' }}</h1>
           <p class="text-sm text-slate-500">{{ city() }} · since {{ c.profile.createdAt | ist }}</p>
         </div>
-        @if (canReveal() && !revealed()) {
-          <button type="button" class="btn" (click)="reveal()" [disabled]="revealing()">Reveal contact details</button>
+        @if (canReveal()) {
+          <div class="flex flex-col items-end gap-2">
+            <label class="text-sm text-slate-600">
+              Why you need it
+              <input class="input ml-2 inline-block w-64" [value]="reason()" (input)="reason.set(inputValue($event))"
+                     placeholder="e.g. complaint #142" aria-describedby="reveal-hint" />
+            </label>
+            <div class="flex gap-2">
+              <button type="button" class="btn" (click)="reveal('phone')"
+                      [disabled]="revealing() || !reasonOk() || shown().has('phone')">Show phone</button>
+              <button type="button" class="btn" (click)="reveal('email')"
+                      [disabled]="revealing() || !reasonOk() || shown().has('email')">Show email</button>
+            </div>
+            <p id="reveal-hint" class="text-xs text-slate-500">One field at a time. Each one is logged with your reason; 50 a day.</p>
+          </div>
         }
       </header>
       @if (revealError()) {
         <p class="mb-4 rounded bg-red-50 p-3 text-sm text-red-800" role="alert">{{ revealError() }}</p>
       }
       @if (revealed()) {
-        <p class="mb-4 rounded bg-amber-50 p-3 text-sm text-amber-900" role="status">Unmasked. This view was recorded in the audit log under your name.</p>
+        <p class="mb-4 rounded bg-amber-50 p-3 text-sm text-amber-900" role="status">Unmasked: {{ shownList() }}. Recorded under your name with your reason.</p>
       }
 
       <section class="mb-8">
@@ -228,12 +241,17 @@ export default class CustomerViewPage {
   readonly id = input.required<string>();
 
   readonly customer = httpResource<CustomerView>(() => `/api/customers/${encodeURIComponent(this.id())}`);
-  readonly revealedKeys = signal<IdentityKey[] | null>(null);
+  /** Unmasked keys, per field revealed so far. */
+  readonly revealedKeys = signal<IdentityKey[]>([]);
   readonly revealing = signal(false);
   readonly revealError = signal<string | null>(null);
+  readonly reason = signal('');
 
   readonly canReveal = computed(() => this.#tokens.has('ANALYST'));
-  readonly revealed = computed(() => this.revealedKeys() !== null);
+  readonly reasonOk = computed(() => this.reason().trim().length >= 5);
+  readonly shown = computed(() => new Set(this.revealedKeys().map((k) => k.kind)));
+  readonly shownList = computed(() => [...this.shown()].join(' and '));
+  readonly revealed = computed(() => this.shown().size > 0);
 
   readonly attrs = computed<Record<string, string>>(() => {
     if (!this.customer.hasValue()) return {};
@@ -246,29 +264,39 @@ export default class CustomerViewPage {
   readonly name = computed(() => this.attrs()['first_name'] ?? '');
   readonly city = computed(() => [this.attrs()['city'], this.attrs()['state']].filter(Boolean).join(', ') || 'Location unknown');
 
-  /** Masked keys, with email and phone replaced once revealed. */
+  /** Masked keys, with a field's values replaced once that field is revealed (same order as served). */
   readonly keys = computed<IdentityKey[]>(() => {
     if (!this.customer.hasValue()) return [];
     const unmasked = this.revealedKeys();
+    const seen: Record<string, number> = {};
     return this.customer.value().keys.map((k) => {
-      const match = unmasked?.find((u) => u.kind === k.kind);
-      return match && (k.kind === 'email' || k.kind === 'phone') ? { ...k, value: match.value } : k;
+      if (k.kind !== 'email' && k.kind !== 'phone') return k;
+      const i = (seen[k.kind] = (seen[k.kind] ?? -1) + 1);
+      const match = unmasked.filter((u) => u.kind === k.kind)[i];
+      return match ? { ...k, value: match.value } : k;
     });
   });
 
-  async reveal(): Promise<void> {
+  async reveal(field: 'phone' | 'email'): Promise<void> {
     this.revealing.set(true);
     this.revealError.set(null);
     try {
       const r = await firstValueFrom(
-        this.#http.post<{ keys: IdentityKey[] }>(`/api/customers/${encodeURIComponent(this.id())}/reveal`, {}),
+        this.#http.post<{ keys: IdentityKey[] }>(`/api/customers/${encodeURIComponent(this.id())}/reveal`, {
+          field,
+          reason: this.reason().trim(),
+        }),
       );
-      this.revealedKeys.set(r.keys);
+      this.revealedKeys.update((ks) => [...ks.filter((k) => k.kind !== field), ...r.keys]);
     } catch (e) {
       this.revealError.set(problemDetail(e, 'Could not reveal the details.'));
     } finally {
       this.revealing.set(false);
     }
+  }
+
+  inputValue(e: Event): string {
+    return (e.target as HTMLInputElement).value;
   }
 
   keyLabel(kind: string): string {

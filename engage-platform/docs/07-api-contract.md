@@ -37,7 +37,9 @@ npm run api:generate                # openapi-generator → src/app/core/api
 | POST | `/auth/refresh` | — | Rotates. Reuse revokes the family. |
 | POST | `/auth/logout` | any | Revokes the family |
 | GET | `/auth/me` | any | Operator + roles + MFA state |
-| POST | `/auth/mfa/enrol` | any | Returns provisioning URI + recovery codes |
+| POST | `/auth/mfa/enrol` | any | Returns provisioning URI and secret |
+| POST | `/auth/mfa/confirm` | any | `{code}`: activates MFA; returns the ten recovery codes, once |
+| POST | `/auth/mfa/recovery-codes` | any | `{code}` (current TOTP): a new set; the old one stops working |
 
 ## Config
 
@@ -151,7 +153,7 @@ Journey *definitions* are code and are not editable through the API. Their *conf
 |---|---|---|---|
 | GET | `/customers/lookup?phone=` | `VIEWER` | Exact match only. No wildcard browse. |
 | GET | `/customers/{id}` | `VIEWER` | 360: profile, consent timeline, sends, orders |
-| POST | `/customers/{id}/unmask` | `ANALYST` | Returns full PII, writes an audit row |
+| POST | `/customers/{id}/reveal` | `ANALYST` | `{field: phone\|email, reason}`: one field; writes `pii_unmask_log` and an audit row |
 | POST | `/inspector` | `ANALYST` | `{phone, reason}`: runs, attempts and sends for one exact number, masked. Writes `pii_unmask_log`; counts toward the unmask limit |
 | GET | `/templates` | any | Registry templates with Meta state per language; category mismatches flagged |
 | POST | `/customers/{id}/suppress` | `CAMPAIGN_SEND` | Manual suppression |
@@ -169,7 +171,10 @@ The consent timeline is the most useful view on this screen during a complaint: 
 | GET | `/reports/deliverability` | `VIEWER` | Funnel per channel |
 | GET | `/reports/blocks` | `VIEWER` | Block reasons over time |
 | GET | `/reports/quality` | `VIEWER` | Meta quality per number and per template |
-| POST | `/exports` | `ANALYST` | Async. Throttled, audited, signed URL, 15 min TTL. |
+| POST | `/exports` | `ANALYST` | `{kind: campaign_report\|segment_ids\|sends, params, includePii?, reason?}`. Generated at once, ≤ 50,000 rows, kept 24 h. Contact details: OWNER, segment_ids only, with a reason |
+| GET | `/exports` | `ANALYST` | Your exports (an OWNER sees all) |
+| POST | `/exports/{id}/link` | `ANALYST` | Requester only: a 15-minute download link |
+| GET | `/exports/download?token=` | the link | The CSV; audited |
 
 ## Rate limits
 
@@ -177,7 +182,7 @@ The consent timeline is the most useful view on this screen during a complaint: 
 |---|---|
 | `/auth/login` | 5 per account per 15 min, 20 per IP per 15 min |
 | `/exports` | 3 per operator per day |
-| `/customers/*/unmask`, `/inspector` | 50 per operator per day |
+| `/customers/*/reveal`, `/inspector`, PII exports | 50 per operator per day (one shared count) |
 | Everything else | 600 per operator per minute |
 
 The unmask limit is deliberate. An operator legitimately needs to see a customer's number to resolve a complaint; an operator who needs 500 in a day is exporting your list one record at a time.

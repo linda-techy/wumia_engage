@@ -65,7 +65,7 @@ public class AuthController {
         return signedIn(result.signed());
     }
 
-    @PublicEndpoint("checks the 5-minute MFA token from login and a single-use TOTP code")
+    @PublicEndpoint("checks the 5-minute MFA token from login and a single-use TOTP or recovery code")
     @Post("/mfa")
     public HttpResponse<Map<String, Object>> mfa(HttpRequest<?> request, @Body MfaRequest body) {
         if (body == null) throw Problems.badRequest("mfaToken and code are required");
@@ -106,10 +106,20 @@ public class AuthController {
 
     @PublicEndpoint("needs a session or the enrolment-only token from login's 403")
     @Post("/mfa/confirm")
-    public HttpResponse<?> confirm(@Body ConfirmRequest body) {
+    public Map<String, Object> confirm(@Body ConfirmRequest body) {
         if (body == null || body.code() == null) throw Problems.badRequest("code is required");
-        auth.confirmEnrolment(enrolee(body.enrolToken()), body.code());
-        return HttpResponse.noContent();
+        return Map.of("recoveryCodes", auth.confirmEnrolment(enrolee(body.enrolToken()), body.code()));
+    }
+
+    @Serdeable
+    public record CodeRequest(@Nullable String code) {}
+
+    /** New recovery codes for the signed-in operator; the old ones stop working. Needs a current TOTP code. */
+    @RequiresRole(Role.VIEWER)
+    @Post("/mfa/recovery-codes")
+    public Map<String, Object> recoveryCodes(@Body CodeRequest body) {
+        if (body == null || body.code() == null) throw Problems.badRequest("a current authenticator code is required");
+        return Map.of("recoveryCodes", auth.reissueRecoveryCodes(current.id(), body.code()));
     }
 
     @PublicEndpoint("checks the one-time set-password link token, bound to the operator's ver")
