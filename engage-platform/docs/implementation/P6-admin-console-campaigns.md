@@ -19,7 +19,7 @@ Operators log in with MFA, see the system's health, halt it in an incident, chan
 | P6-T05 | Segment DSL → SQL compiler | BE1 | 2 d | T01 |
 | P6-T06 | Campaigns: estimate, approve, arm, executor | BE1 | 3 d | T05 |
 | P6-T07 | Angular 22 admin UI | FE | 8 d (parallel from T01) | T01–T06 endpoints |
-| P6-T08 | Exports, PII masking, recovery codes (V19) | BE2 | 1.5 d | T01 |
+| P6-T08 | Exports, PII masking, recovery codes (migration) | BE2 | 1.5 d | T01 |
 
 ---
 
@@ -102,7 +102,36 @@ admin-api/src/main/java/in/brand/engage/admin/operators/BootstrapOwner.java   # 
 
 ---
 
-### ☐ P6-T03 — Config API
+### ☑ P6-T03 — Config API
+
+> **Done 2026-10-08.** `ConfigTest` (8) covers the three named tests:
+> - CRITICAL self-approval answers 409 `four-eyes`.
+> - An approved value dated 3 s ahead is absent from `config_current` until its start and in force after it, with no further write.
+> - A "Diwali week" cap with `effectiveTo` reverts to the previous value on its own.
+>
+> `ConfigValuesTest` (6) covers validation. `:admin-api:test`: 94 tests.
+>
+> Where the build differs from the text below:
+> - **V17 fills `json_schema`**, which was NULL for every key, so "validated against `json_schema`" had nothing to check:
+>   - WhatsApp marketing ≤ 2/day and ≤ 7/week;
+>   - push ≤ 10/day;
+>   - email ≤ 14/week;
+>   - holdouts 0–50 %;
+>   - FCM TTL 60 s–28 days;
+>   - stale-token days 1–365;
+>   - budgets and the approval threshold ≤ ₹10 lakh;
+>   - Meta rates ≤ ₹10.
+>
+>   These are sanity bounds, apart from Meta's per-user limit. Change them by migration. The validator supports `type`, `minimum`, `maximum`, `enum`, `pattern`, `minLength` and `maxLength`. **Any other keyword fails the write (500)** rather than being ignored.
+> - **One pending proposal per key and selector** (a V17 partial unique index; the API answers 409 `proposal-pending`). Two pending proposals for the same setting would let a reviewer approve a stale diff.
+> - **No backdating:** `effectiveFrom` more than a minute in the past is 400, because snapshots already taken would no longer match history. A proposal whose start passes while it waits takes effect on approval. One whose `effectiveTo` has passed cannot be approved (409 `window-passed`).
+> - **Endpoints beyond the text:**
+>   - `POST /api/config/proposals/{id}/reject` (another operator, optional reason).
+>   - `DELETE /api/config/proposals/{id}` (proposer only). `decided_by` stays NULL, because the four-eyes CHECK forbids the proposer there.
+>   - `GET /api/config/{key}/history` (ANALYST).
+> - **Approval inserts the version with `changed_by` = proposer and `approved_by` = approver.** It re-validates the value against the current schema, in case the schema tightened while the proposal waited.
+> - **Writes need CONFIG_ADMIN and the key's `min_role`**, and approval needs the same. `halt.*` keys answer 409 `use-halt`: halts go through `/api/halt`, which pauses campaigns and needs no approval.
+> - Policy picks up a future start or an end within its 30 s cache expiry (`ConfigResolver`); kill switches remain uncached.
 
 - `GET /config` → every `config_keys` row with its effective value (current version or `default_value`), the version that set it, and pending proposals.
 - `POST /config/{key}` `{selector, value, effectiveFrom?, effectiveTo?, reason}`:
@@ -116,15 +145,57 @@ admin-api/src/main/java/in/brand/engage/admin/operators/BootstrapOwner.java   # 
 
 ---
 
-### ☐ P6-T04 — Copy registry, templates, journey inspector
+### ☑ P6-T04 — Copy registry, templates, journey inspector
+
+> **Done 2026-10-08.** `:admin-api:test`: 99 tests (`InspectorTest` 4, `TemplatesTest` 1).
+>
+> Where the build differs from the text below:
+> - **Consent copy** was already built in admin console v0 (`GET/POST /api/consent-copy`, grant count per version, CONFIG_ADMIN to create). Nothing new here.
+> - **The inspector is `POST /api/inspector {phone, reason}`**, not `GET ?phone=`: a number in a URL lands in proxy logs and browser history. It needs **ANALYST**, the same tier as the v0 customer reveal, because a phone number goes in and a person's whole message history comes out.
+>   - It accepts any common format (`Msisdn.normalise`) and follows an identity merge to the survivor.
+>   - It returns the identity id, the phone and emails masked, cascade runs with their attempts, and the last 200 sends with `decision` as JSON.
+>   - A reason of 5+ characters is required. Every lookup writes `pii_unmask_log`, **a miss included**, because probing numbers is the pattern to catch.
+>   - The 07-api-contract limit of **50 per operator per 24 h** counts that log and answers 429 `unmask-limit`.
+> - **`GET /api/templates`** (VIEWER): `templates` with each language's Meta state from `wa_templates`, plus `categoryMismatch` per language and per template. Read-only: templates change in code and sync from Meta (P4).
+> - **V18 is `pii_unmask_log` only**, taken from the planned admin-security migration, which keeps exports and recovery codes (P6-T08). Planned migrations no longer carry numbers (README, Migrations).
 
 - `GET/POST /consent-copy` (`CONFIG_ADMIN` to create; rows immutable, V4 trigger). Shows the grant count per version. Replaces the P2-T07 seed file for new versions.
 - `GET /templates` joins `templates` and `wa_templates`: requested vs approved category (mismatch flagged), status, quality.
-- `GET /inspector?phone=` → exact match on the normalised number (`Msisdn`), returns masked identifiers, every `cascade_runs` row with its `cascade_attempts`, and every `sends` row with `decision`. Each lookup writes a `pii_unmask_log` row (V19) with the operator and reason.
+- `GET /inspector?phone=` → exact match on the normalised number (`Msisdn`), returns masked identifiers, every `cascade_runs` row with its `cascade_attempts`, and every `sends` row with `decision`. Each lookup writes a `pii_unmask_log` row (V18) with the operator and reason.
 
 ---
 
-### ☐ P6-T05 — Segment DSL
+### ☑ P6-T05 — Segment DSL
+
+> **Done 2026-10-09.** `SegmentCompilerTest` (6) covers the named checks:
+> - `KL'); DROP TABLE identities; --` is a bind parameter and absent from the SQL text;
+> - an unknown field, an operator such as `>= 0 OR 1=1 --`, or an unavailable field is 400;
+> - depth > 5 or more than 30 predicates is 400;
+> - values are typed.
+>
+> `SegmentTest` (5) runs the phase-6 example on fixture data: one identity matches. The lookalikes that must not match are a recent buyer, a northern buyer, a dress buyer, a cancelled order and a non-buyer. `:admin-api:test`: 110 tests; `:ingest-api:test`: 86.
+>
+> Where the build differs from the text below:
+> - **The §3 example uses `bought_product_type`, not `bought_collection`.** Collection membership is in no Shopify webhook payload; it needs an Admin API collection sync.
+> - **Unavailable fields are listed but refused with a 400 that says what is missing:**
+>   - `bought_collection`;
+>   - `city_tier` (needs a city-to-tier map; `city` and `state` work);
+>   - `aov_band` and `net_margin_band` (need the P5 profile job).
+>
+>   A predicate over empty data would silently size an audience at 0.
+> - **New data (V19, ingest):**
+>   - `order_lines`, from every order topic; whichever arrives first writes them.
+>   - `products` (type, tags, which option is the size), from `products/update`, where Shopify's `updated_at` wins.
+>   - Customer tags into `profiles.attrs.shopify_tags`.
+>
+>   All values are lower-cased. The migration backfills from the inbox's 7 days of payloads; older orders have no lines.
+> - **Fields:** `orders_count`, `last_order_at` (`older_than` / `within`), `bought_product_type`, `bought_product`, `bought_size`, `shopify_tag`, `state`, `city`, `has_open_cart`, `cart_value` (₹), `waitlisted_variant`, `waitlisted_product`, `push_reachable`, `wa_capable`, and `wa|push|email|sms_marketing`. Their meanings:
+>   - Cancelled orders are not purchases.
+>   - An open cart has items, is unconverted, and was touched within 30 days.
+>   - `push_reachable` means a fresh token (`device_health`).
+>   - No capability row counts as `UNKNOWN`.
+>   - Merged identities are always excluded.
+> - **Endpoints:** `/api/segments` with `fields`, `preview`, save, edit and resize (see 07-api-contract). Counting and saving need CAMPAIGN_EDIT, because sizes probe the customer base. A count over 10 s answers 422 `segment-too-slow`.
 
 **Files**
 ```
@@ -191,7 +262,7 @@ Structure, auth handling and the composer from `06-admin-ui-angular.md`. Signals
 
 ### ☐ P6-T08 — Exports, PII, recovery codes
 
-**Migration `V19__admin_security.sql`**
+**Migration `V<next>__admin_security.sql`**
 ```sql
 CREATE TABLE operator_recovery_codes (
     operator_id UUID NOT NULL REFERENCES operators(id) ON DELETE CASCADE,
@@ -212,16 +283,9 @@ CREATE TABLE exports (
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     expires_at   TIMESTAMPTZ NOT NULL DEFAULT now() + interval '24 hours'
 );
-
-CREATE TABLE pii_unmask_log (
-    id          BIGSERIAL PRIMARY KEY,
-    operator_id UUID NOT NULL REFERENCES operators(id),
-    identity_id UUID,
-    field       TEXT NOT NULL,                   -- phone | email | address
-    reason      TEXT NOT NULL,
-    at          TIMESTAMPTZ NOT NULL DEFAULT now()
-);
 ```
+
+`pii_unmask_log` was built in **V18** with P6-T04 (append-only, a miss logged with `identity_id` NULL).
 
 - Phones and emails are masked in every API response by default (`Msisdn.mask`). Unmasking is one field at a time, needs a reason, and writes `pii_unmask_log`.
 - Exports: `ANALYST`+, 5 per operator per day, PII only for `OWNER` with a reason. Files expire after 24 hours.

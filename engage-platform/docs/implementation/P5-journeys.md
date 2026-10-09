@@ -14,7 +14,7 @@ The revenue journeys run through the orchestrator: payment recovery (utility), c
 
 | ID | Task | Owner | Est. | Depends on |
 |---|---|---|---|---|
-| P5-T01 | Journey framework + collisions + V18 | BE1 | 2 d | P4-T07 |
+| P5-T01 | Journey framework + collisions + migration | BE1 | 2 d | P4-T07 |
 | P5-T02 | `payment_failed` (utility) | BE1 | 1.5 d | T01, ADR-002 |
 | P5-T03 | `checkout_abandon` (marketing) | BE1 | 1.5 d | T01 |
 | P5-T04 | `cart_recovery` (full) | BE2 | 1 d | T01 |
@@ -28,7 +28,7 @@ The revenue journeys run through the orchestrator: payment recovery (utility), c
 
 ### ☐ P5-T01 — Journey framework
 
-**Migration `V18__journey_config.sql`**
+**Migration `V<next>__journey_config.sql`**
 ```sql
 INSERT INTO config_keys (key, scope, value_type, label, help_text, risk, sort_order) VALUES
  ('journey.payment_failed.first_delay_minutes', 'JOURNEY','INT','Payment failed: first message after (min)',

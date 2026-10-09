@@ -47,7 +47,9 @@ npm run api:generate                # openapi-generator → src/app/core/api
 | GET | `/config/{key}/history` | `ANALYST` | Full version history with actor and reason |
 | POST | `/config/{key}` | `CONFIG_ADMIN` | `CRITICAL` keys create a proposal |
 | POST | `/config/proposals/{id}/approve` | `CONFIG_ADMIN` | Must differ from proposer |
-| DELETE | `/config/proposals/{id}` | `CONFIG_ADMIN` | Withdraw |
+| POST | `/config/proposals/{id}/reject` | `CONFIG_ADMIN` | Must differ from proposer; optional `{reason}` |
+| DELETE | `/config/proposals/{id}` | `CONFIG_ADMIN` | Withdraw (proposer only) |
+| GET | `/config/snapshots/{id}` | any | The resolved config a send was decided under |
 | GET | `/halt` | any | Halts in force, with actor, reason and since |
 | POST | `/halt` | `CAMPAIGN_SEND` or `CONFIG_ADMIN` | Kill switch `{scope: channel\|marketing\|journey, selector, reason}`. Immediate, uncached, no approval. Pauses RUNNING and SCHEDULED campaigns on the scope |
 | DELETE | `/halt/{scope}/{selector}?reason=` | `CONFIG_ADMIN` | Release. Follows the key's risk tier; paused campaigns stay paused |
@@ -73,6 +75,19 @@ POST /api/config/cap.whatsapp.marketing.1d
 ```
 
 `reason` is required by the schema. A config change without a stated reason is not accepted, because six months later the reason is the only part anyone needs.
+
+## Segments
+
+| Method | Path | Role | Notes |
+|---|---|---|---|
+| GET | `/segments/fields` | `VIEWER` | The predicate whitelist: field, operators, value kind, availability |
+| GET | `/segments`, `/segments/{id}` | `VIEWER` | With definition and last size |
+| POST | `/segments/preview` | `CAMPAIGN_EDIT` | `{definition}` → `{size}`; nothing saved. 10 s limit, else 422 |
+| POST | `/segments` | `CAMPAIGN_EDIT` | `{name, description?, definition}`; sized and audited; names unique (case-insensitive) |
+| PUT | `/segments/{id}` | `CAMPAIGN_EDIT` | Re-sized and audited with before/after |
+| POST | `/segments/{id}/size` | `CAMPAIGN_EDIT` | Recount |
+
+Definitions are JSON (`{all|any: [...]}`, `{not: {...}}`, `{field, op, value}`), compiled on the server; the browser never sends SQL.
 
 ## Campaigns
 
@@ -135,6 +150,8 @@ Journey *definitions* are code and are not editable through the API. Their *conf
 | GET | `/customers/lookup?phone=` | `VIEWER` | Exact match only. No wildcard browse. |
 | GET | `/customers/{id}` | `VIEWER` | 360: profile, consent timeline, sends, orders |
 | POST | `/customers/{id}/unmask` | `ANALYST` | Returns full PII, writes an audit row |
+| POST | `/inspector` | `ANALYST` | `{phone, reason}`: runs, attempts and sends for one exact number, masked. Writes `pii_unmask_log`; counts toward the unmask limit |
+| GET | `/templates` | any | Registry templates with Meta state per language; category mismatches flagged |
 | POST | `/customers/{id}/suppress` | `CAMPAIGN_SEND` | Manual suppression |
 | POST | `/customers/{id}/erase` | `OWNER` | DPDP erasure; cascades, irreversible |
 
@@ -158,7 +175,7 @@ The consent timeline is the most useful view on this screen during a complaint: 
 |---|---|
 | `/auth/login` | 5 per account per 15 min, 20 per IP per 15 min |
 | `/exports` | 3 per operator per day |
-| `/customers/*/unmask` | 50 per operator per day |
+| `/customers/*/unmask`, `/inspector` | 50 per operator per day |
 | Everything else | 600 per operator per minute |
 
 The unmask limit is deliberate. An operator legitimately needs to see a customer's number to resolve a complaint; an operator who needs 500 in a day is exporting your list one record at a time.
