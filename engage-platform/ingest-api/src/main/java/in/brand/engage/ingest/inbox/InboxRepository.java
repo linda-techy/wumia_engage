@@ -92,6 +92,56 @@ public class InboxRepository {
     }
 
     /**
+     * Store a verified WhatsApp Cloud API webhook (source {@code meta}).
+     * Meta payloads carry phone numbers ({@code wa_id}, {@code from},
+     * {@code recipient_id}), never emails, so the allowlist applies through
+     * identities: every number in the payload must already be a phone key of
+     * an identity that also holds an allowlisted email (or the allowlist is
+     * {@code *}). A payload with no customer numbers at all (template status,
+     * number quality) is stored. The topic is the first change's
+     * {@code field}: messages, message_template_status_update, ...
+     */
+    public Stored storeMeta(String deliveryId, byte[] rawBody) {
+        var json = new String(rawBody, StandardCharsets.UTF_8);
+        return db.inTx(c -> {
+            try (PreparedStatement ps = c.prepareStatement("""
+                    WITH x AS (SELECT ?::jsonb AS p),
+                    nums AS (
+                      SELECT DISTINCT n FROM x, LATERAL (
+                        SELECT jsonb_path_query(x.p, '$.entry[*].changes[*].value.contacts[*].wa_id') #>> '{}' AS n
+                        UNION ALL
+                        SELECT jsonb_path_query(x.p, '$.entry[*].changes[*].value.messages[*].from') #>> '{}'
+                        UNION ALL
+                        SELECT jsonb_path_query(x.p, '$.entry[*].changes[*].value.statuses[*].recipient_id') #>> '{}'
+                      ) q WHERE n IS NOT NULL),
+                    ok AS (
+                      SELECT ? OR NOT EXISTS (
+                        SELECT 1 FROM nums WHERE NOT EXISTS (
+                          SELECT 1 FROM identity_keys pk
+                            JOIN identity_keys ek ON ek.identity_id = pk.identity_id AND ek.kind = 'email'
+                           WHERE pk.kind = 'phone' AND pk.value = nums.n AND ek.value = ANY(?::text[])))
+                      AS allowed),
+                    ins AS (
+                      INSERT INTO webhook_inbox (source, delivery_id, topic, payload)
+                      SELECT 'meta', ?, COALESCE(jsonb_path_query_first(p, '$.entry[0].changes[0].field') #>> '{}', 'unknown'), p
+                        FROM x, ok WHERE ok.allowed
+                      ON CONFLICT (source, delivery_id) DO NOTHING
+                      RETURNING 1)
+                    SELECT (SELECT allowed FROM ok), (SELECT count(*) FROM ins)""")) {
+                ps.setString(1, json);
+                ps.setBoolean(2, allowlist.allowAll());
+                ps.setArray(3, c.createArrayOf("text", allowlist.emails().toArray()));
+                ps.setString(4, deliveryId);
+                try (var rs = ps.executeQuery()) {
+                    rs.next();
+                    if (!rs.getBoolean(1)) return Stored.FILTERED;
+                    return rs.getLong(2) == 1 ? Stored.NEW : Stored.DUPLICATE;
+                }
+            }
+        });
+    }
+
+    /**
      * Claim due items with a lease: next_attempt_at moves 5 minutes out, so
      * another pod will not pick the same row while this one works on it. If
      * this pod dies mid-way, the lease expires and the item is retried.

@@ -31,6 +31,10 @@ public final class EngageProperties {
     @ConfigurationProperties("engage.pixel")
     public record Pixel(String writeKey) {}
 
+    /** WhatsApp Cloud API webhooks (P4-T01). Empty values refuse every webhook and every verification. */
+    @ConfigurationProperties("engage.meta")
+    public record Meta(String appSecret, String verifyToken) {}
+
     @ConfigurationProperties("engage.privacy")
     public record Privacy(String customerAllowlistEmails) {}
 }

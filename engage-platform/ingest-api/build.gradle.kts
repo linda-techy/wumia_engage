@@ -96,6 +96,9 @@ tasks.withType<Test>().configureEach {
         // -1 binds to a random free port: tests must not fight the running
         // ingest-api service on 8081 for the fixed port.
         env["INGEST_PORT"] = "-1"
+        // Deterministic Meta secrets: never the real app secret.
+        env["WA_APP_SECRET"] = "test-meta-app-secret"
+        env["WA_WEBHOOK_VERIFY_TOKEN"] = "test-verify-token"
         environment(env)
     }
     testLogging { events("failed"); exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }

@@ -60,6 +60,12 @@ engage:
     # Shared with the web pixel's settings (webPixelCreate). Public by nature:
     # it keeps out casual traffic only. Empty = /pixel/events answers 503.
     write-key: ${PIXEL_WRITE_KEY:}
+  meta:
+    # WhatsApp Cloud API webhooks (P4-T01). The APP secret (App settings ->
+    # Basic), not the access token. Empty = every webhook is 401.
+    app-secret: ${WA_APP_SECRET:}
+    # Any string you choose, typed into Meta's webhook setup. Empty = 403.
+    verify-token: ${WA_WEBHOOK_VERIFY_TOKEN:}
   privacy:
     # Empty = refuse to start (fail closed). * = every customer.
     customer-allowlist-emails: ${CUSTOMER_ALLOWLIST_EMAILS:}

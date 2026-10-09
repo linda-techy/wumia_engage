@@ -1,6 +1,7 @@
 package in.brand.engage.ingest.config;
 
 import in.brand.engage.core.privacy.CustomerAllowlist;
+import in.brand.engage.core.meta.MetaSignatureVerifier;
 import in.brand.engage.core.razorpay.RazorpaySignatureVerifier;
 import in.brand.engage.core.shopify.AppProxyVerifier;
 import in.brand.engage.core.shopify.ShopifyWebhookVerifier;
@@ -24,6 +25,12 @@ public class VerifierFactory {
     @Singleton
     RazorpaySignatureVerifier razorpaySignatureVerifier(EngageProperties.Razorpay razorpay) {
         return new RazorpaySignatureVerifier(razorpay.webhookSecret());
+    }
+
+    /** Not required at startup: until WA_APP_SECRET is set, every Meta webhook is refused. */
+    @Singleton
+    MetaSignatureVerifier metaSignatureVerifier(EngageProperties.Meta meta) {
+        return new MetaSignatureVerifier(meta.appSecret());
     }
 
     /** Throws at startup when CUSTOMER_ALLOWLIST_EMAILS is empty: fail closed. */
