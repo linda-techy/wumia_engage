@@ -20,10 +20,12 @@ public class WorkerJobs {
 
     private final EventDispatcher events;
     private final DefaultOrchestrator orchestrator;
+    private final CampaignExecutor campaigns;
 
-    public WorkerJobs(EventDispatcher events, DefaultOrchestrator orchestrator) {
+    public WorkerJobs(EventDispatcher events, DefaultOrchestrator orchestrator, CampaignExecutor campaigns) {
         this.events = events;
         this.orchestrator = orchestrator;
+        this.campaigns = campaigns;
     }
 
     /** Every second; drains while batches come back full. */
@@ -47,6 +49,16 @@ public class WorkerJobs {
             }
         } catch (RuntimeException e) {
             LOG.error("cascade tick failed", e);
+        }
+    }
+
+    /** Armed campaigns, one batch each per pass (P6-T06). The rate bucket does the pacing. */
+    @Scheduled(fixedDelay = "2s", initialDelay = "15s")
+    void runCampaigns() {
+        try {
+            campaigns.runOnce();
+        } catch (RuntimeException e) {
+            LOG.error("campaign pass failed", e);
         }
     }
 }

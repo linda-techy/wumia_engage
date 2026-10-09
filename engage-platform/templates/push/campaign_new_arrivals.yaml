@@ -1,0 +1,11 @@
+# Campaign (P6-T06): new pieces in a collection. Copy is reviewed here, in code;
+# a campaign supplies only the variables.
+key: push_campaign_new_arrivals_v1
+channel: push
+category: marketing
+cooldown: P1D
+locales:
+  en:      { title: "New in: {{collection}}", body: "Fresh pieces just landed in {{collection}}. Take a look." }
+  hi-Latn: { title: "Naya aaya: {{collection}}", body: "{{collection}} mein naye pieces aa gaye hain. Ek nazar daaliye." }
+vars: [collection, url, image]
+samples: { collection: "Handblock Cotton Kurtas" }
