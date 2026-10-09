@@ -41,14 +41,28 @@ public abstract sealed class ChannelException extends Exception
     public static final class Permanent extends ChannelException {
         private static final long serialVersionUID = 1L;
         private final boolean suppress;
+        private final boolean escalateImmediately;
 
         public Permanent(String code, String message, boolean suppress, List<TokenPrune> prunes) {
+            this(code, message, suppress, false, prunes);
+        }
+
+        /**
+         * @param escalateImmediately move the cascade to its next step now, without
+         *                            waiting (WhatsApp 131026 / 131049: try SMS)
+         */
+        public Permanent(String code, String message, boolean suppress, boolean escalateImmediately, List<TokenPrune> prunes) {
             super(code, message, prunes, null);
             this.suppress = suppress;
+            this.escalateImmediately = escalateImmediately;
         }
 
         public boolean suppress() {
             return suppress;
+        }
+
+        public boolean escalateImmediately() {
+            return escalateImmediately;
         }
     }
 

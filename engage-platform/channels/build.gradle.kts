@@ -15,6 +15,8 @@ dependencies {
     // httpclient5 from 5.3 to 5.6, which decompresses responses itself, and every
     // FCM call fails "Not in GZIP format" (seen 2026-09-29).
     implementation("com.google.firebase:firebase-admin:9.11.0")
+    // WhatsApp Cloud API JSON (P4-T02): Micronaut's mapper; HTTP is the JDK client.
+    implementation("io.micronaut.serde:micronaut-serde-jackson")
 
     testImplementation("io.micronaut.sql:micronaut-jdbc-hikari")
     testImplementation("io.micronaut.flyway:micronaut-flyway")

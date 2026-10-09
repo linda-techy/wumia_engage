@@ -18,10 +18,11 @@ import java.util.Objects;
  * @param ttl         how long the provider may hold it for an offline device
  * @param highUrgency push: Web Push {@code Urgency: high} and Android high priority
  * @param beaconSig   push: signature of {@code sendId}, echoed back by the click beacon (null = none)
+ * @param whatsapp    WhatsApp: the template call; null sends {@code body} as a free-form service reply
  */
 public record RenderedMessage(Channel channel, String templateKey, long sendId, String kind,
                               String title, String body, String url, String image, String tag,
-                              Duration ttl, boolean highUrgency, String beaconSig) {
+                              Duration ttl, boolean highUrgency, String beaconSig, WaTemplateCall whatsapp) {
 
     public RenderedMessage {
         Objects.requireNonNull(channel, "channel");
@@ -31,6 +32,12 @@ public record RenderedMessage(Channel channel, String templateKey, long sendId, 
         Objects.requireNonNull(body, "body");
         Objects.requireNonNull(url, "url");
         Objects.requireNonNull(ttl, "ttl");
+    }
+
+    /** Push and the other non-WhatsApp channels: no template call. */
+    public RenderedMessage(Channel channel, String templateKey, long sendId, String kind, String title, String body,
+                           String url, String image, String tag, Duration ttl, boolean highUrgency, String beaconSig) {
+        this(channel, templateKey, sendId, kind, title, body, url, image, tag, ttl, highUrgency, beaconSig, null);
     }
 
     /** The push data payload (phase-3 §3). Data-only: the service worker renders it. */
