@@ -1,10 +1,15 @@
 import { age, ist, problemDetail, rupees } from './format';
 
 describe('format', () => {
-  it('formats paise as rupees with Indian grouping', () => {
-    expect(rupees(149900)).toBe('₹1,499.00');
+  it('formats paise as rupees exactly as Paise.toRupeeString does', () => {
+    expect(rupees(149900)).toBe('₹1,499');
     expect(rupees(1249950)).toBe('₹12,499.50');
-    expect(rupees(14999900)).toBe('₹1,49,999.00');
+    expect(rupees(14999900)).toBe('₹1,49,999');
+    expect(rupees(17200000)).toBe('₹1,72,000');
+    expect(rupees(1234567890)).toBe('₹1,23,45,678.90');
+    expect(rupees(5)).toBe('₹0.05');
+    expect(rupees(0)).toBe('₹0');
+    expect(rupees(-86)).toBe('-₹0.86');
     expect(rupees(null)).toBe('—');
   });
 

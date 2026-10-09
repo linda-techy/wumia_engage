@@ -267,7 +267,36 @@ worker/src/main/java/in/brand/engage/worker/CampaignExecutor.java              #
 
 ---
 
-### ☐ P6-T07 — Angular 22 admin UI
+### ☑ P6-T07 — Angular 22 admin UI
+
+> **Done 2026-10-09.** `ng build` is green and Vitest runs 27 tests in 8 files:
+> - the auth interceptor;
+> - money (`rupees()` now matches `Paise.toRupeeString` exactly) and IST time;
+> - the composer's disabled states (`campaign-rules`: Approve off for the author, Arm off until a dry run from the last 30 minutes, approval where needed, resume never past a budget cap);
+> - the halt confirmation word;
+> - config value parsing;
+> - the segment builder ⇄ DSL conversion;
+> - the dashboard sums.
+>
+> Where the build differs from the text below:
+> - **The smoke test ran in a real browser, driven interactively rather than as a checked-in Playwright spec.** It used a local admin-api, the local database at V21, and a throwaway local OWNER, disabled afterwards. Steps:
+>   1. Sign-in, the 403, then enrolment with the QR and manual key.
+>   2. Ten recovery codes shown once.
+>   3. Sign-in with a recovery code, then the dashboard.
+>   4. Halt all marketing (confirm word typed); the header shows the halt with actor and time.
+>   5. Release with a reason; the header clears.
+>   6. A GUARDED setting saved; an out-of-range value refused in the form.
+>   7. A CRITICAL setting proposed, with only Withdraw offered to its author.
+>   8. The segment live count.
+>
+>   Every other screen rendered. The only console errors were the expected 401 (no session yet) and the 403 (enrolment needed). A checked-in `@playwright/test` spec needs its browser download, which this machine's HTTPS scanning (Avast) breaks; adding it is the follow-up.
+> - **Kill switches sit in a header bar on every page**, not on the dashboard. They poll every 30 s. The confirm word is the channel or journey name when one is chosen, else the scope.
+> - **Settings show the change for CRITICAL keys inline before proposing**, rather than in a dialog. The reason (10+ characters) is required for every key, as the API requires.
+> - **Push and WhatsApp health are sections of the dashboard**, not separate screens. WhatsApp number quality waits for P4.
+> - **Not in the console yet:**
+>   - an operator's own MFA reset (an OWNER resets it from Operators);
+>   - an export file preview;
+>   - the campaign report screen beyond live progress and the CSV export.
 
 Structure, auth handling and the composer from `06-admin-ui-angular.md`. Signals and `httpResource`; Signal Forms; zoneless; OnPush (the default).
 

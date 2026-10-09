@@ -1,6 +1,5 @@
 import { Pipe, PipeTransform } from '@angular/core';
 
-const INR = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 });
 const IST = new Intl.DateTimeFormat('en-IN', {
   timeZone: 'Asia/Kolkata',
   day: '2-digit',
@@ -10,10 +9,24 @@ const IST = new Intl.DateTimeFormat('en-IN', {
   minute: '2-digit',
 });
 
-/** Paise (integer) → "₹1,499.00", Indian grouping. Money never travels as a float. */
+/**
+ * Paise (integer) → "₹1,49,999" or "₹12,499.50": lakh grouping, paise only
+ * when not zero. The same output as Paise.toRupeeString on the server, so the
+ * console and a WhatsApp message never show one amount two ways. Integer
+ * arithmetic only: money never travels as a float.
+ */
 export function rupees(paise: number | null | undefined): string {
-  if (paise === null || paise === undefined) return '—';
-  return INR.format(Number(paise) / 100);
+  if (paise === null || paise === undefined || Number.isNaN(Number(paise))) return '—';
+  const total = Math.trunc(Number(paise));
+  const sign = total < 0 ? '-' : '';
+  const abs = Math.abs(total);
+  const digits = String(Math.floor(abs / 100));
+  // Last three digits, then groups of two: 1,49,99,999.
+  const head = digits.slice(0, -3);
+  const tail = digits.slice(-3);
+  const grouped = head ? head.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + ',' + tail : tail;
+  const p = abs % 100;
+  return `${sign}₹${grouped}${p === 0 ? '' : '.' + String(p).padStart(2, '0')}`;
 }
 
 /** ISO instant → "30 Sept 2026, 06:30 pm" in IST, whatever the browser's zone. */

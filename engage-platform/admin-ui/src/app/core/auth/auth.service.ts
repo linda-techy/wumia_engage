@@ -71,8 +71,20 @@ export class AuthService {
     return firstValueFrom(this.#http.post<Enrolment>('/api/auth/mfa/enrol', enrolToken ? { enrolToken } : {}));
   }
 
-  confirmEnrolment(code: string, enrolToken?: string): Promise<void> {
-    return firstValueFrom(this.#http.post<void>('/api/auth/mfa/confirm', { code, enrolToken }));
+  /** @returns the ten recovery codes, shown once */
+  confirmEnrolment(code: string, enrolToken?: string): Promise<string[]> {
+    return firstValueFrom(
+      this.#http
+        .post<{ recoveryCodes: string[] }>('/api/auth/mfa/confirm', { code, enrolToken })
+        .pipe(map((r) => r.recoveryCodes ?? [])),
+    );
+  }
+
+  /** A new set of recovery codes; needs a current authenticator code. */
+  reissueRecoveryCodes(code: string): Promise<string[]> {
+    return firstValueFrom(
+      this.#http.post<{ recoveryCodes: string[] }>('/api/auth/mfa/recovery-codes', { code }).pipe(map((r) => r.recoveryCodes)),
+    );
   }
 
   setPassword(token: string, password: string): Promise<void> {
