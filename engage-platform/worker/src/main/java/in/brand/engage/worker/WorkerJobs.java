@@ -1,6 +1,8 @@
 package in.brand.engage.worker;
 
 import in.brand.engage.orchestrator.DefaultOrchestrator;
+import in.brand.engage.persistence.CapabilityService;
+import in.brand.engage.persistence.Db;
 import io.micronaut.context.annotation.Requires;
 import io.micronaut.scheduling.annotation.Scheduled;
 import jakarta.inject.Singleton;
@@ -21,11 +23,16 @@ public class WorkerJobs {
     private final EventDispatcher events;
     private final DefaultOrchestrator orchestrator;
     private final CampaignExecutor campaigns;
+    private final CapabilityService capability;
+    private final Db db;
 
-    public WorkerJobs(EventDispatcher events, DefaultOrchestrator orchestrator, CampaignExecutor campaigns) {
+    public WorkerJobs(EventDispatcher events, DefaultOrchestrator orchestrator, CampaignExecutor campaigns,
+                      CapabilityService capability, Db db) {
         this.events = events;
         this.orchestrator = orchestrator;
         this.campaigns = campaigns;
+        this.capability = capability;
+        this.db = db;
     }
 
     /** Every second; drains while batches come back full. */
@@ -59,6 +66,17 @@ public class WorkerJobs {
             campaigns.runOnce();
         } catch (RuntimeException e) {
             LOG.error("campaign pass failed", e);
+        }
+    }
+
+    /** 03:30 IST: INCAPABLE past its 120-day recheck goes back to UNKNOWN (CLAUDE.md §4.2). */
+    @Scheduled(cron = "0 30 3 * * *", zoneId = "Asia/Kolkata")
+    void recheckCapability() {
+        try {
+            int n = db.inTx(c -> capability.expireIncapable(c, java.time.Instant.now()));
+            if (n > 0) LOG.info("capability: {} INCAPABLE numbers back to UNKNOWN for a recheck", n);
+        } catch (RuntimeException e) {
+            LOG.error("capability recheck failed", e);
         }
     }
 }
