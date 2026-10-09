@@ -2,6 +2,8 @@ package in.brand.engage.orchestrator.templates;
 
 import in.brand.engage.core.messaging.Channel;
 import jakarta.inject.Singleton;
+import in.brand.engage.channels.WaTemplateCall;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
@@ -27,6 +29,9 @@ public class Renderer {
 
     public record Rendered(String locale, String title, String body, String url, String image) {}
 
+    /** A WhatsApp template rendered for Meta: positional parameters, or a free-form body (SERVICE). */
+    public record WhatsAppRendered(String locale, String body, WaTemplateCall call) {}
+
     /**
      * @param locale preferred locale; falls back to {@code en} when the template lacks it
      * @throws IllegalArgumentException if a variable the copy uses is missing
@@ -41,6 +46,61 @@ public class Renderer {
             body = cut(body, PUSH_BODY_MAX);
         }
         return new Rendered(chosen, title, body, vars.get("url"), vars.get("image"));
+    }
+
+    /**
+     * WhatsApp: the body's variables become Meta's {{1}}, {{2}}… in order of
+     * first appearance, and each URL button's trailing variable its suffix.
+     * A free-form (SERVICE) template returns the filled body and no call.
+     *
+     * @throws IllegalArgumentException if a variable the copy or a button uses is missing
+     */
+    public WhatsAppRendered whatsapp(MessageTemplate template, String locale, Map<String, String> vars) {
+        var chosen = locale != null && template.locales().containsKey(locale) ? locale : MessageTemplate.FALLBACK_LOCALE;
+        var copy = template.locales().get(chosen);
+        var body = fill(copy.body(), vars, template.key());
+        if (template.freeForm()) return new WhatsAppRendered(chosen, body, null);
+        var params = new ArrayList<String>();
+        for (var name : placeholders(copy.body())) params.add(require(vars, name, template.key()));
+        var suffixes = new ArrayList<String>();
+        for (var b : template.buttons()) {
+            var name = buttonVariable(b.url());
+            if (name != null) suffixes.add(require(vars, name, template.key()));
+        }
+        return new WhatsAppRendered(chosen, body,
+                new WaTemplateCall(copy.providerName(), copy.language(), params, suffixes));
+    }
+
+    /** The body as submitted to Meta: {{order_no}} → {{1}}, by first appearance. */
+    public static String metaBody(String body) {
+        var index = new java.util.HashMap<String, Integer>();
+        var m = PLACEHOLDER.matcher(body);
+        var out = new StringBuilder();
+        while (m.find()) {
+            int n = index.computeIfAbsent(m.group(1), k -> index.size() + 1);
+            m.appendReplacement(out, Matcher.quoteReplacement("{{" + n + "}}"));
+        }
+        m.appendTail(out);
+        return out.toString();
+    }
+
+    /** A URL button as submitted to Meta: the trailing {{var}} becomes {{1}}. */
+    public static String metaUrl(String url) {
+        return PLACEHOLDER.matcher(url).replaceAll("{{1}}");
+    }
+
+    /** The variable at the end of a button URL, or null for a static URL. */
+    static String buttonVariable(String url) {
+        var m = PLACEHOLDER.matcher(url);
+        String last = null;
+        while (m.find()) last = m.group(1);
+        return last;
+    }
+
+    private static String require(Map<String, String> vars, String name, String templateKey) {
+        var v = vars.get(name);
+        if (v == null) throw new IllegalArgumentException("template " + templateKey + " needs variable '" + name + "'");
+        return v;
     }
 
     static String fill(String text, Map<String, String> vars, String templateKey) {

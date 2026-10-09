@@ -1,0 +1,11 @@
+# The one reply to STOP (phase-4 §3): a free-form service message inside the
+# 24 h window the STOP itself opened, so it is free and never submitted to
+# Meta. It stops people reaching for "Block", which hurts the quality rating.
+key: wa_stop_confirm
+channel: whatsapp
+category: service
+locales:
+  en:      { body: "You will not get more messages from WUMIKA on WhatsApp. Reply START if you change your mind." }
+  hi-Latn: { body: "Ab aapko WhatsApp par WUMIKA se aur messages nahi aayenge. Wapas chahiye toh START reply karein." }
+vars: []
+samples: {}

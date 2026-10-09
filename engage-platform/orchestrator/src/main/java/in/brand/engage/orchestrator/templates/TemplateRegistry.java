@@ -43,7 +43,9 @@ public class TemplateRegistry implements TemplateCooldowns, ApplicationEventList
 
     private static final Logger LOG = LoggerFactory.getLogger(TemplateRegistry.class);
     static final String INDEX = "templates/index.txt";
-    private static final Set<String> FIELDS = Set.of("key", "channel", "category", "cooldown", "locales", "vars", "samples");
+    private static final Set<String> FIELDS = Set.of("key", "channel", "category", "cooldown", "locales", "vars", "samples",
+            "buttons");
+    private static final Set<String> COPY_FIELDS = Set.of("title", "body", "language", "provider_name");
 
     private final Map<String, MessageTemplate> byKey;
     private final Db db;
@@ -133,10 +135,31 @@ public class TemplateRegistry implements TemplateCooldowns, ApplicationEventList
 
         var locales = new LinkedHashMap<String, MessageTemplate.Copy>();
         if (!(m.get("locales") instanceof Map<?, ?> ls) || ls.isEmpty()) throw invalid(source, "locales is missing");
+        boolean whatsapp = channel == Channel.WHATSAPP;
         for (var e : ls.entrySet()) {
-            if (!(e.getValue() instanceof Map<?, ?> copy)) throw invalid(source, "locale " + e.getKey() + " is not {title, body}");
-            locales.put(String.valueOf(e.getKey()), new MessageTemplate.Copy(
-                    text(copy, "title", source + " " + e.getKey()), text(copy, "body", source + " " + e.getKey())));
+            var where = source + " " + e.getKey();
+            if (!(e.getValue() instanceof Map<?, ?> copy)) throw invalid(source, "locale " + e.getKey() + " is not a mapping");
+            for (var f : copy.keySet()) {
+                if (!COPY_FIELDS.contains(String.valueOf(f))) throw invalid(where, "unknown field '" + f + "'");
+            }
+            // WhatsApp copy has no title; push copy has no Meta name or language.
+            var title = whatsapp ? "" : text(copy, "title", where);
+            var language = whatsapp ? optional(copy, "language", "en") : null;
+            var providerName = whatsapp ? optional(copy, "provider_name",
+                    // en → the key; hi-Latn → key_hi (Meta names: lowercase, digits, _)
+                    e.getKey().equals(MessageTemplate.FALLBACK_LOCALE) ? key
+                            : key + "_" + String.valueOf(e.getKey()).split("-")[0].toLowerCase(java.util.Locale.ROOT)) : null;
+            locales.put(String.valueOf(e.getKey()), new MessageTemplate.Copy(title, text(copy, "body", where), language, providerName));
+        }
+
+        var buttons = new ArrayList<MessageTemplate.Button>();
+        if (m.get("buttons") instanceof List<?> bs) {
+            for (var b : bs) {
+                if (!(b instanceof Map<?, ?> bm)) throw invalid(source, "each button is {text, url}");
+                buttons.add(new MessageTemplate.Button(text(bm, "text", source + " button"), text(bm, "url", source + " button")));
+            }
+        } else if (m.get("buttons") != null) {
+            throw invalid(source, "buttons must be a list");
         }
 
         var vars = new ArrayList<String>();
@@ -148,7 +171,12 @@ public class TemplateRegistry implements TemplateCooldowns, ApplicationEventList
         else if (m.get("samples") != null) throw invalid(source, "samples must be a mapping");
 
         return new MessageTemplate(key, channel, category, cooldown, Map.copyOf(locales), List.copyOf(vars),
-                Map.copyOf(samples), source);
+                Map.copyOf(samples), List.copyOf(buttons), source);
+    }
+
+    private static String optional(Map<?, ?> m, String field, String fallback) {
+        var v = m.get(field);
+        return v == null || String.valueOf(v).isBlank() ? fallback : String.valueOf(v);
     }
 
     private static String text(Map<?, ?> m, String field, String source) {

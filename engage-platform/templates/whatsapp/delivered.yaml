@@ -1,0 +1,9 @@
+# Jewellery: a care note, not a fit check. Starts post-purchase journeys (P5).
+key: delivered_v1
+channel: whatsapp
+category: utility
+locales:
+  en:      { body: "Your WUMIKA order {{order_no}} has been delivered. Keep your jewellery dry and in its pouch to keep the shine. Reply here if anything needs an exchange." }
+  hi-Latn: { body: "Aapka WUMIKA order {{order_no}} deliver ho gaya hai. Chamak bani rahe, isliye jewellery ko sukha aur pouch mein rakhein. Exchange chahiye toh yahin reply karein." }
+vars: [order_no]
+samples: { order_no: "#1042" }

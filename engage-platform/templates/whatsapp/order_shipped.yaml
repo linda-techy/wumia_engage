@@ -1,0 +1,10 @@
+key: order_shipped_v1
+channel: whatsapp
+category: utility
+locales:
+  en:      { body: "Your WUMIKA order {{order_no}} has shipped with {{courier}} (AWB {{awb}}). Expected delivery by {{eta}}." }
+  hi-Latn: { body: "Aapka WUMIKA order {{order_no}} courier {{courier}} se ship ho gaya hai (AWB {{awb}}). Delivery {{eta}} tak expected hai." }
+buttons:
+  - { text: "Track order", url: "https://wumika.com/apps/track/{{track_ref}}" }
+vars: [order_no, courier, awb, eta, track_ref]
+samples: { order_no: "#1042", courier: "Delhivery", awb: "1234567890123", eta: "12 Oct", track_ref: "1042" }

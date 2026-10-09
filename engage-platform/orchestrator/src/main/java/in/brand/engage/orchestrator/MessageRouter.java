@@ -9,6 +9,7 @@ import in.brand.engage.core.messaging.Channel;
 import in.brand.engage.orchestrator.templates.MessageTemplate;
 import in.brand.engage.orchestrator.templates.Renderer;
 import in.brand.engage.orchestrator.templates.TemplateRegistry;
+import in.brand.engage.orchestrator.templates.WaTemplateGate;
 import in.brand.engage.policy.Decision;
 import in.brand.engage.policy.PolicyEngine;
 import jakarta.inject.Singleton;
@@ -44,10 +45,12 @@ public class MessageRouter {
     private final TemplateRegistry templates;
     private final Renderer renderer;
     private final BeaconSignature beacons;
+    private final WaTemplateGate waGate;
     private final Map<Channel, ChannelAdapter> adapters = new EnumMap<>(Channel.class);
 
     public MessageRouter(PolicyEngine policy, SendRepository sends, TemplateRegistry templates, Renderer renderer,
-                         BeaconSignature beacons, List<ChannelAdapter> adapters) {
+                         BeaconSignature beacons, WaTemplateGate waGate, List<ChannelAdapter> adapters) {
+        this.waGate = waGate;
         this.policy = policy;
         this.sends = sends;
         this.templates = templates;
@@ -93,6 +96,25 @@ public class MessageRouter {
         if (template == null) return fail(cmd, sendId, "template_not_in_registry", false, false, List.of());
 
         RenderedMessage message;
+        if (cmd.channel() == Channel.WHATSAPP) {
+            try {
+                var wa = renderer.whatsapp(template, allow.locale(), cmd.vars());
+                if (wa.call() == null && !allow.freeWindow()) {
+                    // A free-form reply outside the 24 h window: Meta would refuse it (131047).
+                    return fail(cmd, sendId, "outside_service_window", false, false, List.of());
+                }
+                if (wa.call() != null) {
+                    var refusal = waGate.refusal(wa.call().name(), wa.call().language());
+                    if (refusal != null) return fail(cmd, sendId, refusal, false, false, List.of());
+                }
+                message = new RenderedMessage(cmd.channel(), template.key(), sendId, cmd.intentKey(), "", wa.body(),
+                        cmd.vars().getOrDefault("url", ""), null, null, cmd.ttl(), false, null, wa.call());
+            } catch (IllegalArgumentException e) {
+                LOG.error("send {}: cannot render {}: {}", sendId, template.key(), e.getMessage());
+                return fail(cmd, sendId, "render_failed", false, false, List.of());
+            }
+            return deliver(cmd, allow, sendId, adapter, message);
+        }
         try {
             var r = renderer.render(template, allow.locale(), cmd.vars());
             if (r.url() == null) throw new IllegalArgumentException("template " + template.key() + " needs variable 'url'");
@@ -105,6 +127,11 @@ public class MessageRouter {
             return fail(cmd, sendId, "render_failed", false, false, List.of());
         }
 
+        return deliver(cmd, allow, sendId, adapter, message);
+    }
+
+    private SendResult deliver(SendCommand cmd, Decision.Allow allow, long sendId, ChannelAdapter adapter,
+                               RenderedMessage message) {
         try {
             var result = adapter.send(message, allow.addresses());
             sends.markSent(sendId, cmd.channel(), allow.effectiveCategory(), allow.unitCostPaise(), result);

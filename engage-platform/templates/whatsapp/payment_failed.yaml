@@ -1,0 +1,12 @@
+# The Razorpay payment id ({{payment_id}}) is what makes this utility, not
+# marketing: a reference to a real transaction (P0-T02).
+key: payment_failed_v1
+channel: whatsapp
+category: utility
+locales:
+  en:      { body: "Hi {{name}}, your payment of {{amount}} for your WUMIKA order did not go through (ref {{payment_id}}). Your items are still held for you. You can complete the payment using the button below." }
+  hi-Latn: { body: "Hi {{name}}, aapke WUMIKA order ka {{amount}} payment complete nahi hua (ref {{payment_id}}). Aapke items abhi bhi hold par hain. Neeche diye button se payment poora karein." }
+buttons:
+  - { text: "Complete payment", url: "https://wumika.com/{{pay_path}}" }
+vars: [name, amount, payment_id, pay_path]
+samples: { name: "Priya", amount: "₹12,499", payment_id: "pay_O6gPwJ3yP9rJ3k", pay_path: "checkouts/cn/abc123/recover" }
