@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -28,6 +29,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * <li>No role above ANALYST without MFA enrolled (403); an enrolled operator
  *     gets a 5-minute MFA token instead of a session.</li>
  * <li>A TOTP code is valid once: the step it belongs to is remembered.</li>
+ * <li>A recovery code may stand in for the TOTP code, once each (P6-T08).</li>
  * <li>A login's session and its audit row commit in one transaction.</li>
  * </ul>
  */
@@ -57,6 +59,7 @@ public class AuthService {
     private final AuditLog audit;
     private final Db db;
     private final AdminProperties properties;
+    private final RecoveryCodes recoveryCodes;
     private final String dummyHash;
     /**
      * Last TOTP step used per operator. Per-instance state: correct while one
@@ -66,7 +69,7 @@ public class AuthService {
     private final ConcurrentHashMap<UUID, Long> lastUsedStep = new ConcurrentHashMap<>();
 
     public AuthService(OperatorRepository operators, SessionRepository sessions, PasswordHasher hasher,
-                       Tokens tokens, AuditLog audit, Db db, AdminProperties properties) {
+                       Tokens tokens, AuditLog audit, Db db, AdminProperties properties, RecoveryCodes recoveryCodes) {
         this.operators = operators;
         this.sessions = sessions;
         this.hasher = hasher;
@@ -74,6 +77,7 @@ public class AuthService {
         this.audit = audit;
         this.db = db;
         this.properties = properties;
+        this.recoveryCodes = recoveryCodes;
         this.dummyHash = hasher.hash("timing-equaliser-not-a-password".toCharArray());
     }
 
@@ -116,6 +120,21 @@ public class AuthService {
                 .filter(Operator::active)
                 .filter(o -> !o.locked() && o.mfaEnrolled() && o.mfaSecretEnc() != null)
                 .orElseThrow(() -> Problems.unauthorized("invalid code"));
+
+        if (RecoveryCodes.looksLikeOne(code)) {
+            // A recovery code instead of the authenticator: lost or replaced phone.
+            boolean spent = db.inTx(c -> {
+                if (!recoveryCodes.consume(c, id, code)) return false;
+                audit.record(c, id, "auth.recovery_code_used", "operator", id.toString(), null, null);
+                return true;
+            });
+            if (!spent) {
+                operators.recordFailedLogin(id);
+                throw Problems.unauthorized("invalid code");
+            }
+            operators.clearFailures(id);
+            return signIn(operator, userAgent);
+        }
 
         var secret = SecretBox.decrypt(mfaKey(), operator.mfaSecretEnc());
         var step = matchedStep(secret, code, Instant.now());
@@ -185,17 +204,42 @@ public class AuthService {
                 java.util.Base64.getEncoder().encodeToString(secret));
     }
 
-    public void confirmEnrolment(UUID operatorId, String code) {
+    /** @return the ten recovery codes, to show once */
+    public List<String> confirmEnrolment(UUID operatorId, String code) {
         var operator = operators.findById(operatorId).orElseThrow(() -> Problems.unauthorized("not authenticated"));
         if (operator.mfaSecretEnc() == null) throw Problems.badRequest("start enrolment first");
         var secret = SecretBox.decrypt(mfaKey(), operator.mfaSecretEnc());
         var step = matchedStep(secret, code, Instant.now());
         if (step == null) throw Problems.unauthorized("invalid code");
         lastUsedStep.merge(operatorId, step, Math::max);   // this code is now spent for sign-in too
-        db.inTx(c -> {
+        return db.inTx(c -> {
             operators.setMfaSecret(c, operatorId, operator.mfaSecretEnc());
+            var codes = recoveryCodes.issue(c, operatorId);
             audit.record(c, operatorId, "auth.mfa_enrolled", "operator", operatorId.toString(), null, null);
-            return null;
+            return codes;
+        });
+    }
+
+    /**
+     * A new set of recovery codes, the old set void. Needs a current TOTP code:
+     * a stolen session alone must not be able to mint a way past MFA.
+     */
+    public List<String> reissueRecoveryCodes(UUID operatorId, String code) {
+        var operator = operators.findById(operatorId).filter(Operator::active)
+                .filter(o -> o.mfaEnrolled() && o.mfaSecretEnc() != null)
+                .orElseThrow(() -> Problems.conflict("mfa-not-enrolled", "enrol MFA first"));
+        var step = matchedStep(SecretBox.decrypt(mfaKey(), operator.mfaSecretEnc()), code, Instant.now());
+        if (step == null) throw Problems.unauthorized("invalid code");
+        var fresh = new boolean[1];
+        lastUsedStep.compute(operatorId, (k, used) -> {
+            fresh[0] = used == null || step > used;
+            return fresh[0] ? step : used;
+        });
+        if (!fresh[0]) throw Problems.unauthorized("code already used; wait for the next one");
+        return db.inTx(c -> {
+            var codes = recoveryCodes.issue(c, operatorId);
+            audit.record(c, operatorId, "auth.recovery_codes_reissued", "operator", operatorId.toString(), null, null);
+            return codes;
         });
     }
 

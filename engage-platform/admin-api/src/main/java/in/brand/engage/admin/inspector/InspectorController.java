@@ -3,6 +3,7 @@ package in.brand.engage.admin.inspector;
 import in.brand.engage.admin.auth.CurrentOperator;
 import in.brand.engage.admin.auth.RequiresRole;
 import in.brand.engage.admin.auth.Role;
+import in.brand.engage.admin.privacy.PiiAccess;
 import in.brand.engage.admin.web.Problems;
 import in.brand.engage.admin.web.Rows;
 import in.brand.engage.core.identity.Msisdn;
@@ -11,7 +12,6 @@ import in.brand.engage.persistence.Db;
 import in.brand.engage.persistence.Sql;
 import io.micronaut.core.annotation.Nullable;
 import io.micronaut.core.type.Argument;
-import io.micronaut.http.HttpStatus;
 import io.micronaut.http.annotation.Body;
 import io.micronaut.http.annotation.Controller;
 import io.micronaut.http.annotation.Post;
@@ -48,8 +48,6 @@ import java.util.UUID;
 @ExecuteOn(TaskExecutors.BLOCKING)
 public class InspectorController {
 
-    static final int DAILY_LIMIT = 50;
-    static final int MIN_REASON = 5;
     static final int MAX_ROWS = 200;
 
     @Serdeable
@@ -58,11 +56,13 @@ public class InspectorController {
     private final Db db;
     private final CurrentOperator current;
     private final ObjectMapper json;
+    private final PiiAccess pii;
 
-    public InspectorController(Db db, CurrentOperator current, ObjectMapper json) {
+    public InspectorController(Db db, CurrentOperator current, ObjectMapper json, PiiAccess pii) {
         this.db = db;
         this.current = current;
         this.json = json;
+        this.pii = pii;
     }
 
     @RequiresRole(Role.ANALYST)
@@ -70,16 +70,12 @@ public class InspectorController {
     public Map<String, Object> inspect(@Body Lookup body) {
         var phone = Msisdn.normalise(body == null ? null : body.phone())
                 .orElseThrow(() -> Problems.badRequest("an Indian mobile number is required"));
-        var reason = body.reason() == null ? "" : body.reason().strip();
-        if (reason.length() < MIN_REASON) throw Problems.badRequest("say why you are looking this customer up");
-        if (reason.length() > 500) throw Problems.badRequest("reason is at most 500 characters");
+        var reason = PiiAccess.reason(body.reason());
         var actor = current.id();
 
         var found = db.inTx(c -> {
-            limit(c, actor);
             var identity = identityFor(c, phone);
-            Sql.update(c, "INSERT INTO pii_unmask_log (operator_id, identity_id, field, reason) VALUES (?, ?, 'phone', ?)",
-                    actor, identity, reason);
+            pii.record(c, actor, identity, "phone", reason);
             return identity;
         });
         if (found == null) throw Problems.notFound("no customer has this number");
@@ -97,23 +93,6 @@ public class InspectorController {
                       FROM sends WHERE identity_id = ? ORDER BY created_at DESC, id DESC LIMIT ?""", found, MAX_ROWS));
             return out;
         });
-    }
-
-    /** Serialised per operator, so two tabs cannot both take the 50th lookup. */
-    private static void limit(Connection c, UUID actor) throws SQLException {
-        try (var ps = Sql.prepare(c, "SELECT pg_advisory_xact_lock(hashtextextended(?, 0))", "unmask:" + actor);
-             var rs = ps.executeQuery()) {
-            rs.next();
-        }
-        try (var ps = Sql.prepare(c, """
-                SELECT count(*) FROM pii_unmask_log WHERE operator_id = ? AND at > now() - interval '24 hours'""", actor);
-             var rs = ps.executeQuery()) {
-            rs.next();
-            if (rs.getLong(1) >= DAILY_LIMIT) {
-                throw new Problems.ApiException(HttpStatus.TOO_MANY_REQUESTS, "unmask-limit",
-                        DAILY_LIMIT + " customer lookups in 24 hours is the limit; ask an OWNER if this is an incident");
-            }
-        }
     }
 
     /** The identity holding this phone key, following a merge to the survivor. */

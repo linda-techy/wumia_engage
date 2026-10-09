@@ -175,6 +175,7 @@ public class OperatorController {
                            failed_logins = 0, locked_until = NULL, updated_at = now()
                      WHERE id = ?""", placeholder, operatorId);
             if (n == 0) throw Problems.notFound("no such operator");
+            Sql.update(c, "DELETE FROM operator_recovery_codes WHERE operator_id = ?", operatorId);
             sessions.revokeAllFor(c, operatorId, "operator_reset");
             audit.record(c, actor, "operator.reset", "operator", operatorId.toString(), null, null);
             return null;

@@ -126,18 +126,25 @@ class CustomerLookupTest {
         assertEquals(404, status(() -> get("/api/customers/not-a-uuid", token)));
     }
 
-    @Test void reveal_requires_analyst_and_writes_an_audit_row() {
+    @Test void reveal_is_one_field_with_a_reason_for_an_analyst_and_is_logged() {
         var viewerToken = data.loginAsViewer(client);
         var forbidden = assertThrows(HttpClientResponseException.class, () -> client.toBlocking().exchange(
-                HttpRequest.POST("/api/customers/" + identityId + "/reveal", Map.of()).bearerAuth(viewerToken)));
+                HttpRequest.POST("/api/customers/" + identityId + "/reveal", Map.of("field", "email", "reason", "Complaint #7"))
+                        .bearerAuth(viewerToken)));
         assertEquals(403, forbidden.getStatus().getCode());
         assertEquals(0L, data.countAudit("customer.reveal"));
 
         var analystToken = data.loginAsAnalyst(client);
-        var body = client.toBlocking().retrieve(
-                HttpRequest.POST("/api/customers/" + identityId + "/reveal", Map.of()).bearerAuth(analystToken), Map.class);
+        assertEquals(400, status(() -> client.toBlocking().retrieve(HttpRequest.POST("/api/customers/" + identityId + "/reveal",
+                Map.of("field", "email")).bearerAuth(analystToken), Map.class)), "a reason is required");
+        assertEquals(400, status(() -> client.toBlocking().retrieve(HttpRequest.POST("/api/customers/" + identityId + "/reveal",
+                Map.of("field", "address", "reason", "Complaint #7")).bearerAuth(analystToken), Map.class)));
+
+        var body = client.toBlocking().retrieve(HttpRequest.POST("/api/customers/" + identityId + "/reveal",
+                Map.of("field", "email", "reason", "Complaint #7")).bearerAuth(analystToken), Map.class);
         var keys = (List<Map<String, Object>>) body.get("keys");
         assertTrue(keys.stream().anyMatch(k -> "mary@example.com".equals(k.get("value"))));
+        assertTrue(keys.stream().allMatch(k -> "email".equals(k.get("kind"))), "only the field asked for");
         assertEquals(1L, data.countAudit("customer.reveal"));
     }
 

@@ -292,7 +292,29 @@ Structure, auth handling and the composer from `06-admin-ui-angular.md`. Signals
 
 ---
 
-### ☐ P6-T08 — Exports, PII, recovery codes
+### ☑ P6-T08 — Exports, PII, recovery codes
+
+> **Done 2026-10-09.** `ExportTest` (5), `RecoveryCodeTest` (3) and the reworked reveal test. `:admin-api:test`: 123 tests.
+>
+> Where the build differs from the text below:
+> - **Exports follow 03-auth-and-rbac and 07-api-contract where they disagree with this plan:**
+>   - **3 per operator per 24 h** (not 5), ≤ 50,000 rows;
+>   - a **15-minute signed download link** that only the requester can mint; the link is the credential, so a plain browser download works;
+>   - the file is purged after 24 h by `ExportHousekeeping`. The export row and its audit trail stay.
+> - **Kinds:**
+>   - `campaign_report`: aggregate outcomes.
+>   - `segment_ids`: identity ids. With `includePii`, also phone and email; this needs an OWNER and a reason, and is logged in `pii_unmask_log`.
+>   - `sends`: one IST date range ≤ 31 days, with identity ids and policy reasons, never contact details.
+> - **Generated at once rather than queued.** The CSV is kept in `export_files` until object storage exists (production goes to AWS). Cells starting with `= + - @` are prefixed with `'` so a spreadsheet never runs them as formulas: template variables and order data come from customers.
+> - **Reveal is one field (`phone` | `email`) with a reason** (`POST /api/customers/{id}/reveal`, the v0 path; 07 called it `unmask`). It writes `pii_unmask_log` and the audit row.
+>   - `PiiAccess` now owns the log and the shared 50-per-24 h limit, across reveals, inspector lookups and PII exports.
+>   - The console's customer screen asks for the reason and shows phone and email separately. It is built and unit-tested, not yet browser-tested.
+> - **Recovery codes:**
+>   - Issued at **MFA confirmation**, not enrolment: only after the secret is proven. Ten codes `XXXXX-XXXXX`, Crockford base32, sha256 stored.
+>   - Accepted at `/auth/mfa` in place of the TOTP, once each; case and separators are ignored. Use is audited.
+>   - `POST /api/auth/mfa/recovery-codes` issues a new set and needs a current TOTP code, because a stolen session alone must not mint a way past MFA.
+>   - An OWNER's operator reset deletes them.
+>   - The console does not show them or accept them at sign-in yet (P6-T07). Operators enrolled before then can issue a set once the screen exists.
 
 **Migration `V<next>__admin_security.sql`**
 ```sql
