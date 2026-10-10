@@ -1,0 +1,11 @@
+# Abandoned cart (P5-T04): for known customers who left items in the cart
+# without starting checkout. Marketing; needs a WhatsApp marketing opt-in.
+key: cart_reminder_v1
+channel: whatsapp
+category: marketing
+locales:
+  en: { body: "Hi {{name}}, {{product}} is still in your WUMIKA bag. Tap below to pick up where you left off." }
+buttons:
+  - { text: "View bag", url: "https://wumika.com/cart" }
+vars: [name, product]
+samples: { name: "Priya", product: "Kundan Jhumka Earrings" }

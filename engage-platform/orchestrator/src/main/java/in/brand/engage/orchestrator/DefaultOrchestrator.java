@@ -285,7 +285,7 @@ public class DefaultOrchestrator implements MessageOrchestrator {
                 var grants = new java.util.HashSet<String>();
                 for (Object g : (Object[]) rs.getArray("grants").getArray()) grants.add(String.valueOf(g));
                 return new Guard.Context(def.priority(), rs.getString("cap"), rs.getBoolean("device"),
-                        rs.getBoolean("phone"), grants, cartValue);
+                        rs.getBoolean("phone"), grants, cartValue, vars);
             }
         });
     }

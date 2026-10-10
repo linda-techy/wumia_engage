@@ -1,5 +1,6 @@
 package in.brand.engage.orchestrator;
 
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
 
@@ -13,7 +14,16 @@ public record Guard(String name, Predicate<Context> test) {
 
     /** What the guards look at, loaded once per step ({@link DefaultOrchestrator}). */
     public record Context(Priority priority, String waCapability, boolean hasLivePushDevice, boolean hasPhone,
-                          Set<String> grants, long cartValuePaise) {
+                          Set<String> grants, long cartValuePaise, Map<String, String> vars) {
+
+        public Context {
+            vars = vars == null ? Map.of() : Map.copyOf(vars);
+        }
+
+        public Context(Priority priority, String waCapability, boolean hasLivePushDevice, boolean hasPhone,
+                       Set<String> grants, long cartValuePaise) {
+            this(priority, waCapability, hasLivePushDevice, hasPhone, grants, cartValuePaise, Map.of());
+        }
 
         public boolean granted(String channel, String purpose) {
             return grants.contains(channel + "/" + purpose);
@@ -41,6 +51,18 @@ public record Guard(String name, Predicate<Context> test) {
     public static final Guard HAS_EMAIL_MARKETING = new Guard("HAS_EMAIL_MARKETING", c -> c.granted("email", "marketing"));
 
     public static final Guard HAS_PHONE = new Guard("HAS_PHONE", Context::hasPhone);
+
+    /**
+     * The run carries a non-blank variable. Lets a journey decide something
+     * from config when it starts (a WhatsApp cart threshold, a discount code)
+     * and have the step honour it later.
+     */
+    public static Guard hasVar(String name) {
+        return new Guard("HAS_" + name.toUpperCase(java.util.Locale.ROOT), c -> {
+            var v = c.vars().get(name);
+            return v != null && !v.isBlank();
+        });
+    }
 
     public static Guard cartValueAtLeast(long paise) {
         return new Guard("CART_VALUE_AT_LEAST_" + paise, c -> c.cartValuePaise() >= paise);

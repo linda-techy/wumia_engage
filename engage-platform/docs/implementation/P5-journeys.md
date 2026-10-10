@@ -122,7 +122,22 @@ t+6h      SMS       sms_payment_link       require WA_INCAPABLE_OR_UNREAD
 
 ---
 
-### ☐ P5-T03 — `checkout_abandon` (marketing)
+### ◐ P5-T03 — `checkout_abandon` (marketing)
+
+> **Built 2026-10-10, ahead of T01** (branch `p5/abandon-whatsapp`). The owner asked for what most Indian D2C brands do, so this is WhatsApp-led. `CheckoutAbandonTest` (8) covers both journeys. Live check pending: the marketing templates need Meta approval, and customers need a WhatsApp marketing opt-in.
+>
+> Where the build differs from the text below:
+> - **Steps:**
+>   1. At t+30 min (`stall_minutes`), WhatsApp `checkout_reminder_v1`. Its button reopens Shopify's saved checkout (`abandoned_checkout_url`, path and query on our domain). If the step is skipped, the push goes at once instead.
+>   2. 4 h later, push `push_checkout_v1`.
+>   3. 20 h later, WhatsApp `checkout_offer_v1`, only if an operator has set `journey.abandon.discount_code` and `journey.abandon.discount_label`. Codes are created in Shopify admin; the live store app is read-only.
+>
+>   Email (SES) joins in P7.
+> - **WhatsApp guards:** `WA_MARKETING`, not INCAPABLE (UNKNOWN numbers are tried, because Meta bills only delivered messages), and the cart at least `wa_min_cart_paise`. The default minimum is 0, meaning every cart. Policy still applies consent, caps (1 marketing WhatsApp a day by default), quiet hours and the daily budget.
+> - **No guard-only step 0.** Every `checkout_updated` restarts the wait. A completed checkout or `order_placed` ends the run, and starting it ends `cart_recovery` for the same cart.
+> - **No SMS step** (CLAUDE.md §3.2).
+> - **Not built yet:** the hand-over from `payment_failed`, which waits for T02.
+> - **V25** adds the cart and checkout keys from the T01 migration, plus the two discount keys.
 
 Trigger: a checkout with contact (phone or email) and `last_step` set, not completed within `stall_minutes`, with **no** `payment_failed_confirmed` for it. Implemented as a delayed check: on `checkout_updated`, dispatch the intent with `notBefore = +stall_minutes`; step 0 is a guard-only step that verifies the stall is still true.
 
@@ -140,7 +155,9 @@ t+20h     Email     email_checkout           require channelLive(EMAIL), EMAIL_M
 
 ---
 
-### ☐ P5-T04 — `cart_recovery` (full)
+### ◐ P5-T04 — `cart_recovery` (full)
+
+> **Built 2026-10-10**, with T03. WhatsApp `cart_reminder_v1` at t+45 min (`start_delay_minutes`), with the same guards as T03 and `journey.cart_recovery.wa_min_cart_paise` (default 0). Its button opens the cart. A skipped WhatsApp step means the push goes at once; otherwise `push_cart_recovery_v1` follows 4 h later. A cart whose checkout was updated in the last 24 h is left to `checkout_abandon`. Unlike the text below, UNKNOWN numbers are tried, by the owner's decision: an undelivered WhatsApp costs nothing.
 
 Replaces the P3 single-step definition with phase-5 §4. Start delay 45 min after the **last** cart change; every change restarts the run. Cancelled by `order_placed`, `cart_emptied`, `checkout_started`. WhatsApp only if `WA_CAPABLE` (never `UNKNOWN`: marketing does not pay to discover capability) and cart ≥ `wa_min_cart_paise`.
 
