@@ -82,6 +82,9 @@ tasks.withType<Test>().configureEach {
     if (envFile.exists()) {
         val env = readEnvFile(envFile).toMutableMap()
         env["DB_NAME"] = env["TEST_DB_NAME"] ?: "engage_test"
+        // Tests never reach a real provider, whatever local.env holds: no WhatsApp,
+        // template sync or SMS adapter is created (fakes stand in where needed).
+        listOf("WA_PHONE_NUMBER_ID", "WA_ACCESS_TOKEN", "WA_BUSINESS_ACCOUNT_ID", "MSG91_AUTH_KEY").forEach { env[it] = "" }
         // Deterministic test keys: never the operator's real ones.
         // 64 hex = 32 bytes: SecretBox.keyFromHex accepts nothing shorter.
         env["ADMIN_MFA_KEY"] = "0123456789abcdef".repeat(4)

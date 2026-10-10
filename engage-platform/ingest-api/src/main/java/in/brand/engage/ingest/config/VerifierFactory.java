@@ -1,5 +1,6 @@
 package in.brand.engage.ingest.config;
 
+import in.brand.engage.core.crypto.TrackRef;
 import in.brand.engage.core.privacy.CustomerAllowlist;
 import in.brand.engage.core.meta.MetaSignatureVerifier;
 import in.brand.engage.core.razorpay.RazorpaySignatureVerifier;
@@ -20,6 +21,12 @@ public class VerifierFactory {
     @Singleton
     AppProxyVerifier appProxyVerifier(EngageProperties.Shopify shopify) {
         return new AppProxyVerifier(shopify.apiSecret(), shopify.shopDomain());
+    }
+
+    /** Tracking links in order updates (P4-T08), keyed from the same app secret as the worker's. */
+    @Singleton
+    TrackRef trackRef(EngageProperties.Shopify shopify) {
+        return TrackRef.fromAppSecret(shopify.apiSecret());
     }
 
     @Singleton

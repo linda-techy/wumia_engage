@@ -1,13 +1,14 @@
 # DLT: see order_shipped.yaml. ₹ is not GSM-7 (it would make the SMS Unicode),
 # hence Rs. A Shopify checkout recovery path is far over the 30-character DLT
 # limit for a variable, so the link is a short store redirect,
-# /apps/pay/<ref>, which must exist before the payment_failed journey uses this.
+# /apps/push/pay/<ref> (the storefront proxy), which must exist before the
+# payment_failed journey uses this.
 key: sms_payment_link
 channel: sms
 category: utility
 dlt_template_id: PENDING
 msg91_template_id: PENDING
 locales:
-  en: { body: "Your payment of Rs {{amount}} for WUMIKA order {{order_no}} did not go through. Complete it here: https://wumika.com/apps/pay/{{pay_ref}} -WUMIKA" }
+  en: { body: "Your payment of Rs {{amount}} for WUMIKA order {{order_no}} did not go through. Complete it here: https://wumika.com/apps/push/pay/{{pay_ref}} -WUMIKA" }
 vars: [amount, order_no, pay_ref]
 samples: { amount: "12,499", order_no: "#1042", pay_ref: "p8Kx2Q" }

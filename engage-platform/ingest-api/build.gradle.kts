@@ -90,6 +90,9 @@ tasks.withType<Test>().configureEach {
     if (envFile.exists()) {
         val env = readEnvFile(envFile).toMutableMap()
         env["DB_NAME"] = env["TEST_DB_NAME"] ?: "engage_test"
+        // Tests never reach a real provider, whatever local.env holds: no WhatsApp,
+        // template sync or SMS adapter is created (fakes stand in where needed).
+        listOf("WA_PHONE_NUMBER_ID", "WA_ACCESS_TOKEN", "WA_BUSINESS_ACCOUNT_ID", "MSG91_AUTH_KEY").forEach { env[it] = "" }
         env["FLYWAY_ON_STARTUP"] = "true"
         // Tests use synthetic fixtures (priya.k@example.com), never the real allowlist.
         env["CUSTOMER_ALLOWLIST_EMAILS"] = "priya.k@example.com"

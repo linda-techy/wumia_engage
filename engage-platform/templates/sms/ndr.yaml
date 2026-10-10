@@ -7,6 +7,6 @@ dlt_template_id: PENDING
 msg91_template_id: PENDING
 truncate: [courier]
 locales:
-  en: { body: "Delivery of your WUMIKA order {{order_no}} by {{courier}} did not go through today. Track the next attempt: https://wumika.com/apps/track/{{track_ref}} -WUMIKA" }
+  en: { body: "Delivery of your WUMIKA order {{order_no}} by {{courier}} did not go through today. Track the next attempt: https://wumika.com/apps/push/t/{{track_ref}} -WUMIKA" }
 vars: [order_no, courier, track_ref]
-samples: { order_no: "#1042", courier: "Delhivery", track_ref: "1042" }
+samples: { order_no: "#1042", courier: "Delhivery", track_ref: "2s-AbCdEfGhIjK" }

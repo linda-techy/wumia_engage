@@ -20,13 +20,13 @@ class WhatsAppTemplatesPayloadTest {
         assertEquals("UTILITY", payload.get("category"));
         var components = (List<Map<String, Object>>) payload.get("components");
         var body = components.getFirst();
-        assertEquals("Aapka WUMIKA order {{1}} courier {{2}} se ship ho gaya hai (AWB {{3}}). Delivery {{4}} tak expected hai.",
+        assertEquals("Aapka WUMIKA order {{1}} courier {{2}} se ship ho gaya hai (AWB {{3}}). Neeche diye button se track karein.",
                 body.get("text"));
-        assertEquals(List.of(List.of("#1042", "Delhivery", "1234567890123", "12 Oct")),
+        assertEquals(List.of(List.of("#1042", "Delhivery", "1234567890123")),
                 ((Map<String, Object>) body.get("example")).get("body_text"));
         var button = ((List<Map<String, Object>>) components.get(1).get("buttons")).getFirst();
-        assertEquals("https://wumika.com/apps/track/{{1}}", button.get("url"));
-        assertEquals(List.of("https://wumika.com/apps/track/1042"), button.get("example"));
+        assertEquals("https://wumika.com/apps/push/t/{{1}}", button.get("url"));
+        assertEquals(List.of("https://wumika.com/apps/push/t/2s-AbCdEfGhIjK"), button.get("example"));
     }
 
     static List<in.brand.engage.orchestrator.templates.MessageTemplate> loadAll() {
