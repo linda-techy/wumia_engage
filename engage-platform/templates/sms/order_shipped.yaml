@@ -1,0 +1,15 @@
+# DLT (CLAUDE.md §5): register the en body with each {{var}} written as {#var#},
+# under the WUMIKA header, as a Service Implicit template. Then create the MSG91
+# template for it with variables named ##order_no## ##courier## ##track_ref##
+# and put both ids here. Until then PENDING: the template loads and every send
+# fails dlt_pending, nothing leaves.
+key: sms_order_shipped
+channel: sms
+category: utility
+dlt_template_id: PENDING
+msg91_template_id: PENDING
+truncate: [courier]
+locales:
+  en: { body: "Your WUMIKA order {{order_no}} has shipped with {{courier}}. Track it here: https://wumika.com/apps/track/{{track_ref}} -WUMIKA" }
+vars: [order_no, courier, track_ref]
+samples: { order_no: "#1042", courier: "Delhivery", track_ref: "1042" }

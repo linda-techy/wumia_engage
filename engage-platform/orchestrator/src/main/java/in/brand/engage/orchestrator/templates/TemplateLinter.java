@@ -34,23 +34,45 @@ import java.util.regex.Pattern;
  *       https, whose variable is not at the very end, or whose label is over
  *       25 characters; buttons on a free-form (SERVICE) reply; the same Meta
  *       name and language twice.</li>
+ *   <li>SMS (DLT, CLAUDE.md §5): a marketing or service category; a DLT id
+ *       that is neither 19 digits nor PENDING; a locale other than {@code en};
+ *       a variable used twice; a sample value over 30 characters that is not
+ *       declared in {@code truncate}; text outside the GSM-7 alphabet (it
+ *       would go as Unicode, 70 characters a part); more than one 160-character
+ *       part with the sample values; a link that is not https on a domain in
+ *       {@code templates/lint/sms_url_domains.txt}.</li>
  * </ul>
  */
 public final class TemplateLinter {
 
     static final String BANNED_WORDS = "templates/lint/banned_words.txt";
+    static final String SMS_URL_DOMAINS = "templates/lint/sms_url_domains.txt";
 
     private final List<Pattern> banned;
+    private final Set<String> smsDomains;
 
     public TemplateLinter(List<Pattern> banned) {
-        this.banned = List.copyOf(banned);
+        this(banned, Set.of());
     }
 
-    /** The lint with the repository's banned-words list. */
+    public TemplateLinter(List<Pattern> banned, Set<String> smsDomains) {
+        this.banned = List.copyOf(banned);
+        this.smsDomains = Set.copyOf(smsDomains);
+    }
+
+    /** The lint with the repository's banned-words and SMS link-domain lists. */
     public static TemplateLinter standard() {
-        try (InputStream in = TemplateLinter.class.getClassLoader().getResourceAsStream(BANNED_WORDS)) {
-            if (in == null) throw new IllegalStateException("missing " + BANNED_WORDS);
-            return new TemplateLinter(parseBanned(new String(in.readAllBytes(), StandardCharsets.UTF_8)));
+        var domains = new HashSet<String>();
+        resource(SMS_URL_DOMAINS).lines().map(String::strip)
+                .filter(l -> !l.isEmpty() && !l.startsWith("#"))
+                .forEach(l -> domains.add(l.toLowerCase(java.util.Locale.ROOT)));
+        return new TemplateLinter(parseBanned(resource(BANNED_WORDS)), domains);
+    }
+
+    private static String resource(String path) {
+        try (InputStream in = TemplateLinter.class.getClassLoader().getResourceAsStream(path)) {
+            if (in == null) throw new IllegalStateException("missing " + path);
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
@@ -81,6 +103,7 @@ public final class TemplateLinter {
         });
         t.buttons().forEach(b -> used.addAll(Renderer.placeholders(b.url())));
         if (t.channel() == Channel.WHATSAPP) problems.addAll(whatsapp(t, where));
+        if (t.channel() == Channel.SMS) problems.addAll(sms(t, where));
         var payload = t.channel() == Channel.PUSH ? Renderer.PUSH_PAYLOAD_VARS : Set.<String>of();
         for (var v : used) {
             if (!declared.contains(v)) problems.add(where + "variable '" + v + "' is used but not declared in vars");
@@ -140,6 +163,63 @@ public final class TemplateLinter {
                 }
             }
             problems.addAll(lint(t));
+        }
+        return problems;
+    }
+
+    static final Pattern URL = Pattern.compile("(\\S+)://([^/\\s]+)");
+    static final int SMS_PART = 160;
+
+    private List<String> sms(MessageTemplate t, String where) {
+        var problems = new ArrayList<String>();
+        var dlt = t.sms();
+        if (dlt == null) return List.of(where + "an SMS template needs dlt_template_id and msg91_template_id");
+        if (t.category() != UTILITY && t.category() != AUTHENTICATION) {
+            problems.add(where + "SMS is transactional only (CLAUDE.md §3.2): category " + t.category().dbName()
+                    + " is not allowed; there are no promotional SMS templates");
+        }
+        if (!in.brand.engage.channels.SmsCall.DLT_ID.matcher(dlt.dltTemplateId()).matches() && !dlt.dltTemplateId().equals(MessageTemplate.Sms.PENDING)) {
+            problems.add(where + "dlt_template_id '" + dlt.dltTemplateId() + "' is neither a 19-digit DLT id nor PENDING");
+        }
+        if (!t.locales().keySet().equals(Set.of(MessageTemplate.FALLBACK_LOCALE))) {
+            problems.add(where + "SMS has one registered text: only the 'en' locale, got " + t.locales().keySet());
+        }
+        for (var v : dlt.truncate()) {
+            if (!t.vars().contains(v)) problems.add(where + "truncate names '" + v + "', which is not in vars");
+        }
+        var copy = t.locales().get(MessageTemplate.FALLBACK_LOCALE);
+        if (copy == null) return problems;
+        var body = copy.body();
+        var seen = new HashSet<String>();
+        var m = Renderer.PLACEHOLDER.matcher(body);
+        while (m.find()) {
+            if (!seen.add(m.group(1))) problems.add(where + "variable '" + m.group(1) + "' is used twice; each DLT slot takes one");
+        }
+        if (!Renderer.gsm7(body)) problems.add(where + "the body has characters outside GSM-7, so it would go as Unicode");
+        for (var v : seen) {
+            var sample = t.samples().get(v);
+            if (sample == null) continue;
+            if (Renderer.length(sample) > in.brand.engage.channels.SmsCall.VALUE_MAX && !dlt.truncate().contains(v)) {
+                problems.add(where + "sample for '" + v + "' is over 30 characters, the DLT limit for a variable; "
+                        + "shorten it or declare it in truncate");
+            }
+        }
+        if (seen.stream().allMatch(t.samples()::containsKey)) {
+            var rendered = Renderer.fill(body, t.samples(), t.key());
+            if (Renderer.gsm7Length(rendered) > SMS_PART) {
+                problems.add(where + "the body is " + Renderer.gsm7Length(rendered) + " characters with the sample values; "
+                        + "keep it to one 160-character part: \"" + rendered + "\"");
+            }
+        }
+        var u = URL.matcher(body);
+        while (u.find()) {
+            var host = u.group(2).toLowerCase(java.util.Locale.ROOT);
+            if (!u.group(1).endsWith("https")) problems.add(where + "link " + u.group() + " must be https");
+            if (host.contains("{{")) {
+                problems.add(where + "link host is a variable; DLT needs the domain in the registered text");
+            } else if (smsDomains.stream().noneMatch(d -> host.equals(d) || host.endsWith("." + d))) {
+                problems.add(where + "link to " + host + ", which is not in " + SMS_URL_DOMAINS + " (whitelist it on DLT first)");
+            }
         }
         return problems;
     }

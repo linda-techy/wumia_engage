@@ -66,6 +66,11 @@ engage:
     app-secret: ${WA_APP_SECRET:}
     # Any string you choose, typed into Meta's webhook setup. Empty = 403.
     verify-token: ${WA_WEBHOOK_VERIFY_TOKEN:}
+  msg91:
+    # SMS delivery reports (P4-T06). Any long random string; the report URL in
+    # MSG91 is https://<ingest host>/webhooks/sms?token=<it>. Empty = every
+    # report is 401.
+    dlr-token: ${MSG91_DLR_TOKEN:}
   privacy:
     # Empty = refuse to start (fail closed). * = every customer.
     customer-allowlist-emails: ${CUSTOMER_ALLOWLIST_EMAILS:}

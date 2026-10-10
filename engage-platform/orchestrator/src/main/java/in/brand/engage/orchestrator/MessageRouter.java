@@ -61,6 +61,15 @@ public class MessageRouter {
                 throw new IllegalStateException("two adapters for channel " + a.channel());
             }
         }
+        if (this.adapters.containsKey(Channel.SMS)) {
+            var pending = templates.all().stream()
+                    .filter(t -> t.channel() == Channel.SMS && (t.sms() == null || t.sms().pending()))
+                    .map(MessageTemplate::key).toList();
+            if (!pending.isEmpty()) {
+                LOG.error("SMS is on (MSG91_AUTH_KEY) but {} are not registered on DLT yet: every send of them fails "
+                        + "dlt_pending. Put the DLT and MSG91 ids in templates/sms/.", pending);
+            }
+        }
     }
 
     /** Channels with an adapter. */
@@ -109,6 +118,19 @@ public class MessageRouter {
                 }
                 message = new RenderedMessage(cmd.channel(), template.key(), sendId, cmd.intentKey(), "", wa.body(),
                         cmd.vars().getOrDefault("url", ""), null, null, cmd.ttl(), false, null, wa.call());
+            } catch (IllegalArgumentException e) {
+                LOG.error("send {}: cannot render {}: {}", sendId, template.key(), e.getMessage());
+                return fail(cmd, sendId, "render_failed", false, false, List.of());
+            }
+            return deliver(cmd, allow, sendId, adapter, message);
+        }
+        if (cmd.channel() == Channel.SMS) {
+            // Not registered on DLT yet: the operator would drop it after MSG91 said "success".
+            if (template.sms() == null || template.sms().pending()) return fail(cmd, sendId, "dlt_pending", false, false, List.of());
+            try {
+                var sms = renderer.sms(template, cmd.vars());
+                message = new RenderedMessage(cmd.channel(), template.key(), sendId, cmd.intentKey(), "", sms.body(),
+                        "", null, null, cmd.ttl(), false, null, null, sms.call());
             } catch (IllegalArgumentException e) {
                 LOG.error("send {}: cannot render {}: {}", sendId, template.key(), e.getMessage());
                 return fail(cmd, sendId, "render_failed", false, false, List.of());

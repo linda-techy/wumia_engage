@@ -44,7 +44,8 @@ public class TemplateRegistry implements TemplateCooldowns, ApplicationEventList
     private static final Logger LOG = LoggerFactory.getLogger(TemplateRegistry.class);
     static final String INDEX = "templates/index.txt";
     private static final Set<String> FIELDS = Set.of("key", "channel", "category", "cooldown", "locales", "vars", "samples",
-            "buttons");
+            "buttons", "dlt_template_id", "msg91_template_id", "truncate");
+    private static final Set<String> SMS_ONLY = Set.of("dlt_template_id", "msg91_template_id", "truncate");
     private static final Set<String> COPY_FIELDS = Set.of("title", "body", "language", "provider_name");
 
     private final Map<String, MessageTemplate> byKey;
@@ -124,6 +125,10 @@ public class TemplateRegistry implements TemplateCooldowns, ApplicationEventList
         var key = text(m, "key", source);
         var channel = Channel.fromDb(text(m, "channel", source));
         var category = Category.fromDb(text(m, "category", source));
+        boolean sms = channel == Channel.SMS;
+        for (var f : SMS_ONLY) {
+            if (!sms && m.containsKey(f)) throw invalid(source, "'" + f + "' is for SMS templates only");
+        }
         Duration cooldown = null;
         if (m.get("cooldown") != null) {
             try {
@@ -142,8 +147,8 @@ public class TemplateRegistry implements TemplateCooldowns, ApplicationEventList
             for (var f : copy.keySet()) {
                 if (!COPY_FIELDS.contains(String.valueOf(f))) throw invalid(where, "unknown field '" + f + "'");
             }
-            // WhatsApp copy has no title; push copy has no Meta name or language.
-            var title = whatsapp ? "" : text(copy, "title", where);
+            // WhatsApp and SMS copy has no title; push copy has no Meta name or language.
+            var title = whatsapp || sms ? "" : text(copy, "title", where);
             var language = whatsapp ? optional(copy, "language", "en") : null;
             var providerName = whatsapp ? optional(copy, "provider_name",
                     // en → the key; hi-Latn → key_hi (Meta names: lowercase, digits, _)
@@ -170,8 +175,18 @@ public class TemplateRegistry implements TemplateCooldowns, ApplicationEventList
         if (m.get("samples") instanceof Map<?, ?> ss) ss.forEach((k, v) -> samples.put(String.valueOf(k), String.valueOf(v)));
         else if (m.get("samples") != null) throw invalid(source, "samples must be a mapping");
 
+        MessageTemplate.Sms dlt = null;
+        if (sms) {
+            // Required, so a template DLT has not seen yet must say PENDING rather than leave it out.
+            var truncate = new java.util.LinkedHashSet<String>();
+            if (m.get("truncate") instanceof List<?> ts) ts.forEach(t -> truncate.add(String.valueOf(t)));
+            else if (m.get("truncate") != null) throw invalid(source, "truncate must be a list");
+            dlt = new MessageTemplate.Sms(text(m, "dlt_template_id", source).strip(),
+                    text(m, "msg91_template_id", source).strip(), Set.copyOf(truncate));
+        }
+
         return new MessageTemplate(key, channel, category, cooldown, Map.copyOf(locales), List.copyOf(vars),
-                Map.copyOf(samples), List.copyOf(buttons), source);
+                Map.copyOf(samples), List.copyOf(buttons), source, dlt);
     }
 
     private static String optional(Map<?, ?> m, String field, String fallback) {

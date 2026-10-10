@@ -19,10 +19,12 @@ import java.util.Objects;
  * @param highUrgency push: Web Push {@code Urgency: high} and Android high priority
  * @param beaconSig   push: signature of {@code sendId}, echoed back by the click beacon (null = none)
  * @param whatsapp    WhatsApp: the template call; null sends {@code body} as a free-form service reply
+ * @param sms         SMS: the DLT template and its slot values (null for other channels)
  */
 public record RenderedMessage(Channel channel, String templateKey, long sendId, String kind,
                               String title, String body, String url, String image, String tag,
-                              Duration ttl, boolean highUrgency, String beaconSig, WaTemplateCall whatsapp) {
+                              Duration ttl, boolean highUrgency, String beaconSig, WaTemplateCall whatsapp,
+                              SmsCall sms) {
 
     public RenderedMessage {
         Objects.requireNonNull(channel, "channel");
@@ -34,10 +36,17 @@ public record RenderedMessage(Channel channel, String templateKey, long sendId, 
         Objects.requireNonNull(ttl, "ttl");
     }
 
-    /** Push and the other non-WhatsApp channels: no template call. */
+    /** WhatsApp (and push, with a null call). */
+    public RenderedMessage(Channel channel, String templateKey, long sendId, String kind, String title, String body,
+                           String url, String image, String tag, Duration ttl, boolean highUrgency, String beaconSig,
+                           WaTemplateCall whatsapp) {
+        this(channel, templateKey, sendId, kind, title, body, url, image, tag, ttl, highUrgency, beaconSig, whatsapp, null);
+    }
+
+    /** Push and the other channels without a provider template call. */
     public RenderedMessage(Channel channel, String templateKey, long sendId, String kind, String title, String body,
                            String url, String image, String tag, Duration ttl, boolean highUrgency, String beaconSig) {
-        this(channel, templateKey, sendId, kind, title, body, url, image, tag, ttl, highUrgency, beaconSig, null);
+        this(channel, templateKey, sendId, kind, title, body, url, image, tag, ttl, highUrgency, beaconSig, null, null);
     }
 
     /** The push data payload (phase-3 §3). Data-only: the service worker renders it. */

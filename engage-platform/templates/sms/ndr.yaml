@@ -1,0 +1,12 @@
+# DLT: see order_shipped.yaml. NDR success is a reply on WhatsApp; the SMS
+# points to the tracking page, which shows the courier's next attempt.
+key: sms_ndr
+channel: sms
+category: utility
+dlt_template_id: PENDING
+msg91_template_id: PENDING
+truncate: [courier]
+locales:
+  en: { body: "Delivery of your WUMIKA order {{order_no}} by {{courier}} did not go through today. Track the next attempt: https://wumika.com/apps/track/{{track_ref}} -WUMIKA" }
+vars: [order_no, courier, track_ref]
+samples: { order_no: "#1042", courier: "Delhivery", track_ref: "1042" }

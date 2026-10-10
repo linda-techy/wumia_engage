@@ -16,10 +16,11 @@ import java.util.Map;
  * @param samples  the longest realistic value of each variable used in the copy
  * @param buttons  WhatsApp URL buttons (empty for other channels)
  * @param source   where it was loaded from, for lint messages
+ * @param sms      SMS: the DLT registration (null for other channels)
  */
 public record MessageTemplate(String key, Channel channel, Category category, Duration cooldown,
                               Map<String, Copy> locales, List<String> vars, Map<String, String> samples,
-                              List<Button> buttons, String source) {
+                              List<Button> buttons, String source, Sms sms) {
 
     public static final String FALLBACK_LOCALE = "en";
 
@@ -42,6 +43,25 @@ public record MessageTemplate(String key, Channel channel, Category category, Du
      * {@code .../track/{{1}}} and the value of {@code order_no} is sent as its suffix.
      */
     public record Button(String text, String url) {}
+
+    /**
+     * An SMS template's DLT registration (CLAUDE.md §5). The registered text
+     * is the {@code en} body with each {@code {{var}}} written as {@code {#var#}}.
+     * Until DLT approves it, an id is the literal {@code PENDING}: the template
+     * loads, and every send of it fails {@code dlt_pending} with nothing sent.
+     *
+     * @param dltTemplateId      19-digit DLT content template id, or PENDING
+     * @param providerTemplateId MSG91's template id for it, or PENDING
+     * @param truncate           variables that may be cut to 30 characters; any other over-long value fails the send
+     */
+    public record Sms(String dltTemplateId, String providerTemplateId, java.util.Set<String> truncate) {
+
+        public static final String PENDING = "PENDING";
+
+        public boolean pending() {
+            return PENDING.equalsIgnoreCase(dltTemplateId) || PENDING.equalsIgnoreCase(providerTemplateId);
+        }
+    }
 
     /** WhatsApp templates in category SERVICE are free-form replies inside the 24 h window, never submitted to Meta. */
     public boolean freeForm() {

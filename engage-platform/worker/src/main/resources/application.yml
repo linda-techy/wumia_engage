@@ -38,6 +38,12 @@ engage:
     # templates. Empty = none of that runs.
     business-account-id: ${WA_BUSINESS_ACCOUNT_ID:}
     access-token: ${WA_ACCESS_TOKEN:}
+  sms:
+    msg91:
+      # DLT SMS through MSG91 (P4-T06). Empty = no SMS adapter: SMS sends are
+      # recorded as no_adapter, nothing leaves. Templates still PENDING on DLT
+      # fail dlt_pending even when this is set.
+      auth-key: ${MSG91_AUTH_KEY:}
   metrics:
     # Bearer token for /prometheus (same value as ingest-api). Empty = 404.
     token: ${METRICS_TOKEN:}

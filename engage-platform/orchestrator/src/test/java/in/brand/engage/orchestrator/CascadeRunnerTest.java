@@ -24,6 +24,7 @@ class CascadeRunnerTest {
 
     @Inject DefaultOrchestrator orchestrator;
     @Inject FakePushAdapter fcm;
+    @Inject FakeSmsAdapter sms;
     @Inject OrchestratorTestData data;
     @Inject TestClock clock;
     @Inject Db db;
@@ -32,6 +33,7 @@ class CascadeRunnerTest {
         clock.setIst("2026-09-28T12:00:00");
         data.resetConfig();
         fcm.reset();
+        sms.sent.clear();
     }
 
     CascadeRun dispatch(UUID identity, String intent) {
@@ -133,13 +135,31 @@ class CascadeRunnerTest {
         var s = data.subscriber();
         data.exec("INSERT INTO channel_capability (identity_id, channel, state, strike_days, recheck_after) "
                 + "VALUES (?, 'whatsapp', 'INCAPABLE', '{2026-09-01,2026-09-03}', now() + interval '100 days')", s.id());
+        data.exec("INSERT INTO identity_keys (identity_id, kind, value) VALUES (?, 'phone', ?)",
+                s.id(), "919" + String.format("%09d", Math.floorMod(s.id().getLeastSignificantBits(), 1_000_000_000L)));
 
         var run = dispatch(s.id(), TestCascades.TRACKING);
 
         var a = attempts(run.id());
         assertEquals("0:whatsapp:skipped:guard:WA_CAPABLE_OR_UNKNOWN", a.getFirst(), "no WhatsApp attempt is made");
-        assertTrue(a.get(1).startsWith("1:sms:"), "the SMS step ran at once: " + a);
+        assertEquals("1:sms:failed:dlt_pending", a.get(1), "the SMS step ran at once");
         assertEquals(0L, data.count("SELECT count(*) FROM sends WHERE identity_id = ? AND channel = 'whatsapp'", s.id()));
+        assertTrue(sms.sent.isEmpty(), "a template DLT has not approved never reaches the provider");
+    }
+
+    @Test void an_sms_delivery_ends_a_transactional_cascade_but_not_a_promotional_one() {
+        var s = data.subscriber();
+        var tracking = dispatch(s.id(), TestCascades.TRACKING);
+        // As after its last step, the SMS, was sent: the delivery report comes later.
+        data.exec("UPDATE cascade_runs SET status = 'exhausted', outcome = 'sent' WHERE id = ?", tracking.id());
+        var promo = dispatch(s.id(), TestCascades.TWO_STEP);
+
+        boolean ended = db.inTx(c -> orchestrator.onSignal(c, tracking.id(), "delivered"));
+        boolean promoEnded = db.inTx(c -> orchestrator.onSignal(c, promo.id(), "delivered"));
+        assertTrue(ended);
+        assertFalse(promoEnded, "promotional needs a click");
+        assertEquals("succeeded|delivered", run(tracking.id()).status() + "|" + run(tracking.id()).outcome());
+        assertEquals("waiting", run(promo.id()).status());
     }
 
     @Test void ios_web_identity_never_gets_a_push_step() {

@@ -2,6 +2,7 @@ package in.brand.engage.orchestrator.templates;
 
 import in.brand.engage.core.messaging.Channel;
 import jakarta.inject.Singleton;
+import in.brand.engage.channels.SmsCall;
 import in.brand.engage.channels.WaTemplateCall;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -31,6 +32,9 @@ public class Renderer {
 
     /** A WhatsApp template rendered for Meta: positional parameters, or a free-form body (SERVICE). */
     public record WhatsAppRendered(String locale, String body, WaTemplateCall call) {}
+
+    /** An SMS rendered for its DLT registration: the text as it will arrive, and the call. */
+    public record SmsRendered(String body, SmsCall call) {}
 
     /**
      * @param locale preferred locale; falls back to {@code en} when the template lacks it
@@ -69,6 +73,59 @@ public class Renderer {
         }
         return new WhatsAppRendered(chosen, body,
                 new WaTemplateCall(copy.providerName(), copy.language(), params, suffixes));
+    }
+
+    /**
+     * SMS: one value per {@code {{var}}}, in order, for the registered text
+     * with {@code {#var#}} slots. A value over 30 characters is cut only if
+     * the template declares it in {@code truncate}; otherwise it goes through
+     * as it is and the adapter refuses the send (CLAUDE.md §5).
+     *
+     * @throws IllegalArgumentException a variable is missing, holds a link (links belong in the
+     *                                  registered text, on a DLT-whitelisted domain), or is not GSM-7
+     */
+    public SmsRendered sms(MessageTemplate template, Map<String, String> vars) {
+        var dlt = template.sms();
+        if (dlt == null) throw new IllegalArgumentException("template " + template.key() + " has no DLT registration");
+        var text = template.locales().get(MessageTemplate.FALLBACK_LOCALE).body();
+        var names = new ArrayList<String>();
+        var values = new ArrayList<String>();
+        var m = PLACEHOLDER.matcher(text);
+        var body = new StringBuilder();
+        while (m.find()) {
+            var name = m.group(1);
+            var value = require(vars, name, template.key()).strip();
+            var lower = value.toLowerCase(java.util.Locale.ROOT);
+            if (lower.contains("://") || lower.contains("www.")) {
+                throw new IllegalArgumentException("SMS variable '" + name + "' holds a link; links belong in the registered text");
+            }
+            if (!gsm7(value)) throw new IllegalArgumentException("SMS variable '" + name + "' has characters outside GSM-7");
+            if (length(value) > SmsCall.VALUE_MAX && dlt.truncate().contains(name)) {
+                value = value.substring(0, value.offsetByCodePoints(0, SmsCall.VALUE_MAX)).stripTrailing();
+            }
+            names.add(name);
+            values.add(value);
+            m.appendReplacement(body, Matcher.quoteReplacement(value));
+        }
+        m.appendTail(body);
+        var registered = PLACEHOLDER.matcher(text).replaceAll(Matcher.quoteReplacement(SmsCall.SLOT));
+        return new SmsRendered(body.toString(),
+                new SmsCall(dlt.dltTemplateId(), dlt.providerTemplateId(), registered, names, values));
+    }
+
+    /** GSM 03.38: the basic set, then the extension set (two units each). */
+    static final String GSM7_BASIC = "@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !\"#¤%&'()*+,-./0123456789:;<=>?"
+            + "¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà";
+    static final String GSM7_EXTENDED = "^{}\\[~]|€\f";
+
+    /** True if every character is in the GSM-7 alphabet, so the SMS is not sent as Unicode. */
+    static boolean gsm7(String s) {
+        return s.chars().allMatch(c -> GSM7_BASIC.indexOf(c) >= 0 || GSM7_EXTENDED.indexOf(c) >= 0);
+    }
+
+    /** Length in GSM-7 units: extension characters take two. */
+    static int gsm7Length(String s) {
+        return s.chars().map(c -> GSM7_EXTENDED.indexOf(c) >= 0 ? 2 : 1).sum();
     }
 
     /** The body as submitted to Meta: {{order_no}} → {{1}}, by first appearance. */
