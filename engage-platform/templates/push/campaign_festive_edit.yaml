@@ -6,6 +6,5 @@ category: marketing
 cooldown: P1D
 locales:
   en:      { title: "The {{festival}} edit is here", body: "Pieces picked for {{festival}}. Explore the edit." }
-  hi-Latn: { title: "{{festival}} edit aa gaya", body: "{{festival}} ke liye chune hue pieces. Edit dekhiye." }
 vars: [festival, url, image]
 samples: { festival: "Onam" }

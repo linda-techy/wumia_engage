@@ -97,8 +97,7 @@ The router's generic "permanent → suppression" rule from P3-T05 must **not** a
 >
 > Where the build differs from the text below:
 > - **Templates as code**, in `templates/whatsapp/*.yaml`:
->   - eight utility templates, each in en and hi-Latn;
->   - Hinglish is its own Meta template, `<key>_hi`, in language `en`;
+>   - eight utility templates, **English only** (owner's decision, 2026-10-10; Hinglish copy was written and then removed before anything was submitted). A test fails the build if a non-English locale is added. The registry still supports more locales (a Hinglish copy would be its own Meta template, `<key>_hi`);
 >   - the free-form `wa_stop_confirm`, in category service, is never submitted.
 > - **The lint mirrors Meta's review:**
 >   - a body of at most 1,024 characters;

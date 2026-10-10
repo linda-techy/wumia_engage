@@ -7,7 +7,6 @@ category: utility          # the shopper asked for it
 # restock of a DIFFERENT item the shopper is also waiting for.
 locales:
   en:      { title: "Size {{size}} is back: {{product}}", body: "Only a few pieces in this restock." }
-  hi-Latn: { title: "Size {{size}} aa gaya: {{product}}", body: "Is restock mein kam pieces hain." }
 vars: [size, product, url, image]
 # The longest realistic values: the lint renders with these and checks the
 # 40/90 limits. Longer names are cut with an ellipsis at send time.

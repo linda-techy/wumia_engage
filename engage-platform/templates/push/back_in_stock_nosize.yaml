@@ -8,6 +8,5 @@ category: utility          # the shopper asked for it
 # restock of a DIFFERENT item the shopper is also waiting for.
 locales:
   en:      { title: "Back in stock: {{product}}", body: "Only a few pieces in this restock." }
-  hi-Latn: { title: "Wapas stock mein: {{product}}", body: "Is restock mein kam pieces hain." }
 vars: [product, url, image]
 samples: { product: "Floral Anarkali Kurta" }

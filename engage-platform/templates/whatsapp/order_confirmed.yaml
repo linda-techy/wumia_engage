@@ -5,6 +5,5 @@ channel: whatsapp
 category: utility
 locales:
   en:      { body: "Hi {{name}}, your WUMIKA order {{order_no}} is confirmed. Total {{amount}}. We will message you here when it ships." }
-  hi-Latn: { body: "Hi {{name}}, aapka WUMIKA order {{order_no}} confirm ho gaya hai. Total {{amount}}. Ship hote hi hum yahin bata denge." }
 vars: [name, order_no, amount]
 samples: { name: "Priya", order_no: "#1042", amount: "₹12,499" }

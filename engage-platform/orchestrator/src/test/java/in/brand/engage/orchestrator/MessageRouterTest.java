@@ -62,13 +62,13 @@ class MessageRouterTest {
         assertTrue(beacons.verify(sent.sendId(), msg.pushData().get("sig")), "ingest-api must accept this push's beacons");
     }
 
-    @Test void the_persons_locale_picks_the_copy() {
+    @Test void a_locale_the_template_lacks_gets_the_english_copy() {
         var s = data.subscriber();
-        data.locale(s.id(), "hi-Latn");
+        data.locale(s.id(), "hi-Latn");                      // templates are English only (decided 2026-10-10)
 
         router.send(command(s.id(), key()));
 
-        assertEquals("Abhi bhi soch rahe hain?", fcm.sent.getFirst().title());
+        assertEquals("Still thinking about it?", fcm.sent.getFirst().title());
     }
 
     @Test void a_duplicate_key_returns_duplicate_and_writes_no_second_row() {

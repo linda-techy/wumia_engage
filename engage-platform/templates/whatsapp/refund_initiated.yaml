@@ -3,6 +3,5 @@ channel: whatsapp
 category: utility
 locales:
   en:      { body: "Your refund of {{amount}} for WUMIKA order {{order_no}} has been started. It will reach your account in {{days}}." }
-  hi-Latn: { body: "Aapke WUMIKA order {{order_no}} ka {{amount}} refund shuru ho gaya hai. Yeh {{days}} mein aapke account mein aa jayega." }
 vars: [amount, order_no, days]
 samples: { amount: "₹12,499", order_no: "#1042", days: "5-7 working days" }

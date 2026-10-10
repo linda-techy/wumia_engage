@@ -10,6 +10,5 @@ category: marketing
 cooldown: PT12H
 locales:
   en:      { title: "Still in your bag: {{product}}", body: "It's saved for you. Complete your order when you're ready." }
-  hi-Latn: { title: "Aapke bag mein: {{product}}", body: "Aapke liye save hai. Jab chahein order complete kijiye." }
 vars: [product, url, image]
 samples: { product: "Floral Anarkali Kurta" }

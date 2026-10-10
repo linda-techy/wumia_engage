@@ -13,14 +13,14 @@ class WhatsAppTemplatesPayloadTest {
     @SuppressWarnings("unchecked")
     void a_submission_carries_positional_text_examples_and_the_url_button() {
         var shipped = loadAll().stream().filter(x -> x.key().equals("order_shipped_v1")).findFirst().orElseThrow();
-        var payload = WhatsAppTemplates.payload(shipped, shipped.locales().get("hi-Latn"));
+        var payload = WhatsAppTemplates.payload(shipped, shipped.locales().get("en"));
 
-        assertEquals("order_shipped_v1_hi", payload.get("name"));
+        assertEquals("order_shipped_v1", payload.get("name"));
         assertEquals("en", payload.get("language"));
         assertEquals("UTILITY", payload.get("category"));
         var components = (List<Map<String, Object>>) payload.get("components");
         var body = components.getFirst();
-        assertEquals("Aapka WUMIKA order {{1}} courier {{2}} se ship ho gaya hai (AWB {{3}}). Neeche diye button se track karein.",
+        assertEquals("Your WUMIKA order {{1}} has shipped with {{2}} (AWB {{3}}). Track it with the button below.",
                 body.get("text"));
         assertEquals(List.of(List.of("#1042", "Delhivery", "1234567890123")),
                 ((Map<String, Object>) body.get("example")).get("body_text"));

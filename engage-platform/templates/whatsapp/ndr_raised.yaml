@@ -3,6 +3,5 @@ channel: whatsapp
 category: utility
 locales:
   en:      { body: "Delivery of your WUMIKA order {{order_no}} by {{courier}} did not go through: {{reason}}. Reply with a convenient time or an updated address and we will arrange another attempt." }
-  hi-Latn: { body: "Aapka WUMIKA order {{order_no}} courier {{courier}} deliver nahi kar paya: {{reason}}. Suvidha ka time ya naya address reply karein, hum dobara delivery karwayenge." }
 vars: [order_no, courier, reason]
 samples: { order_no: "#1042", courier: "Delhivery", reason: "Customer not available at the address" }

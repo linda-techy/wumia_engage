@@ -3,6 +3,5 @@ channel: whatsapp
 category: utility
 locales:
   en:      { body: "Your WUMIKA order {{order_no}} is out for delivery today with {{courier}}. Please keep your phone reachable." }
-  hi-Latn: { body: "Aapka WUMIKA order {{order_no}} aaj courier {{courier}} se deliver hoga. Kripya apna phone reachable rakhein." }
 vars: [order_no, courier]
 samples: { order_no: "#1042", courier: "Delhivery" }

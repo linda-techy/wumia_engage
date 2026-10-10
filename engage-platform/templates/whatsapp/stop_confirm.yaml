@@ -6,6 +6,5 @@ channel: whatsapp
 category: service
 locales:
   en:      { body: "You will not get more messages from WUMIKA on WhatsApp. Reply START if you change your mind." }
-  hi-Latn: { body: "Ab aapko WhatsApp par WUMIKA se aur messages nahi aayenge. Wapas chahiye toh START reply karein." }
 vars: []
 samples: {}

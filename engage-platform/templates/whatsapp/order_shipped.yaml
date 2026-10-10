@@ -6,7 +6,6 @@ channel: whatsapp
 category: utility
 locales:
   en:      { body: "Your WUMIKA order {{order_no}} has shipped with {{courier}} (AWB {{awb}}). Track it with the button below." }
-  hi-Latn: { body: "Aapka WUMIKA order {{order_no}} courier {{courier}} se ship ho gaya hai (AWB {{awb}}). Neeche diye button se track karein." }
 buttons:
   - { text: "Track order", url: "https://wumika.com/apps/push/t/{{track_ref}}" }
 vars: [order_no, courier, awb, track_ref]

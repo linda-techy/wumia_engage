@@ -6,6 +6,5 @@ category: marketing
 cooldown: P1D
 locales:
   en:      { title: "Still thinking about it?", body: "{{product}} is still in stock. Take another look." }
-  hi-Latn: { title: "Abhi bhi soch rahe hain?", body: "{{product}} abhi stock mein hai. Ek baar aur dekhiye." }
 vars: [product, url, image]
 samples: { product: "Floral Anarkali Kurta" }
