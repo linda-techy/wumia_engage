@@ -113,6 +113,48 @@ class CheckoutAbandonTest {
         assertEquals("exhausted|sent", run(checkout));
     }
 
+    @Test void the_discount_goes_once_per_customer_in_60_days() {
+        discountCode();
+        var who = customer(true, true);
+        db.inTx(c -> Sql.update(c, """
+                INSERT INTO sends (identity_id, channel, category, template_key, idempotency_key, status, created_at)
+                VALUES (?, 'whatsapp', 'marketing', 'checkout_offer_v1', ?, 'delivered', now() - interval '20 days')""",
+                who, "test-offer-" + UUID.randomUUID()));
+        abandon(who, 1249900);
+        assertFalse(hasCode(checkout), "got the discount 20 days ago: reminders only");
+    }
+
+    @Test void two_open_checkouts_carry_the_discount_once() {
+        discountCode();
+        var who = customer(true, true);
+        abandon(who, 1249900);
+        assertTrue(hasCode(checkout));
+        checkout = "test-checkout-" + UUID.randomUUID();
+        cart = "test-cart-" + UUID.randomUUID();
+        abandon(who, 1249900);
+        assertFalse(hasCode(checkout), "the first checkout's run already holds the offer");
+    }
+
+    @Test void first_time_buyers_only_skips_customers_with_an_order() {
+        discountCode();
+        db.inTx(c -> {
+            setConfig(c, "journey.abandon.discount_new_customers_only", "true");
+            return null;
+        });
+        config.invalidate();
+        var buyer = customer(true, true);
+        db.inTx(c -> Sql.update(c, "INSERT INTO orders (id, order_number, identity_id, total_paise, created_at) VALUES (?, '#1001', ?, 99900, now())",
+                "test-order-" + UUID.randomUUID(), buyer));
+        abandon(buyer, 1249900);
+        assertFalse(hasCode(checkout), "has ordered before");
+
+        var newcomer = customer(true, true);
+        checkout = "test-checkout-" + UUID.randomUUID();
+        cart = "test-cart-" + UUID.randomUUID();
+        abandon(newcomer, 1249900);
+        assertTrue(hasCode(checkout), "never ordered: gets the code");
+    }
+
     @Test void without_a_whatsapp_opt_in_the_push_goes_at_30_minutes() {
         var who = customer(false, true);
         abandon(who, 1249900);
@@ -186,6 +228,26 @@ class CheckoutAbandonTest {
     }
 
     /* -------------------------------- fixtures -------------------------------- */
+
+    private void discountCode() {
+        db.inTx(c -> {
+            setConfig(c, "journey.abandon.discount_code", "\"WUMIKA10\"");
+            setConfig(c, "journey.abandon.discount_label", "\"10% off\"");
+            return null;
+        });
+        config.invalidate();
+    }
+
+    private boolean hasCode(String subject) {
+        return db.inTx(c -> {
+            try (var ps = Sql.prepare(c, """
+                    SELECT vars->>'code' IS NOT NULL FROM cascade_runs WHERE subject_key = ? ORDER BY id DESC LIMIT 1""", subject);
+                 var rs = ps.executeQuery()) {
+                assertTrue(rs.next(), "no run for " + subject);
+                return rs.getBoolean(1);
+            }
+        });
+    }
 
     private void at(String istTime) {
         clock.setIst("2026-09-28T" + istTime + ":00");

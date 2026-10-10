@@ -134,6 +134,13 @@ t+6h      SMS       sms_payment_link       require WA_INCAPABLE_OR_UNREAD
 >
 >   Email (SES) joins in P7.
 > - **WhatsApp guards:** `WA_MARKETING`, not INCAPABLE (UNKNOWN numbers are tried, because Meta bills only delivered messages), and the cart at least `wa_min_cart_paise`. The default minimum is 0, meaning every cart. Policy still applies consent, caps (1 marketing WhatsApp a day by default), quiet hours and the daily budget.
+> - **Who gets the discount** (V26, owner's decision 2026-10-10):
+>   - at most one discount message per customer per `journey.abandon.discount_cooldown_days` (default 60). Both offers already sent and an offer still waiting in another live run count;
+>   - optionally only customers with no past order (`journey.abandon.discount_new_customers_only`, default off);
+>   - a customer who doesn't qualify still gets the reminders; the last step is skipped.
+>
+>   Pair this with "Limit to one use per customer" on the code in Shopify admin.
+> - **Next, before real customers:** unique single-use 48 h codes per customer. They need the `write_discounts` scope on the live store app, which needs the owner's approval; build and test on wumika-dev first. Shared codes leak to coupon sites.
 > - **No guard-only step 0.** Every `checkout_updated` restarts the wait. A completed checkout or `order_placed` ends the run, and starting it ends `cart_recovery` for the same cart.
 > - **No SMS step** (CLAUDE.md §3.2).
 > - **Not built yet:** the hand-over from `payment_failed`, which waits for T02.

@@ -38,6 +38,12 @@ import java.util.UUID;
  * <li>Every checkout update restarts the wait (the shopper is still in it);
  *     a completed checkout or {@code order_placed} ends the run.</li>
  * <li>Starting it ends {@code cart_recovery} for the same cart: one journey per basket.</li>
+ * <li>The discount goes at most once per customer per
+ *     {@code journey.abandon.discount_cooldown_days}, counting offers sent and
+ *     offers still waiting in another live run, and optionally only to
+ *     customers without a past order ({@code discount_new_customers_only}):
+ *     otherwise shoppers learn to abandon for a code. Without it, the last
+ *     step is skipped and the reminders still go.</li>
  * <li>WhatsApp goes to numbers not known to lack it: Meta bills a message only
  *     when delivered, so trying an UNKNOWN number costs nothing if it has no
  *     WhatsApp. Policy still applies consent, caps, quiet hours and budget.</li>
@@ -121,12 +127,33 @@ public class CheckoutAbandon implements EventConsumer {
             if (total >= snapshot.longValue("journey.checkout_abandon.wa_min_cart_paise", "*")) vars.put(WA_OK, "1");
             var code = snapshot.text("journey.abandon.discount_code", "*").strip();
             var label = snapshot.text("journey.abandon.discount_label", "*").strip();
-            if (!code.isEmpty() && !label.isEmpty()) {
+            if (!code.isEmpty() && !label.isEmpty() && discountAllowed(c, identity, token, e, snapshot)) {
                 vars.put("code", code);
                 vars.put("discount", label);
             }
             var stall = Duration.ofMinutes(snapshot.longValue("journey.checkout_abandon.stall_minutes", "*"));
             return List.of(new MessageIntent(identity, INTENT, token, Map.copyOf(vars), e.occurredAt().plus(stall)));
+        }
+    }
+
+    /** May this customer get the discount on this checkout? Decided when the run starts. */
+    private static boolean discountAllowed(Connection c, UUID identity, String token, Event e,
+                                           in.brand.engage.policy.ConfigSnapshot snapshot) throws SQLException {
+        var since = e.occurredAt().minus(Duration.ofDays(snapshot.longValue("journey.abandon.discount_cooldown_days", "*")))
+                .atOffset(java.time.ZoneOffset.UTC);
+        boolean newOnly = snapshot.boolValue("journey.abandon.discount_new_customers_only", "*");
+        try (var ps = Sql.prepare(c, """
+                SELECT EXISTS (SELECT 1 FROM sends s
+                                WHERE s.identity_id = ? AND s.template_key = 'checkout_offer_v1'
+                                  AND s.status IN ('queued','sent','delivered','read','clicked') AND s.created_at > ?)
+                    OR EXISTS (SELECT 1 FROM cascade_runs r
+                                WHERE r.identity_id = ? AND r.intent_key = ? AND r.subject_key <> ?
+                                  AND r.status IN ('active','waiting') AND r.vars->>'code' IS NOT NULL)
+                    OR (? AND EXISTS (SELECT 1 FROM orders o WHERE o.identity_id = ? AND o.cancelled_at IS NULL))""",
+                identity, since, identity, INTENT, token, newOnly, identity);
+             var rs = ps.executeQuery()) {
+            rs.next();
+            return !rs.getBoolean(1);
         }
     }
 
