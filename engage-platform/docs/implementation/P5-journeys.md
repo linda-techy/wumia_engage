@@ -140,7 +140,13 @@ t+6h      SMS       sms_payment_link       require WA_INCAPABLE_OR_UNREAD
 >   - a customer who doesn't qualify still gets the reminders; the last step is skipped.
 >
 >   Pair this with "Limit to one use per customer" on the code in Shopify admin.
-> - **Next, before real customers:** unique single-use 48 h codes per customer. They need the `write_discounts` scope on the live store app, which needs the owner's approval; build and test on wumika-dev first. Shared codes leak to coupon sites.
+> - **Unique codes** (V27, 2026-10-11): with `journey.abandon.discount_mode = unique`, `AbandonDiscount` creates the code in Shopify when the discount WhatsApp is due, so codes are made only for runs that reach that step. It's a `StepVars` provider; steps name one with `withVarsFrom`. Each code:
+>   - is `WUM` plus 8 characters, avoiding look-alikes (0, O, 1, I, L);
+>   - is single use, once per customer, for the whole order;
+>   - gives `discount_percent` off (default 10), valid for `discount_valid_hours` (default 48), with an optional minimum order.
+>
+>   The code is kept on the run, so a retry reuses it. If Shopify refuses (for example, the app lacks `write_discounts`), the discount step is skipped with the reason recorded. Default mode is `shared`.
+> - **Scope:** `write_discounts` is added to `shopify.app.dev.toml` (wumikaEngage-dev). The owner deploys it and approves it on wumika-dev, then on the live app (`shopify.app.engage.toml`) after testing. `config/local.env` points at the live store, so a dev-store test runs with `config/devstore.env`.
 > - **No guard-only step 0.** Every `checkout_updated` restarts the wait. A completed checkout or `order_placed` ends the run, and starting it ends `cart_recovery` for the same cart.
 > - **No SMS step** (CLAUDE.md §3.2).
 > - **Not built yet:** the hand-over from `payment_failed`, which waits for T02.

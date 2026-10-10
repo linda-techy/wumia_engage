@@ -34,6 +34,7 @@ class CheckoutAbandonTest {
     @Inject Db db;
     @Inject WorkerTestBeans.FakeWhatsApp wa;
     @Inject WorkerTestBeans.FakePush push;
+    @Inject WorkerTestBeans.FakeDiscounts discounts;
 
     String cart;
     String checkout;
@@ -42,6 +43,7 @@ class CheckoutAbandonTest {
         clock.setIst("2026-09-28T12:00:00");
         wa.reset();
         push.all.clear();
+        discounts.reset();
         db.inTx(c -> {
             try (var st = c.createStatement(); var rs = st.executeQuery("select current_database()")) {
                 rs.next();
@@ -89,7 +91,7 @@ class CheckoutAbandonTest {
         clock.setIst("2026-09-29T12:40:00");
         orchestrator.tick(200);
         assertEquals(1, wa.all.size(), "no discount message without a code");
-        assertEquals("exhausted|skipped:HAS_CODE", run(checkout));
+        assertEquals("exhausted|skipped:HAS_DISCOUNT", run(checkout));
     }
 
     @Test void with_a_code_the_last_whatsapp_carries_it() {
@@ -111,6 +113,42 @@ class CheckoutAbandonTest {
         assertEquals("checkout_offer_v1", offer.name());
         assertEquals(List.of("Priya", "Kundan Jhumka Earrings", "WUMIKA10", "10% off"), offer.bodyParams());
         assertEquals("exhausted|sent", run(checkout));
+    }
+
+    @Test void unique_mode_makes_a_single_use_code_when_the_discount_message_goes() {
+        uniqueCodes();
+        var who = customer(true, true);
+        abandon(who, 1249900);
+        at("12:31");
+        at("16:32");
+        assertTrue(discounts.created.isEmpty(), "no code until the discount message is due");
+        clock.setIst("2026-09-29T12:40:00");
+        orchestrator.tick(200);
+
+        assertEquals(1, discounts.created.size(), attempts(checkout));
+        var spec = discounts.created.getFirst();
+        assertTrue(spec.code().matches("WUM[A-HJ-NP-Z2-9]{8}"), spec.code());
+        assertEquals(15, spec.percent());
+        assertEquals(java.time.Duration.ofHours(48), java.time.Duration.between(spec.startsAt(), spec.endsAt()));
+        var offer = wa.all.getLast().whatsapp();
+        assertEquals("checkout_offer_v1", offer.name());
+        assertEquals(List.of("Priya", "Kundan Jhumka Earrings", spec.code(), "15% off"), offer.bodyParams());
+        assertEquals(spec.code(), runVar(checkout, "code"), "kept on the run, so a retry reuses it");
+    }
+
+    @Test void if_shopify_refuses_the_code_the_discount_message_is_skipped() {
+        uniqueCodes();
+        discounts.refuse = new in.brand.engage.worker.intents.DiscountCodes.Failed("access denied: the app needs write_discounts", false);
+        var who = customer(true, true);
+        abandon(who, 1249900);
+        at("12:31");
+        at("16:32");
+        clock.setIst("2026-09-29T12:40:00");
+        orchestrator.tick(200);
+
+        assertEquals(1, wa.all.size(), "the reminder went; no message with a code that does not exist");
+        assertEquals("exhausted|skipped:vars:abandon_discount", run(checkout));
+        assertTrue(attempts(checkout).contains("write_discounts"), attempts(checkout));
     }
 
     @Test void the_discount_goes_once_per_customer_in_60_days() {
@@ -229,6 +267,24 @@ class CheckoutAbandonTest {
 
     /* -------------------------------- fixtures -------------------------------- */
 
+    private void uniqueCodes() {
+        db.inTx(c -> {
+            setConfig(c, "journey.abandon.discount_mode", "\"unique\"");
+            setConfig(c, "journey.abandon.discount_percent", "15");
+            return null;
+        });
+        config.invalidate();
+    }
+
+    private String runVar(String subject, String key) {
+        return db.inTx(c -> {
+            try (var ps = Sql.prepare(c, "SELECT vars->>? FROM cascade_runs WHERE subject_key = ? ORDER BY id DESC LIMIT 1", key, subject);
+                 var rs = ps.executeQuery()) {
+                return rs.next() ? rs.getString(1) : null;
+            }
+        });
+    }
+
     private void discountCode() {
         db.inTx(c -> {
             setConfig(c, "journey.abandon.discount_code", "\"WUMIKA10\"");
@@ -241,7 +297,7 @@ class CheckoutAbandonTest {
     private boolean hasCode(String subject) {
         return db.inTx(c -> {
             try (var ps = Sql.prepare(c, """
-                    SELECT vars->>'code' IS NOT NULL FROM cascade_runs WHERE subject_key = ? ORDER BY id DESC LIMIT 1""", subject);
+                    SELECT vars->>'discount' IS NOT NULL FROM cascade_runs WHERE subject_key = ? ORDER BY id DESC LIMIT 1""", subject);
                  var rs = ps.executeQuery()) {
                 assertTrue(rs.next(), "no run for " + subject);
                 return rs.getBoolean(1);

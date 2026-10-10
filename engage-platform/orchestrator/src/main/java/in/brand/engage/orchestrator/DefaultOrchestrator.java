@@ -38,12 +38,17 @@ public class DefaultOrchestrator implements MessageOrchestrator {
     private final CascadeDefinitions definitions;
     private final MessageRouter router;
     private final Clock clock;
+    private final Map<String, StepVars> stepVars = new HashMap<>();
 
-    public DefaultOrchestrator(Db db, CascadeDefinitions definitions, MessageRouter router, Clock clock) {
+    public DefaultOrchestrator(Db db, CascadeDefinitions definitions, MessageRouter router, Clock clock,
+                               List<StepVars> stepVars) {
         this.db = db;
         this.definitions = definitions;
         this.router = router;
         this.clock = clock;
+        for (var p : stepVars) {
+            if (this.stepVars.put(p.name(), p) != null) throw new IllegalStateException("two StepVars named " + p.name());
+        }
     }
 
     @Override
@@ -212,6 +217,16 @@ public class DefaultOrchestrator implements MessageOrchestrator {
             }
 
             var vars = vars(current.id());
+            if (step.varsFrom() != null) {
+                // Values only the send moment can give (a single-use code); skipped like a guard when unavailable.
+                var unavailable = provideVars(current, step, vars);
+                if (unavailable != null) {
+                    attempt(current, step, null, "skipped", unavailable);
+                    if (last) return finish(current, "exhausted", "skipped:vars:" + step.varsFrom());
+                    current = skip(current);
+                    continue;
+                }
+            }
             var result = router.send(new SendCommand(current.identityId(), current.intentKey(), current.id(),
                     current.stepIndex(), step.channel(), step.templateFor(vars), vars,
                     "run:" + current.id() + ":step:" + current.stepIndex(),
@@ -340,6 +355,29 @@ public class DefaultOrchestrator implements MessageOrchestrator {
         return db.inTx(c -> one(c, sql, params))
                 .or(() -> find(runId))
                 .orElseThrow(() -> new IllegalStateException("run " + runId + " vanished"));
+    }
+
+    /** Adds the step's provider values to {@code vars} and keeps them on the run. @return null, or why the step cannot go */
+    private String provideVars(CascadeRun run, CascadeDefinition.Step step, Map<String, String> vars) {
+        var provider = stepVars.get(step.varsFrom());
+        if (provider == null) return "vars:" + step.varsFrom() + ":no_provider";
+        try {
+            var extra = provider.provide(run, Map.copyOf(vars));
+            if (!extra.isEmpty()) {
+                db.inTx(c -> {
+                    for (var e : extra.entrySet()) {
+                        Sql.update(c, "UPDATE cascade_runs SET vars = jsonb_set(vars, ARRAY[?], to_jsonb(?::text)) WHERE id = ?",
+                                e.getKey(), e.getValue(), run.id());
+                    }
+                    return null;
+                });
+                vars.putAll(extra);
+            }
+            return null;
+        } catch (StepVars.Unavailable e) {
+            var reason = "vars:" + step.varsFrom() + ":" + e.getMessage();
+            return reason.length() > 200 ? reason.substring(0, 200) : reason;
+        }
     }
 
     private Map<String, String> vars(long runId) {

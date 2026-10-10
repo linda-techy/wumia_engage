@@ -31,7 +31,9 @@ import java.util.UUID;
  * t+30 min  WhatsApp checkout_reminder_v1  marketing opt-in, not INCAPABLE, cart ≥ wa_min_cart_paise
  *           (skipped → the push goes at once instead)
  * +4 h      Push     push_checkout_v1       a live browser subscription
- * +20 h     WhatsApp checkout_offer_v1      as step 1, and journey.abandon.discount_code is set
+ * +20 h     WhatsApp checkout_offer_v1      as step 1, and a discount applies: the operator's shared
+ *                                          code, or (discount_mode = unique) a single-use code made
+ *                                          at send time by AbandonDiscount
  * </pre>
  *
  * <ul>
@@ -75,7 +77,8 @@ public class CheckoutAbandon implements EventConsumer {
             return new CascadeDefinition(INTENT, Priority.HIGH_INTENT, List.of(
                     Step.whatsapp("checkout_reminder_v1").require(wa).waitAfter(Duration.ofHours(4)),
                     Step.push("push_checkout_v1", TTL).require(Guard.HAS_LIVE_DEVICE).waitAfter(Duration.ofHours(20)),
-                    Step.whatsapp("checkout_offer_v1").require(wa).require(Guard.hasVar("code"))));
+                    Step.whatsapp("checkout_offer_v1").require(wa).require(Guard.hasVar("discount"))
+                            .withVarsFrom(AbandonDiscount.NAME)));
         }
     }
 
@@ -125,11 +128,19 @@ public class CheckoutAbandon implements EventConsumer {
             vars.put("url", storefront.path(path));
             vars.put("cart_value_paise", Long.toString(total));
             if (total >= snapshot.longValue("journey.checkout_abandon.wa_min_cart_paise", "*")) vars.put(WA_OK, "1");
-            var code = snapshot.text("journey.abandon.discount_code", "*").strip();
-            var label = snapshot.text("journey.abandon.discount_label", "*").strip();
-            if (!code.isEmpty() && !label.isEmpty() && discountAllowed(c, identity, token, e, snapshot)) {
-                vars.put("code", code);
-                vars.put("discount", label);
+            if ("unique".equals(snapshot.text("journey.abandon.discount_mode", "*").strip())) {
+                // The code itself is made when the discount message goes (AbandonDiscount).
+                if (discountAllowed(c, identity, token, e, snapshot)) {
+                    vars.put("discount_mode", "unique");
+                    vars.put("discount", snapshot.longValue("journey.abandon.discount_percent", "*") + "% off");
+                }
+            } else {
+                var code = snapshot.text("journey.abandon.discount_code", "*").strip();
+                var label = snapshot.text("journey.abandon.discount_label", "*").strip();
+                if (!code.isEmpty() && !label.isEmpty() && discountAllowed(c, identity, token, e, snapshot)) {
+                    vars.put("code", code);
+                    vars.put("discount", label);
+                }
             }
             var stall = Duration.ofMinutes(snapshot.longValue("journey.checkout_abandon.stall_minutes", "*"));
             return List.of(new MessageIntent(identity, INTENT, token, Map.copyOf(vars), e.occurredAt().plus(stall)));
@@ -148,7 +159,7 @@ public class CheckoutAbandon implements EventConsumer {
                                   AND s.status IN ('queued','sent','delivered','read','clicked') AND s.created_at > ?)
                     OR EXISTS (SELECT 1 FROM cascade_runs r
                                 WHERE r.identity_id = ? AND r.intent_key = ? AND r.subject_key <> ?
-                                  AND r.status IN ('active','waiting') AND r.vars->>'code' IS NOT NULL)
+                                  AND r.status IN ('active','waiting') AND r.vars->>'discount' IS NOT NULL)
                     OR (? AND EXISTS (SELECT 1 FROM orders o WHERE o.identity_id = ? AND o.cancelled_at IS NULL))""",
                 identity, since, identity, INTENT, token, newOnly, identity);
              var rs = ps.executeQuery()) {

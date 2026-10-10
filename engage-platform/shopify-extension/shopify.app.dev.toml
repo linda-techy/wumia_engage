@@ -17,7 +17,7 @@ embedded = false
 # write_pixels + read_customer_events: the engage-pixel web pixel (P2-T06),
 # activated with webPixelCreate.
 # read_fulfillments: fulfillments/create + update (P1-T02, AWB and shipping states).
-scopes = "read_orders,read_customers,read_inventory,read_products,write_pixels,read_customer_events,read_fulfillments"
+scopes = "read_orders,read_customers,read_inventory,read_products,write_pixels,read_customer_events,read_fulfillments,write_discounts"
 use_legacy_install_flow = false
 
 [auth]

@@ -122,6 +122,24 @@ public class WorkerTestBeans {
         }
     }
 
+    /** Shopify discount codes that never leave the JVM: records each one, or refuses as scripted. */
+    @Singleton
+    @Replaces(in.brand.engage.worker.intents.ShopifyDiscountCodes.class)
+    public static class FakeDiscounts implements in.brand.engage.worker.intents.DiscountCodes {
+        public final List<Spec> created = new java.util.concurrent.CopyOnWriteArrayList<>();
+        public volatile Failed refuse;
+
+        @Override public void create(Spec spec) throws Failed {
+            if (refuse != null) throw refuse;
+            created.add(spec);
+        }
+
+        public void reset() {
+            created.clear();
+            refuse = null;
+        }
+    }
+
     /** SMS that never leaves the JVM. */
     @Singleton
     @Replaces(Msg91Adapter.class)

@@ -55,10 +55,16 @@ public record CascadeDefinition(String intentKey, Priority priority, List<Step> 
      * @param reply              a reply inside the WhatsApp service window the customer just opened
      *                           (the STOP confirmation): policy lets it through without an opt-in
      * @param guards             all must pass, or the step is skipped at once (no wait consumed)
+     * @param varsFrom           a {@link StepVars} provider asked for values at send time, or null
      */
     public record Step(Channel channel, String templateKey, Duration ttl, boolean highUrgency,
                        boolean allowStaleDevices, Duration waitAfter, List<String> alternateTemplates, boolean reply,
-                       List<Guard> guards) {
+                       List<Guard> guards, String varsFrom) {
+
+        public Step(Channel channel, String templateKey, Duration ttl, boolean highUrgency, boolean allowStaleDevices,
+                    Duration waitAfter, List<String> alternateTemplates, boolean reply, List<Guard> guards) {
+            this(channel, templateKey, ttl, highUrgency, allowStaleDevices, waitAfter, alternateTemplates, reply, guards, null);
+        }
 
         public Step {
             alternateTemplates = List.copyOf(alternateTemplates);
@@ -93,27 +99,33 @@ public record CascadeDefinition(String intentKey, Priority priority, List<Step> 
         }
 
         public Step urgent() {
-            return new Step(channel, templateKey, ttl, true, allowStaleDevices, waitAfter, alternateTemplates, reply, guards);
+            return new Step(channel, templateKey, ttl, true, allowStaleDevices, waitAfter, alternateTemplates, reply, guards, varsFrom);
         }
 
         public Step staleDevicesAllowed() {
-            return new Step(channel, templateKey, ttl, highUrgency, true, waitAfter, alternateTemplates, reply, guards);
+            return new Step(channel, templateKey, ttl, highUrgency, true, waitAfter, alternateTemplates, reply, guards, varsFrom);
         }
 
         public Step waitAfter(Duration wait) {
-            return new Step(channel, templateKey, ttl, highUrgency, allowStaleDevices, wait, alternateTemplates, reply, guards);
+            return new Step(channel, templateKey, ttl, highUrgency, allowStaleDevices, wait, alternateTemplates, reply, guards, varsFrom);
         }
 
         public Step require(Guard... more) {
             var all = new ArrayList<>(guards);
             all.addAll(List.of(more));
-            return new Step(channel, templateKey, ttl, highUrgency, allowStaleDevices, waitAfter, alternateTemplates, reply, all);
+            return new Step(channel, templateKey, ttl, highUrgency, allowStaleDevices, waitAfter, alternateTemplates, reply, all, varsFrom);
         }
 
         public Step orTemplate(String alternate) {
             var all = new ArrayList<>(alternateTemplates);
             all.add(alternate);
-            return new Step(channel, templateKey, ttl, highUrgency, allowStaleDevices, waitAfter, all, reply, guards);
+            return new Step(channel, templateKey, ttl, highUrgency, allowStaleDevices, waitAfter, all, reply, guards, varsFrom);
+        }
+
+        /** Ask the named {@link StepVars} provider for values just before this step sends. */
+        public Step withVarsFrom(String provider) {
+            return new Step(channel, templateKey, ttl, highUrgency, allowStaleDevices, waitAfter, alternateTemplates, reply,
+                    guards, provider);
         }
 
         /** The first guard that fails for this person, or null when every guard passes. */
