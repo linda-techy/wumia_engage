@@ -66,10 +66,11 @@ Never in the database, never in the admin UI, never in `application.yml`. Inject
 
 ```
 DB_URL, DB_PASSWORD
-WA_ACCESS_TOKEN, WA_APP_SECRET, WA_PHONE_NUMBER_ID
+WA_ACCESS_TOKEN, WA_APP_SECRET, WA_WEBHOOK_VERIFY_TOKEN   # system-user token, never the 24 h temporary one
+WA_PHONE_NUMBER_ID, WA_BUSINESS_ACCOUNT_ID                 # not secret, but they switch sending on
 FIREBASE_SERVICE_ACCOUNT_B64
 AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
-MSG91_AUTH_KEY
+MSG91_AUTH_KEY, MSG91_DLR_TOKEN                            # DLR token = the secret in the delivery-report URL
 JWT_PRIVATE_KEY, JWT_PUBLIC_KEY
 CONFIG_ENCRYPTION_KEY          # wraps operators.mfa_secret_enc
 ```
