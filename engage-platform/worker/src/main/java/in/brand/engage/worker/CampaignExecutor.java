@@ -158,13 +158,17 @@ public class CampaignExecutor {
         if (grant <= 0) return null;
 
         var claimed = new ArrayList<UUID>();
+        // MATERIALIZED: picked once. As an IN (… LIMIT … SKIP LOCKED) subquery Postgres may
+        // re-run it, skip the rows it just claimed, and claim past the LIMIT (and the rate).
         try (var ps = Sql.prepare(c, """
-                UPDATE campaign_recipients r SET state = 'claimed', attempts = attempts + 1, processed_at = now()
-                 WHERE r.campaign_id = ? AND r.identity_id IN (
+                WITH picked AS MATERIALIZED (
                        SELECT identity_id FROM campaign_recipients
                         WHERE campaign_id = ? AND state = 'pending' AND bucket = 'treatment'
                         ORDER BY identity_id LIMIT ? FOR UPDATE SKIP LOCKED)
-                RETURNING r.identity_id""", id, id, grant); var rs = ps.executeQuery()) {
+                UPDATE campaign_recipients r SET state = 'claimed', attempts = attempts + 1, processed_at = now()
+                  FROM picked
+                 WHERE r.campaign_id = ? AND r.identity_id = picked.identity_id
+                RETURNING r.identity_id""", id, grant, id); var rs = ps.executeQuery()) {
             while (rs.next()) claimed.add(rs.getObject(1, UUID.class));
         }
         Sql.update(c, "UPDATE campaign_rate_buckets SET tokens = tokens - ? WHERE campaign_id = ?", claimed.size(), id);

@@ -137,7 +137,8 @@ public class MessageRouter {
             sends.markSent(sendId, cmd.channel(), allow.effectiveCategory(), allow.unitCostPaise(), result);
             return new SendResult.Sent(sendId, result.delivered());
         } catch (ChannelException.Permanent e) {
-            return fail(cmd, sendId, e.code(), e.suppress(), false, e.prunes());
+            sends.markFailed(sendId, cmd.identityId(), cmd.channel(), e.code(), e.suppress(), e.prunes());
+            return new SendResult.Failed(sendId, e.code(), false, e.escalateImmediately());
         } catch (ChannelException.Transient e) {
             LOG.warn("send {}: transient provider failure: {}", sendId, e.getMessage());
             return fail(cmd, sendId, e.code(), false, true, e.prunes());

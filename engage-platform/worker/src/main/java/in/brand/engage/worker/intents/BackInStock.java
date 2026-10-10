@@ -73,11 +73,13 @@ public class BackInStock implements EventConsumer {
 
         var intents = new ArrayList<MessageIntent>();
         try (var ps = Sql.prepare(c, """
+                WITH due AS MATERIALIZED (
+                       SELECT identity_id, variant_id FROM stock_waitlist
+                        WHERE variant_id = ? AND notified_at IS NULL
+                        ORDER BY created_at LIMIT ?
+                          FOR UPDATE SKIP LOCKED)
                 UPDATE stock_waitlist w SET notified_at = now()
-                  FROM (SELECT identity_id, variant_id FROM stock_waitlist
-                         WHERE variant_id = ? AND notified_at IS NULL
-                         ORDER BY created_at LIMIT ?
-                           FOR UPDATE SKIP LOCKED) due
+                  FROM due
                  WHERE w.identity_id = due.identity_id AND w.variant_id = due.variant_id
                 RETURNING w.identity_id, w.size_label, w.product_handle""", variantId, limit);
              var rs = ps.executeQuery()) {

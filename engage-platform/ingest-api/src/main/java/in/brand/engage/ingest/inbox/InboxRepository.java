@@ -149,17 +149,19 @@ public class InboxRepository {
     public List<Item> claim(int limit) {
         return db.inTx(c -> {
             try (PreparedStatement ps = c.prepareStatement("""
-                    UPDATE webhook_inbox w
-                       SET attempts = w.attempts + 1,
-                           next_attempt_at = now() + interval '5 minutes'
-                      FROM (SELECT source, delivery_id
+                    WITH due AS MATERIALIZED (
+                            SELECT source, delivery_id
                               FROM webhook_inbox
                              WHERE processed_at IS NULL
                                AND next_attempt_at <= now()
                                AND attempts < ?
                              ORDER BY received_at
                              LIMIT ?
-                             FOR UPDATE SKIP LOCKED) due
+                             FOR UPDATE SKIP LOCKED)
+                    UPDATE webhook_inbox w
+                       SET attempts = w.attempts + 1,
+                           next_attempt_at = now() + interval '5 minutes'
+                      FROM due
                      WHERE w.source = due.source AND w.delivery_id = due.delivery_id
                  RETURNING w.source, w.delivery_id, w.topic, w.attempts""")) {
                 ps.setInt(1, MAX_ATTEMPTS);

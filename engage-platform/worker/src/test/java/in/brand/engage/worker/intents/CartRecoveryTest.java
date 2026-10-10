@@ -84,6 +84,25 @@ class CartRecoveryTest {
         assertEquals("succeeded|clicked", run(cart));
     }
 
+    @Test void a_whatsapp_reply_or_button_tap_succeeds_but_a_read_does_not() {
+        var id = subscriber(true);
+        var cart = cart(id, 1, false);
+        cartUpdated(id, cart, clock.instant().minus(Duration.ofMinutes(50)));
+        dispatcher.dispatchOnce();
+        // Stand the push send in for a WhatsApp one, as Meta's wamid would identify it.
+        long sendId = count("SELECT s.id FROM sends s JOIN cascade_runs r ON r.id = s.cascade_run_id WHERE r.subject_key = ?", cart);
+        var wamid = "wamid.test-" + UUID.randomUUID();
+        db.inTx(c -> Sql.update(c, "UPDATE sends SET channel = 'whatsapp', provider_id = ? WHERE id = ?", wamid, sendId));
+
+        event(id, "wa_read", "{\"send_id\":" + sendId + "}", clock.instant());
+        dispatcher.dispatchOnce();
+        assertEquals("exhausted|sent", run(cart), "a read is not engagement for a promotional cascade");
+
+        event(id, "fit_ok", "{\"message_id\":\"m1\",\"context_wamid\":\"" + wamid + "\"}", clock.instant());
+        dispatcher.dispatchOnce();
+        assertEquals("succeeded|replied", run(cart));
+    }
+
     @Test void a_recent_change_waits_45_minutes_and_the_tick_sends_it() {
         var id = subscriber(true);
         var cart = cart(id, 1, false);
