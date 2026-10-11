@@ -11,9 +11,11 @@ application_url = "https://www.wumika.com/"
 embedded = false
 
 [access_scopes]
-# Read-only. read_orders covers orders/*, checkouts/* and carts/* webhooks;
-# read_customers covers customers/*.
-scopes = "read_orders,read_customers"
+# read_orders covers orders/*, checkouts/* and carts/* webhooks; read_customers
+# covers customers/*. write_discounts (owner's decision, 2026-10-11): the worker
+# creates single-use abandoned-checkout and win-back codes; tested on wumika-dev.
+# Takes effect only after a deploy and the owner approving it in the store admin.
+scopes = "read_orders,read_customers,write_discounts"
 use_legacy_install_flow = false
 
 [auth]
