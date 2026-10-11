@@ -1,14 +1,16 @@
-# DLT: see order_shipped.yaml. ₹ is not GSM-7 (it would make the SMS Unicode),
-# hence Rs. A Shopify checkout recovery path is far over the 30-character DLT
-# limit for a variable, so the link is a short store redirect,
-# /apps/push/pay/<ref> (the storefront proxy), which must exist before the
-# payment_failed journey uses this.
+# DLT: see order_shipped.yaml. payment_failed (P5-T02), ~6 h after the failure,
+# only if no WhatsApp of the run was read. A failed checkout has no order
+# number yet, so the Razorpay ref names it. ₹ is not GSM-7 (it would make the
+# SMS Unicode), hence Rs. Shopify's checkout recovery path is far over the
+# 30-character DLT variable limit, so the link is /apps/push/pay/<ref>: a
+# signed reference to the run, which the storefront proxy redirects to the
+# saved checkout (PayLinkController).
 key: sms_payment_link
 channel: sms
 category: utility
 dlt_template_id: PENDING
 msg91_template_id: PENDING
 locales:
-  en: { body: "Your payment of Rs {{amount}} for WUMIKA order {{order_no}} did not go through. Complete it here: https://wumika.com/apps/push/pay/{{pay_ref}} -WUMIKA" }
-vars: [amount, order_no, pay_ref]
-samples: { amount: "12,499", order_no: "#1042", pay_ref: "p8Kx2Q" }
+  en: { body: "Your payment of Rs {{amount_plain}} to WUMIKA did not go through (ref {{payment_id}}). Complete it here: https://wumika.com/apps/push/pay/{{pay_ref}} -WUMIKA" }
+vars: [amount_plain, payment_id, pay_ref]
+samples: { amount_plain: "12,499", payment_id: "pay_O6gPwJ3yP9rJ3k", pay_ref: "2s-AbCdEfGhIjK" }

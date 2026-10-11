@@ -1,0 +1,9 @@
+# payment_failed (P5-T02), ~25 min after the failure. Utility: about the
+# shopper's own failed payment.
+key: push_payment_retry_v1
+channel: push
+category: utility
+locales:
+  en: { title: "Your payment did not go through", body: "Your WUMIKA order is saved. Tap to try the payment again." }
+vars: [url, image]
+samples: {}

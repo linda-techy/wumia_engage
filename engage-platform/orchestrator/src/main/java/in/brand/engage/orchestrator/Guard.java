@@ -13,16 +13,22 @@ import java.util.function.Predicate;
 public record Guard(String name, Predicate<Context> test) {
 
     /** What the guards look at, loaded once per step ({@link DefaultOrchestrator}). */
+    /** @param whatsappReadInRun a WhatsApp message of this run has been read */
     public record Context(Priority priority, String waCapability, boolean hasLivePushDevice, boolean hasPhone,
-                          Set<String> grants, long cartValuePaise, Map<String, String> vars) {
+                          Set<String> grants, long cartValuePaise, Map<String, String> vars, boolean whatsappReadInRun) {
 
         public Context {
             vars = vars == null ? Map.of() : Map.copyOf(vars);
         }
 
         public Context(Priority priority, String waCapability, boolean hasLivePushDevice, boolean hasPhone,
+                       Set<String> grants, long cartValuePaise, Map<String, String> vars) {
+            this(priority, waCapability, hasLivePushDevice, hasPhone, grants, cartValuePaise, vars, false);
+        }
+
+        public Context(Priority priority, String waCapability, boolean hasLivePushDevice, boolean hasPhone,
                        Set<String> grants, long cartValuePaise) {
-            this(priority, waCapability, hasLivePushDevice, hasPhone, grants, cartValuePaise, Map.of());
+            this(priority, waCapability, hasLivePushDevice, hasPhone, grants, cartValuePaise, Map.of(), false);
         }
 
         public boolean granted(String channel, String purpose) {
@@ -52,6 +58,9 @@ public record Guard(String name, Predicate<Context> test) {
 
     public static final Guard HAS_PHONE = new Guard("HAS_PHONE", Context::hasPhone);
 
+    /** No WhatsApp message of this run was read: the SMS fallback after an unread WhatsApp (CLAUDE.md §4.4). */
+    public static final Guard WA_UNREAD = new Guard("WA_UNREAD", c -> !c.whatsappReadInRun());
+
     /**
      * The run carries a non-blank variable. Lets a journey decide something
      * from config when it starts (a WhatsApp cart threshold, a discount code)
@@ -61,6 +70,14 @@ public record Guard(String name, Predicate<Context> test) {
         return new Guard("HAS_" + name.toUpperCase(java.util.Locale.ROOT), c -> {
             var v = c.vars().get(name);
             return v != null && !v.isBlank();
+        });
+    }
+
+    /** The run does not carry this variable (e.g. {@code late}: skip a step that would arrive too late). */
+    public static Guard lacksVar(String name) {
+        return new Guard("LACKS_" + name.toUpperCase(java.util.Locale.ROOT), c -> {
+            var v = c.vars().get(name);
+            return v == null || v.isBlank();
         });
     }
 

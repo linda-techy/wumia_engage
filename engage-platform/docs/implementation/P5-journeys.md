@@ -107,7 +107,23 @@ policy/src/main/java/in/brand/engage/policy/CollisionCheck.java           # HIGH
 
 ---
 
-### ☐ P5-T02 — `payment_failed` (utility)
+### ◐ P5-T02 — `payment_failed` (utility)
+
+> **Built 2026-10-11 on fakes.** `PaymentFailedTest` (8), `PayLinkControllerTest` (3). Live check pending: ADR-002 (the Razorpay match-rate spike, P0-T06) is not recorded yet; the templates need Meta approval, and the SMS needs DLT.
+>
+> Where the build differs from the text below:
+> - **Steps:**
+>   1. +5 min (`first_delay_minutes`, from the event's time), WhatsApp `payment_failed_v1`. Its button opens the saved checkout, or the cart when the payment matched no checkout.
+>   2. +25 min, push `push_payment_retry_v1`.
+>   3. +2 h, WhatsApp `payment_failed_r2_v1`, or `payment_failed_r2b_v1` when `failure_kind` is CUSTOMER_CANCELLED (an alternate template).
+>   4. +6 h, SMS `sms_payment_link` with the new `WA_UNREAD` guard: no WhatsApp of the run was read.
+>
+>   A failure processed 30+ min late carries `late`, so the `lacksVar("late")` guard skips the first WhatsApp and the push goes first.
+> - **No `CHECKOUT_STILL_OPEN` guard:** a captured payment, `order_placed`, or a completed checkout for the same checkout cancels the run.
+> - **Hand-over:** the failure cancels `checkout_abandon` for the checkout, and `checkout_abandon` won't start on a checkout with a failed payment.
+> - **SMS link:** `https://wumika.com/apps/push/pay/<ref>`, where `<ref>` is a signed run reference (`TrackRef.ofPayment`), made at send time by the `pay_ref` StepVars provider. `PayLinkController` redirects it on the store's domain to the run's saved checkout. Unsafe paths and other journeys fall back to `/cart`. The SMS shows the Razorpay ref and Rs amount (a failed checkout has no order number).
+> - **Success:** only `converted`. A click is not a payment.
+> - **V30:** `journey.payment_failed.first_delay_minutes`.
 
 Consumes `payment_failed_confirmed`, which `RazorpayInboxHandler` already writes with `payment_id`, `amount_paise`, `checkout_token` (nullable), `match_method` and `failure_kind`. Steps and copy: phase-5 §2.1.
 

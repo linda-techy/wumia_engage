@@ -293,14 +293,16 @@ public class DefaultOrchestrator implements MessageOrchestrator {
                                     WHERE d.identity_id = ? AND d.active AND d.platform <> 'IOS_WEB') AS device,
                            EXISTS (SELECT 1 FROM identity_keys k WHERE k.identity_id = ? AND k.kind = 'phone') AS phone,
                            ARRAY(SELECT channel || '/' || purpose FROM consent_current
-                                  WHERE identity_id = ? AND state = 'granted') AS grants""",
-                    run.identityId(), run.identityId(), run.identityId(), run.identityId());
+                                  WHERE identity_id = ? AND state = 'granted') AS grants,
+                           EXISTS (SELECT 1 FROM sends s WHERE s.cascade_run_id = ? AND s.channel = 'whatsapp'
+                                      AND s.read_at IS NOT NULL) AS wa_read""",
+                    run.identityId(), run.identityId(), run.identityId(), run.identityId(), run.id());
                  var rs = ps.executeQuery()) {
                 rs.next();
                 var grants = new java.util.HashSet<String>();
                 for (Object g : (Object[]) rs.getArray("grants").getArray()) grants.add(String.valueOf(g));
                 return new Guard.Context(def.priority(), rs.getString("cap"), rs.getBoolean("device"),
-                        rs.getBoolean("phone"), grants, cartValue, vars);
+                        rs.getBoolean("phone"), grants, cartValue, vars, rs.getBoolean("wa_read"));
             }
         });
     }

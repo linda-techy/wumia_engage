@@ -100,6 +100,8 @@ public class CheckoutAbandon implements EventConsumer {
         try (var ps = Sql.prepare(c, """
                 SELECT k.identity_id, k.cart_token, k.total_paise, k.recovery_url,
                        k.completed_at IS NOT NULL OR k.order_id IS NOT NULL AS done,
+                       EXISTS (SELECT 1 FROM payment_attempts pa
+                                WHERE pa.checkout_token = k.token AND pa.status = 'failed') AS payment_failed,
                        p.attrs->>'first_name' AS first_name,
                        (SELECT l->>'title' FROM carts ct, jsonb_array_elements(ct.lines) l
                          WHERE ct.cart_token = k.cart_token
@@ -114,6 +116,11 @@ public class CheckoutAbandon implements EventConsumer {
             }
             var identity = rs.getObject("identity_id", UUID.class);
             if (identity == null) return List.of();
+            // A failed payment is not an abandoned checkout: payment_failed owns this checkout.
+            if (rs.getBoolean("payment_failed")) {
+                orchestrator.cancel(c, INTENT, token, "payment_failed");
+                return List.of();
+            }
             var cartToken = rs.getString("cart_token");
             if (cartToken != null) orchestrator.cancel(c, CartRecovery.INTENT, cartToken, "checkout_started");
             orchestrator.cancel(c, INTENT, token, "checkout_changed");
