@@ -37,7 +37,7 @@ class ShopifyDiscountCodesTest {
 
     @Test void codes_avoid_look_alike_characters() {
         for (int i = 0; i < 200; i++) {
-            var code = AbandonDiscount.newCode();
+            var code = JourneyDiscount.newCode();
             assertTrue(code.matches("WUM[A-HJ-NP-Z2-9]{8}"), code);
             assertFalse(code.substring(3).matches(".*[01OIL].*"), code);
         }

@@ -1,0 +1,12 @@
+# Win-back (P5-T08): once per lapse, when the last order is ~90 days old and
+# the customer has not visited for 30 days. A warm "what's new", no discount:
+# most Indian D2C brands keep the offer for the later message. Marketing.
+key: winback_v1
+channel: whatsapp
+category: marketing
+locales:
+  en: { body: "Hi {{name}}, it has been a while since your last WUMIKA order. We have added new pieces since then, and we think you will like them." }
+buttons:
+  - { text: "See what's new", url: "https://wumika.com/{{link_path}}" }
+vars: [name, link_path]
+samples: { name: "Priya", link_path: "collections/all" }

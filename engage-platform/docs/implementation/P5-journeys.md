@@ -140,7 +140,7 @@ t+6h      SMS       sms_payment_link       require WA_INCAPABLE_OR_UNREAD
 >   - a customer who doesn't qualify still gets the reminders; the last step is skipped.
 >
 >   Pair this with "Limit to one use per customer" on the code in Shopify admin.
-> - **Unique codes** (V27, 2026-10-11): with `journey.abandon.discount_mode = unique`, `AbandonDiscount` creates the code in Shopify when the discount WhatsApp is due, so codes are made only for runs that reach that step. It's a `StepVars` provider; steps name one with `withVarsFrom`. Each code:
+> - **Unique codes** (V27, 2026-10-11): with `journey.abandon.discount_mode = unique`, `JourneyDiscount` creates the code in Shopify when the discount WhatsApp is due, so codes are made only for runs that reach that step. It's a `StepVars` provider; steps name one with `withVarsFrom`. Each code:
 >   - is `WUM` plus 8 characters, avoiding look-alikes (0, O, 1, I, L);
 >   - is single use, once per customer, for the whole order;
 >   - gives `discount_percent` off (default 10), valid for `discount_valid_hours` (default 48), with an optional minimum order.
@@ -207,7 +207,25 @@ Replies call the aggregator's NDR action API (ADR-005) through a `CourierActions
 
 ---
 
-### ☐ P5-T08 — `winback` + nightly recompute
+### ◐ P5-T08 — `winback` + nightly recompute
+
+> **Built 2026-10-11 (win-back only)**, as most Indian D2C brands run it (owner's decision). `WinbackTest` (8). Live check pending: Meta approval of `winback_v1` / `winback_offer_v1`.
+>
+> Where the build differs from the text below:
+> - **Who:** `LapsedCustomers` runs at 01:30 IST and emits `became_lapsed` once per lapse, with dedupe key `lapsed:<identity>:<last order time>`. A customer qualifies when both hold:
+>   - their last non-cancelled order is `journey.winback.lapsed_days` old (default 90);
+>   - they haven't visited for `no_visit_days` (default 30): no linked browsing, cart, checkout, push click or WhatsApp reply.
+>
+>   Only customers who crossed the line in the last 7 days are picked, so the first run after a deploy doesn't message everyone who lapsed long ago.
+> - **Steps:**
+>   1. At 11:00 IST, WhatsApp `winback_v1`, a warm "here's what's new" with a button to `link_path` (default `collections/all`). If the step is skipped, the push goes at once instead.
+>   2. 7 days later, push `push_winback_v1`.
+>   3. 7 days after that, WhatsApp `winback_offer_v1`, only if a win-back discount is set: shared code, or `unique` single-use codes through `JourneyDiscount` (`discount_config` = `journey.winback`).
+>
+>   Email joins in P7. Any order ends the run, and there is one live win-back per customer.
+> - **Guards:** WhatsApp needs a marketing opt-in and a number not known to be INCAPABLE. The margin-band guard is not built; instead, customers who had at least half their spend refunded, or two RTO parcels, get the reminders but never the discount.
+> - **Not built yet:** the nightly `profile_recompute` with margin and AOV bands (needed by segments later), and the 100,000-identity performance check.
+> - **V28:** the winback keys.
 
 **Nightly job** (01:30 IST, advisory lock): for identities with an order, call `profile_recompute`; then compute `net_margin_band` (`high`/`mid`/`low` by tertile of `net_paise_365d`) and `aov_band`; emit `became_lapsed` once when `last_order_at` crosses `lapsed_days`, dedupe key `lapsed:<identity>:<last_order_at>`.
 

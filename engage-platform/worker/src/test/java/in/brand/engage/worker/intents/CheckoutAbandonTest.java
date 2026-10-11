@@ -147,7 +147,7 @@ class CheckoutAbandonTest {
         orchestrator.tick(200);
 
         assertEquals(1, wa.all.size(), "the reminder went; no message with a code that does not exist");
-        assertEquals("exhausted|skipped:vars:abandon_discount", run(checkout));
+        assertEquals("exhausted|skipped:vars:journey_discount", run(checkout));
         assertTrue(attempts(checkout).contains("write_discounts"), attempts(checkout));
     }
 

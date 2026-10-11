@@ -33,7 +33,7 @@ import java.util.UUID;
  * +4 h      Push     push_checkout_v1       a live browser subscription
  * +20 h     WhatsApp checkout_offer_v1      as step 1, and a discount applies: the operator's shared
  *                                          code, or (discount_mode = unique) a single-use code made
- *                                          at send time by AbandonDiscount
+ *                                          at send time by JourneyDiscount
  * </pre>
  *
  * <ul>
@@ -78,7 +78,7 @@ public class CheckoutAbandon implements EventConsumer {
                     Step.whatsapp("checkout_reminder_v1").require(wa).waitAfter(Duration.ofHours(4)),
                     Step.push("push_checkout_v1", TTL).require(Guard.HAS_LIVE_DEVICE).waitAfter(Duration.ofHours(20)),
                     Step.whatsapp("checkout_offer_v1").require(wa).require(Guard.hasVar("discount"))
-                            .withVarsFrom(AbandonDiscount.NAME)));
+                            .withVarsFrom(JourneyDiscount.NAME)));
         }
     }
 
@@ -129,9 +129,10 @@ public class CheckoutAbandon implements EventConsumer {
             vars.put("cart_value_paise", Long.toString(total));
             if (total >= snapshot.longValue("journey.checkout_abandon.wa_min_cart_paise", "*")) vars.put(WA_OK, "1");
             if ("unique".equals(snapshot.text("journey.abandon.discount_mode", "*").strip())) {
-                // The code itself is made when the discount message goes (AbandonDiscount).
+                // The code itself is made when the discount message goes (JourneyDiscount).
                 if (discountAllowed(c, identity, token, e, snapshot)) {
                     vars.put("discount_mode", "unique");
+                    vars.put("discount_config", "journey.abandon");
                     vars.put("discount", snapshot.longValue("journey.abandon.discount_percent", "*") + "% off");
                 }
             } else {

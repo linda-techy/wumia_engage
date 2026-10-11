@@ -26,10 +26,13 @@ public class WorkerJobs {
     private final CapabilityService capability;
     private final Db db;
     private final java.util.Optional<WhatsAppTemplates> whatsappTemplates;
+    private final in.brand.engage.worker.intents.LapsedCustomers lapsed;
 
     public WorkerJobs(EventDispatcher events, DefaultOrchestrator orchestrator, CampaignExecutor campaigns,
-                      CapabilityService capability, Db db, java.util.Optional<WhatsAppTemplates> whatsappTemplates) {
+                      CapabilityService capability, Db db, java.util.Optional<WhatsAppTemplates> whatsappTemplates,
+                      in.brand.engage.worker.intents.LapsedCustomers lapsed) {
         this.whatsappTemplates = whatsappTemplates;
+        this.lapsed = lapsed;
         this.events = events;
         this.orchestrator = orchestrator;
         this.campaigns = campaigns;
@@ -68,6 +71,20 @@ public class WorkerJobs {
             campaigns.runOnce();
         } catch (RuntimeException e) {
             LOG.error("campaign pass failed", e);
+        }
+    }
+
+    /**
+     * 01:30 IST: customers whose last order just crossed the win-back line and
+     * who have not visited since (P5-T08). Safe on several workers: each lapse
+     * is one event by its dedupe key.
+     */
+    @Scheduled(cron = "0 30 1 * * *", zoneId = "Asia/Kolkata")
+    void findLapsedCustomers() {
+        try {
+            lapsed.detect(java.time.Instant.now());
+        } catch (RuntimeException e) {
+            LOG.error("win-back lapse detection failed", e);
         }
     }
 
