@@ -15,9 +15,15 @@ import java.util.UUID;
  * @param allowStaleDevices   push: include tokens not refreshed within
  *                            {@code push.campaign_stale_days} (back-in-stock: the
  *                            shopper asked for it)
+ * @param cascadeRunId        the cascade run sending, for the collision check; null outside a cascade
  */
 public record DecisionRequest(UUID identityId, Channel channel, String templateKey, String journeyKey,
-                              boolean isReply, boolean allowStaleDevices) {
+                              boolean isReply, boolean allowStaleDevices, Long cascadeRunId) {
+
+    public DecisionRequest(UUID identityId, Channel channel, String templateKey, String journeyKey,
+                           boolean isReply, boolean allowStaleDevices) {
+        this(identityId, channel, templateKey, journeyKey, isReply, allowStaleDevices, null);
+    }
 
     public DecisionRequest {
         Objects.requireNonNull(identityId, "identityId");
@@ -30,14 +36,18 @@ public record DecisionRequest(UUID identityId, Channel channel, String templateK
     }
 
     public DecisionRequest forJourney(String key) {
-        return new DecisionRequest(identityId, channel, templateKey, key, isReply, allowStaleDevices);
+        return new DecisionRequest(identityId, channel, templateKey, key, isReply, allowStaleDevices, cascadeRunId);
     }
 
     public DecisionRequest asReply() {
-        return new DecisionRequest(identityId, channel, templateKey, journeyKey, true, allowStaleDevices);
+        return new DecisionRequest(identityId, channel, templateKey, journeyKey, true, allowStaleDevices, cascadeRunId);
     }
 
     public DecisionRequest allowingStaleDevices() {
-        return new DecisionRequest(identityId, channel, templateKey, journeyKey, isReply, true);
+        return new DecisionRequest(identityId, channel, templateKey, journeyKey, isReply, true, cascadeRunId);
+    }
+
+    public DecisionRequest inRun(Long runId) {
+        return new DecisionRequest(identityId, channel, templateKey, journeyKey, isReply, allowStaleDevices, runId);
     }
 }

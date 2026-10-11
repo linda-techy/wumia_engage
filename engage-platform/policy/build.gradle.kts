@@ -15,6 +15,7 @@ dependencies {
 
     testImplementation("io.micronaut.sql:micronaut-jdbc-hikari")
     testImplementation("io.micronaut.flyway:micronaut-flyway")
+    testImplementation("org.junit.jupiter:junit-jupiter-params")   // the collision table (P5-T01)
     testRuntimeOnly("org.flywaydb:flyway-database-postgresql")
     testRuntimeOnly("ch.qos.logback:logback-classic")
     testRuntimeOnly("org.yaml:snakeyaml")

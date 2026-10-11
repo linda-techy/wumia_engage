@@ -26,7 +26,15 @@ The revenue journeys run through the orchestrator: payment recovery (utility), c
 
 ---
 
-### ☐ P5-T01 — Journey framework
+### ◐ P5-T01 — Journey framework
+
+> **Collisions built 2026-10-11.** `CollisionTest` (21) runs the 4 × 4 priority table, the 12 h window, its expiry, the setting, other people's runs, and sends outside a cascade.
+>
+> Where the build differs from the text below:
+> - **`policy/CollisionCheck`** runs in the policy engine after consent and before quiet hours, so a collision is a block, not a deferral. Requests carry `cascadeRunId` (`DecisionRequest.inRun`), and policy reads the run's priority from `cascade_runs`. The block records which journey and run held it.
+> - **The rule:** a cascade of priority P is blocked while the same person has a cascade of priority 2 or 3 below P, live or ended within `journey.collision.suppress_hours` (default 12). In practice, checkout and back-in-stock hold cart, price-drop, browse and win-back messages, and cart and price-drop hold browse and win-back. Transactional cascades never block and are never blocked.
+> - **V29:** the setting, plus `cascade_runs (identity_id, updated_at DESC)` for the "recently ended" read.
+> - **Not built yet:** the `Journey` / `JourneyRegistry` / `JourneyParams` classes (each journey is an `EventConsumer` with its own definition, and parameters are read from config directly), the `checkout_started` / `checkout_completed` / `cart_emptied` events (journeys read the checkout and cart rows instead), and `profile_recompute()`.
 
 **Migration `V<next>__journey_config.sql`**
 ```sql

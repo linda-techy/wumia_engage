@@ -37,7 +37,7 @@ public record SendCommand(UUID identityId, String intentKey, Long cascadeRunId, 
     }
 
     DecisionRequest toDecisionRequest() {
-        var req = DecisionRequest.of(identityId, channel, templateKey).forJourney(intentKey);
+        var req = DecisionRequest.of(identityId, channel, templateKey).forJourney(intentKey).inRun(cascadeRunId);
         if (reply) req = req.asReply();
         return allowStaleDevices ? req.allowingStaleDevices() : req;
     }
