@@ -30,6 +30,8 @@ class BackInStockTest {
     @Inject TestClock clock;
     @Inject Db db;
     @Inject WorkerTestBeans.FakePush push;
+    @Inject WorkerTestBeans.FakeWhatsApp wa;
+    @Inject in.brand.engage.orchestrator.DefaultOrchestrator orchestrator;
 
     String variant;
 
@@ -48,10 +50,18 @@ class BackInStockTest {
             Sql.update(c, """
                     INSERT INTO config_versions (key, selector, value, changed_by, reason)
                     VALUES ('holdout.global_pct', '*', '0', ?, 'test')""", operator(c));
+            Sql.update(c, """
+                    INSERT INTO config_versions (key, selector, value, changed_by, reason)
+                    VALUES ('budget.whatsapp.marketing.daily_paise', '*', '0', ?, 'test')""", operator(c));
+            Sql.update(c, """
+                    INSERT INTO wa_templates (key, language, provider_name, requested_category, approved_category, status, quality)
+                    VALUES ('back_in_stock_v1', 'en', 'back_in_stock_v1', 'marketing', 'marketing', 'APPROVED', 'GREEN')
+                    ON CONFLICT (provider_name, language) DO UPDATE SET status = 'APPROVED', quality = 'GREEN'""");
             return null;
         });
         config.invalidate();
         push.all.clear();
+        wa.reset();
         variant = "v" + UUID.randomUUID().toString().substring(0, 8);
     }
 
@@ -116,6 +126,58 @@ class BackInStockTest {
         assertEquals(1, push.all.size());
     }
 
+    @Test void without_a_push_click_whatsapp_follows_15_minutes_later() {
+        var priya = subscriber(Instant.now());
+        whatsapp(priya);
+        waitlist(priya, "M", clock.instant().minus(Duration.ofDays(3)));
+        restocked(1, "Linen Kurta", "linen-kurta", "M");
+        assertEquals(1, push.all.size());
+        assertTrue(wa.all.isEmpty());
+
+        tickAt(clock.instant().plus(Duration.ofMinutes(16)));
+        var call = wa.all.getLast().whatsapp();
+        assertEquals("back_in_stock_v1", call.name());
+        assertEquals(List.of("Linen Kurta"), call.bodyParams());
+        assertEquals(List.of("products/linen-kurta?variant=" + variant), call.urlButtonSuffixes());
+    }
+
+    @Test void a_push_click_means_no_whatsapp() {
+        var priya = subscriber(Instant.now());
+        whatsapp(priya);
+        waitlist(priya, "M", clock.instant().minus(Duration.ofDays(3)));
+        restocked(1, "Linen Kurta", "linen-kurta", "M");
+        long runId = count("SELECT id FROM cascade_runs WHERE intent_key = 'back_in_stock' AND subject_key = ?", variant + ":" + priya);
+        db.inTx(c -> orchestrator.onSignal(c, runId, "clicked"));
+
+        tickAt(clock.instant().plus(Duration.ofMinutes(16)));
+        assertTrue(wa.all.isEmpty());
+    }
+
+    @Test void without_a_push_device_whatsapp_goes_at_once() {
+        var asha = identity();
+        whatsapp(asha);
+        waitlist(asha, "M", clock.instant().minus(Duration.ofDays(3)));
+        restocked(1, "Linen Kurta", "linen-kurta", "M");
+        assertTrue(push.all.isEmpty());
+        assertEquals(1, wa.all.size());
+    }
+
+    @Test void selling_out_again_ends_the_pending_whatsapp() {
+        var priya = subscriber(Instant.now());
+        whatsapp(priya);
+        waitlist(priya, "M", clock.instant().minus(Duration.ofDays(3)));
+        restocked(1, "Linen Kurta", "linen-kurta", "M");
+
+        var props = "{\"variant_id\":\"%s\",\"quantity\":0}".formatted(variant);
+        db.inTx(c -> Sql.update(c, "INSERT INTO events (name, props, source) VALUES ('variant_sold_out', ?::jsonb, 'shopify')", props));
+        dispatcher.dispatchOnce();
+        tickAt(clock.instant().plus(Duration.ofMinutes(16)));
+
+        assertTrue(wa.all.isEmpty(), "gone again: no message about it");
+        assertEquals(1L, count("SELECT count(*) FROM cascade_runs WHERE intent_key = 'back_in_stock' AND subject_key = ? "
+                + "AND status = 'cancelled' AND outcome = 'variant_sold_out'", variant + ":" + priya));
+    }
+
     @Test void without_a_product_title_the_handle_names_the_item() {
         assertEquals("Floral Anarkali Kurta", BackInStock.fromHandle("floral-anarkali-kurta"));
         assertNull(BackInStock.size(" ", "Default Title"));
@@ -153,6 +215,22 @@ class BackInStockTest {
                     VALUES (?, 'push', 'marketing', 'granted', 'test', now() - interval '60 days')""", id);
         });
         return id;
+    }
+
+    /** A phone and a WhatsApp marketing opt-in. */
+    private void whatsapp(UUID id) {
+        var phone = "919" + String.format("%09d", java.util.concurrent.ThreadLocalRandom.current().nextLong(1_000_000_000L));
+        db.inTx(c -> {
+            Sql.update(c, "INSERT INTO identity_keys (identity_id, kind, value, verified) VALUES (?, 'phone', ?, true)", id, phone);
+            return Sql.update(c, """
+                    INSERT INTO consents (identity_id, channel, purpose, state, source, occurred_at)
+                    VALUES (?, 'whatsapp', 'marketing', 'granted', 'test', now() - interval '60 days')""", id);
+        });
+    }
+
+    private void tickAt(Instant t) {
+        clock.setIst(t.atZone(java.time.ZoneId.of("Asia/Kolkata")).toLocalDateTime().toString());
+        orchestrator.tick(200);
     }
 
     private void waitlist(UUID identity, String sizeLabel, Instant at) {

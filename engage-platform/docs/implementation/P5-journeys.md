@@ -202,7 +202,15 @@ Replaces the P3 single-step definition with phase-5 §4. Start delay 45 min afte
 
 ---
 
-### ☐ P5-T05 — `back_in_stock` WhatsApp step
+### ◐ P5-T05 — `back_in_stock` WhatsApp step
+
+> **Built 2026-10-12.** `BackInStockTest` now has 10 tests (4 new). Live check pending: Meta approval of `back_in_stock_v1`.
+>
+> Where the build differs from the text below:
+> - **Guards:** `WA_MARKETING` and not INCAPABLE, not `WA_CAPABLE`: the owner's "Indian D2C" decision, since an undelivered WhatsApp is not billed.
+> - **Who gets it:** shoppers who didn't click the push (a click ends the run), 15 minutes after it. Those the push can't reach get it at once, because a blocked push step is skipped.
+> - **The template** has no size, so one copy serves sized and one-size items. Its button opens the variant (`product_path`).
+> - **`variant_sold_out`** (already emitted by the inventory handler on positive → 0) cancels every live run for the variant, matched by the subject's variant part.
 
 Adds `whatsapp("back_in_stock_v1").require(WA_CAPABLE, WA_MARKETING)` 15 minutes after the push, for runs without a push click. The fan-out cap (restocked quantity × 20) applies to the run count, not per step. If stock hits 0 again before the WhatsApp step, the run is cancelled (`variant_sold_out` event from P1-T03's inventory handler, emitted on positive → 0).
 
