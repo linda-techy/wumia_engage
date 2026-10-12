@@ -29,6 +29,17 @@ class WhatsAppTemplatesPayloadTest {
         assertEquals(List.of("https://wumika.com/apps/push/t/2s-AbCdEfGhIjK"), button.get("example"));
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void quick_replies_are_submitted_as_quick_reply_buttons() {
+        var ask = loadAll().stream().filter(x -> x.key().equals("review_ask_v1")).findFirst().orElseThrow();
+        var payload = WhatsAppTemplates.payload(ask, ask.locales().get("en"));
+        assertEquals("MARKETING", payload.get("category"));
+        var buttons = (List<Map<String, Object>>) ((List<Map<String, Object>>) payload.get("components")).get(1).get("buttons");
+        assertEquals(List.of(Map.of("type", "QUICK_REPLY", "text", "Love it"), Map.of("type", "QUICK_REPLY", "text", "Need help")),
+                buttons);
+    }
+
     static List<in.brand.engage.orchestrator.templates.MessageTemplate> loadAll() {
         try {
             var m = in.brand.engage.orchestrator.templates.TemplateRegistry.class.getDeclaredMethod("loadClasspath");

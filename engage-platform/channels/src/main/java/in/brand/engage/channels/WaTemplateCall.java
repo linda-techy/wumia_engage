@@ -10,13 +10,21 @@ import java.util.Objects;
  *
  * @param urlButtonSuffixes the dynamic part of each URL button, by button index
  *                          (an empty list when the template has none)
+ * @param quickReplyPayloads the payload of each quick-reply button, by button index: what a
+ *                          tap sends back (a template has either URL buttons or quick replies)
  */
-public record WaTemplateCall(String name, String language, List<String> bodyParams, List<String> urlButtonSuffixes) {
+public record WaTemplateCall(String name, String language, List<String> bodyParams, List<String> urlButtonSuffixes,
+                             List<String> quickReplyPayloads) {
 
     public WaTemplateCall {
         Objects.requireNonNull(name, "name");
         Objects.requireNonNull(language, "language");
         bodyParams = List.copyOf(bodyParams);
         urlButtonSuffixes = List.copyOf(urlButtonSuffixes);
+        quickReplyPayloads = List.copyOf(quickReplyPayloads);
+    }
+
+    public WaTemplateCall(String name, String language, List<String> bodyParams, List<String> urlButtonSuffixes) {
+        this(name, language, bodyParams, urlButtonSuffixes, List.of());
     }
 }

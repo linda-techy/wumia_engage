@@ -38,6 +38,10 @@ final class WaPayloads {
             components.add(Map.of("type", "button", "sub_type", "url", "index", Integer.toString(i),
                     "parameters", text(List.of(wa.urlButtonSuffixes().get(i)))));
         }
+        for (int i = 0; i < wa.quickReplyPayloads().size(); i++) {
+            components.add(Map.of("type", "button", "sub_type", "quick_reply", "index", Integer.toString(i),
+                    "parameters", List.of(Map.of("type", "payload", "payload", wa.quickReplyPayloads().get(i)))));
+        }
         var t = new LinkedHashMap<String, Object>();
         t.put("name", wa.name());
         t.put("language", Map.of("code", wa.language()));

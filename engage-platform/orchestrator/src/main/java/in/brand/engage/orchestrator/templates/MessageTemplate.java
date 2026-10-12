@@ -42,7 +42,25 @@ public record MessageTemplate(String key, Channel channel, Category category, Du
      * {@code https://wumika.com/apps/track/{{order_no}}} is submitted as
      * {@code .../track/{{1}}} and the value of {@code order_no} is sent as its suffix.
      */
-    public record Button(String text, String url) {}
+    public record Button(String text, String url, String reply) {
+
+        public Button(String text, String url) {
+            this(text, url, null);
+        }
+
+        /**
+         * A quick-reply button: no URL; a tap comes back as an inbound message
+         * whose payload is {@code reply} (e.g. {@code review_love}), which
+         * ingest-api turns into an event of that name.
+         */
+        public static Button quickReply(String text, String reply) {
+            return new Button(text, null, reply);
+        }
+
+        public boolean isQuickReply() {
+            return url == null;
+        }
+    }
 
     /**
      * An SMS template's DLT registration (CLAUDE.md §5). The registered text

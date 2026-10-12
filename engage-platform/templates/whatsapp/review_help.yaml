@@ -1,0 +1,9 @@
+# The free reply to "Need help" (post_purchase). The tap is also recorded as
+# support_requested, so the team can follow up.
+key: review_help
+channel: whatsapp
+category: service
+locales:
+  en: { body: "Sorry to hear that, {{name}}. Our team will message you here shortly to help with your order." }
+vars: [name]
+samples: { name: "Priya" }

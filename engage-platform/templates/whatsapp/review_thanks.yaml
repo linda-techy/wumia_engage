@@ -1,0 +1,8 @@
+# The free reply to "Love it" (post_purchase), inside the window the tap opened.
+key: review_thanks
+channel: whatsapp
+category: service
+locales:
+  en: { body: "Thank you, {{name}}! You can add a photo or a short review at {{review_url}} to help other shoppers choose." }
+vars: [name, review_url]
+samples: { name: "Priya", review_url: "https://wumika.com/products/kundan-jhumka-earrings" }

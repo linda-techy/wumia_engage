@@ -166,6 +166,12 @@ public class WhatsAppTemplates {
             var buttons = new ArrayList<Map<String, Object>>();
             for (var b : t.buttons()) {
                 var button = new LinkedHashMap<String, Object>();
+                if (b.isQuickReply()) {
+                    button.put("type", "QUICK_REPLY");
+                    button.put("text", b.text());
+                    buttons.add(button);
+                    continue;
+                }
                 button.put("type", "URL");
                 button.put("text", b.text());
                 button.put("url", Renderer.metaUrl(b.url()));

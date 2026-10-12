@@ -67,12 +67,17 @@ public class Renderer {
         var params = new ArrayList<String>();
         for (var name : placeholders(copy.body())) params.add(require(vars, name, template.key()));
         var suffixes = new ArrayList<String>();
+        var replies = new ArrayList<String>();
         for (var b : template.buttons()) {
+            if (b.isQuickReply()) {
+                replies.add(b.reply());
+                continue;
+            }
             var name = buttonVariable(b.url());
             if (name != null) suffixes.add(require(vars, name, template.key()));
         }
         return new WhatsAppRendered(chosen, body,
-                new WaTemplateCall(copy.providerName(), copy.language(), params, suffixes));
+                new WaTemplateCall(copy.providerName(), copy.language(), params, suffixes, replies));
     }
 
     /**

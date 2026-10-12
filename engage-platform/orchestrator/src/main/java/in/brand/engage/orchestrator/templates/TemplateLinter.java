@@ -101,7 +101,7 @@ public final class TemplateLinter {
             used.addAll(Renderer.placeholders(c.title()));
             used.addAll(Renderer.placeholders(c.body()));
         });
-        t.buttons().forEach(b -> used.addAll(Renderer.placeholders(b.url())));
+        t.buttons().stream().filter(b -> !b.isQuickReply()).forEach(b -> used.addAll(Renderer.placeholders(b.url())));
         if (t.channel() == Channel.WHATSAPP) problems.addAll(whatsapp(t, where));
         if (t.channel() == Channel.SMS) problems.addAll(sms(t, where));
         var payload = t.channel() == Channel.PUSH ? Renderer.PUSH_PAYLOAD_VARS : Set.<String>of();
@@ -226,6 +226,7 @@ public final class TemplateLinter {
 
     static final java.util.regex.Pattern META_NAME = java.util.regex.Pattern.compile("[a-z0-9_]{1,512}");
     static final java.util.regex.Pattern META_LANGUAGE = java.util.regex.Pattern.compile("[a-z]{2,3}(_[A-Z]{2})?");
+    static final java.util.regex.Pattern QUICK_REPLY = java.util.regex.Pattern.compile("[a-z][a-z0-9_]{0,63}");
     static final java.util.regex.Pattern ADJACENT = java.util.regex.Pattern.compile("}}\\s*\\{\\{");
     static final int WA_BODY_MAX = 1024;
     static final int WA_BUTTON_TEXT_MAX = 25;
@@ -249,7 +250,21 @@ public final class TemplateLinter {
             }
         }
         if (t.freeForm() && !t.buttons().isEmpty()) problems.add(where + "a free-form (SERVICE) reply cannot have buttons");
+        long replies = t.buttons().stream().filter(MessageTemplate.Button::isQuickReply).count();
+        if (replies > 0 && replies < t.buttons().size()) {
+            problems.add(where + "mix of quick-reply and URL buttons; use one kind per template");
+        }
+        if (replies > 3) problems.add(where + "more than 3 quick replies");
+        var payloads = new HashSet<String>();
         for (var b : t.buttons()) {
+            if (b.isQuickReply()) {
+                if (Renderer.length(b.text()) > WA_BUTTON_TEXT_MAX) problems.add(where + "button label '" + b.text() + "' is over 25 characters");
+                if (!QUICK_REPLY.matcher(b.reply()).matches()) {
+                    problems.add(where + "quick reply '" + b.reply() + "' must be lowercase letters, digits and _ (it becomes an event name)");
+                }
+                if (!payloads.add(b.reply())) problems.add(where + "quick reply '" + b.reply() + "' is used twice");
+                continue;
+            }
             if (!b.url().startsWith("https://")) problems.add(where + "button '" + b.text() + "' URL must be https");
             if (Renderer.length(b.text()) > WA_BUTTON_TEXT_MAX) problems.add(where + "button label '" + b.text() + "' is over 25 characters");
             var vars = Renderer.placeholders(b.url());

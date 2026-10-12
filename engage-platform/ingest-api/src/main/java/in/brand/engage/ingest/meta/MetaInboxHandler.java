@@ -77,7 +77,7 @@ public class MetaInboxHandler implements InboxHandler {
     static final Pattern START = Pattern.compile(
             "^\\s*(start|resume|subscribe|shuru karo|chalu karo)\\s*[.!]*\\s*$",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
-    static final Set<String> QUICK_REPLIES = Set.of("wa_optin_yes", "ndr_reschedule", "fit_ok");
+    static final Set<String> QUICK_REPLIES = Set.of("wa_optin_yes", "ndr_reschedule", "fit_ok", "review_love", "review_help");
     static final String INTHREAD_COPY = "wa_inthread_v1";
 
     private final IdentityResolver identities;

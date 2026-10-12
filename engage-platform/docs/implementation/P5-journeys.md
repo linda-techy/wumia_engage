@@ -216,7 +216,17 @@ Adds `whatsapp("back_in_stock_v1").require(WA_CAPABLE, WA_MARKETING)` 15 minutes
 
 ---
 
-### ☐ P5-T06 — `post_purchase_fit`
+### ◐ P5-T06 — `post_purchase_fit`
+
+> **Built 2026-10-12 as a "how do you like it?" instead of a fit check** (owner's choice: Wumika sells jewellery, where size matters for few pieces). `PostPurchaseTest` (6), `WaPayloadsTest`, plus quick-reply cases in `WhatsAppTemplateTest` and `WhatsAppTemplatesPayloadTest`. Live check pending: Meta approval of `review_ask_v1`.
+>
+> Where the build differs from the text below:
+> - **When:** `journey.post_purchase.delay_days` (default 3, V31) after `order_delivered`, at 11:00 IST.
+> - **What:** WhatsApp `review_ask_v1` (marketing; opt-in and not INCAPABLE) naming the order's most expensive line, with quick replies **Love it** (`review_love`) and **Need help** (`review_help`).
+> - **Who:** once per order, however many parcels. Not sent for cancelled or refunded orders; a cancellation or refund before the send cancels it.
+> - **Love it:** a free-form `review_thanks` reply in the window the tap opened, with the product page for a photo or review.
+> - **Need help:** a free-form `review_help` reply, plus a `support_requested` event (order id) for the team. Nothing in the admin console shows it yet.
+> - **Quick replies are new:** template buttons may be `{text, reply}`, and lint requires one kind per template, at most 3, payloads in event-name form. The adapter sends `quick_reply` components with the payloads, submission uses `QUICK_REPLY` buttons, and ingest's quick-reply allowlist adds `review_love` and `review_help`.
 
 Trigger: `order_delivered` + 3 days. `delivered_fitcheck_v1` (utility) with three quick replies. Reply handling in the P4-T04 inbound path emits `fit_ok`, `fit_small`, `fit_large`.
 

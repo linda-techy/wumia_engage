@@ -160,8 +160,14 @@ public class TemplateRegistry implements TemplateCooldowns, ApplicationEventList
         var buttons = new ArrayList<MessageTemplate.Button>();
         if (m.get("buttons") instanceof List<?> bs) {
             for (var b : bs) {
-                if (!(b instanceof Map<?, ?> bm)) throw invalid(source, "each button is {text, url}");
-                buttons.add(new MessageTemplate.Button(text(bm, "text", source + " button"), text(bm, "url", source + " button")));
+                if (!(b instanceof Map<?, ?> bm)) throw invalid(source, "each button is {text, url} or {text, reply}");
+                var label = text(bm, "text", source + " button");
+                if (bm.get("reply") != null) {
+                    if (bm.get("url") != null) throw invalid(source, "button '" + label + "' has both url and reply");
+                    buttons.add(MessageTemplate.Button.quickReply(label, text(bm, "reply", source + " button")));
+                } else {
+                    buttons.add(new MessageTemplate.Button(label, text(bm, "url", source + " button")));
+                }
             }
         } else if (m.get("buttons") != null) {
             throw invalid(source, "buttons must be a list");

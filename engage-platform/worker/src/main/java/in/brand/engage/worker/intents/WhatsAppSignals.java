@@ -31,7 +31,8 @@ public class WhatsAppSignals implements EventConsumer {
 
     static final Set<String> ESCALATE = Set.of("131026", "131049");
     /** ingest-api emits a button tap under its payload's name (MetaInboxHandler.QUICK_REPLIES). */
-    static final Set<String> REPLIES = Set.of("wa_message_received", "wa_optin_yes", "ndr_reschedule", "fit_ok");
+    static final Set<String> REPLIES = Set.of("wa_message_received", "wa_optin_yes", "ndr_reschedule", "fit_ok",
+            "review_love", "review_help");
 
     private final DefaultOrchestrator orchestrator;
 

@@ -80,4 +80,28 @@ class WhatsAppTemplateTest {
         var promo = lint(SHIPPED.replace("has shipped", "has shipped. Flat 20% off on your next order"));
         assertTrue(promo.stream().anyMatch(p -> p.contains("promotional language")), promo.toString());
     }
+
+    @Test void quick_replies_lint_and_render_to_payloads() {
+        var ok = """
+                key: ask_v1
+                channel: whatsapp
+                category: marketing
+                locales:
+                  en: { body: "Hi {{name}}, how are you liking it?" }
+                buttons:
+                  - { text: "Love it", reply: "review_love" }
+                  - { text: "Need help", reply: "review_help" }
+                vars: [name]
+                samples: { name: "Priya" }
+                """;
+        assertEquals(List.of(), lint(ok));
+        var call = new Renderer().whatsapp(parse(ok), "en", Map.of("name", "Priya")).call();
+        assertEquals(List.of("review_love", "review_help"), call.quickReplyPayloads());
+        assertEquals(List.of(), call.urlButtonSuffixes());
+
+        var mixed = ok.replace("  - { text: \"Need help\", reply: \"review_help\" }",
+                "  - { text: \"Shop\", url: \"https://wumika.com/shop\" }");
+        assertTrue(lint(mixed).stream().anyMatch(p -> p.contains("mix of quick-reply and URL")), lint(mixed).toString());
+        assertTrue(lint(ok.replace("review_love", "Review Love")).stream().anyMatch(p -> p.contains("lowercase")));
+    }
 }
