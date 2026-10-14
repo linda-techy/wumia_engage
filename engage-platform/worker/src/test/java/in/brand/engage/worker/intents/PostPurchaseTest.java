@@ -50,6 +50,7 @@ class PostPurchaseTest {
                 st.execute("TRUNCATE config_versions CASCADE");
             }
             setConfig(c, "holdout.global_pct", "0");
+            setConfig(c, "holdout.journey_pct", "0");
             setConfig(c, "budget.whatsapp.marketing.daily_paise", "0");
             Sql.update(c, """
                     INSERT INTO wa_templates (key, language, provider_name, requested_category, approved_category, status, quality)

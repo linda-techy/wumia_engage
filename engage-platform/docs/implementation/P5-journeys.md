@@ -283,7 +283,15 @@ At most one win-back run per identity per `cooldown_days` (a guard reading `casc
 
 ---
 
-### ☐ P5-T09 — Holdouts on every journey
+### ◐ P5-T09 — Holdouts on every journey
+
+> **Built 2026-10-14.** Three new `PolicyEngineTest` cases: transactional is never held out, campaigns are exempt, and the default is 10%. Live check pending: the 7-day split query on staging traffic.
+>
+> Where the build differs from the text below:
+> - **No per-journey default rows.** `config_versions` needs a real operator, so V32 sets `holdout.journey_pct`'s default to 10 for all journeys, and the policy engine applies the journey holdout to **marketing sends only**. Transactional journeys (order updates, `payment_failed`) are therefore never held out.
+> - **Campaigns** (`campaign:<id>`) are exempt: they have their own control group.
+> - **One marketing journey the text marked 0% now holds out 10%:** `post_purchase` (the review ask). Set its selector to 0 in the admin console to change that.
+> - **Test setups** zero `holdout.journey_pct` alongside `holdout.global_pct`.
 
 Each journey's key is its holdout experiment. Default control share 10% for marketing journeys, **0% for transactional ones** (`payment_failed`, `order_tracking`, `ndr_rescue`, `post_purchase_fit`): withholding a delivery update to measure it is not acceptable. The global holdout (V2 `holdout.global_pct`) applies to marketing only.
 

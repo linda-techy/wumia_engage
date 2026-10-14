@@ -37,6 +37,7 @@ class CollisionTest {
         clock.setIst("2026-09-28T12:00:00");
         data.resetConfig();
         data.setConfig("holdout.global_pct", "*", "0");
+        data.setConfig("holdout.journey_pct", "*", "0");    // V32 defaults it to 10%
         config.invalidate();
         data.template(PUSH_MKT, PUSH, MARKETING, "active");
         data.template(PUSH_UTIL, PUSH, UTILITY, "active");

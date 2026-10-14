@@ -55,6 +55,7 @@ class CheckoutAbandonTest {
                 st.execute("TRUNCATE config_versions CASCADE");
             }
             setConfig(c, "holdout.global_pct", "0");
+            setConfig(c, "holdout.journey_pct", "0");
             // Other tests book marketing WhatsApp spend on this same test date; 0 = no daily budget.
             setConfig(c, "budget.whatsapp.marketing.daily_paise", "0");
             for (var t : List.of("checkout_reminder_v1", "checkout_offer_v1", "cart_reminder_v1")) {

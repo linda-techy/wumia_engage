@@ -52,6 +52,9 @@ class BackInStockTest {
                     VALUES ('holdout.global_pct', '*', '0', ?, 'test')""", operator(c));
             Sql.update(c, """
                     INSERT INTO config_versions (key, selector, value, changed_by, reason)
+                    VALUES ('holdout.journey_pct', '*', '0', ?, 'test')""", operator(c));
+            Sql.update(c, """
+                    INSERT INTO config_versions (key, selector, value, changed_by, reason)
                     VALUES ('budget.whatsapp.marketing.daily_paise', '*', '0', ?, 'test')""", operator(c));
             Sql.update(c, """
                     INSERT INTO wa_templates (key, language, provider_name, requested_category, approved_category, status, quality)

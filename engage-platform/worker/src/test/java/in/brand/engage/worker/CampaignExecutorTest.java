@@ -46,6 +46,9 @@ class CampaignExecutorTest {
             Sql.update(c, """
                     INSERT INTO config_versions (key, selector, value, changed_by, reason)
                     VALUES ('holdout.global_pct', '*', '0', ?, 'test')""", operator);
+            Sql.update(c, """
+                    INSERT INTO config_versions (key, selector, value, changed_by, reason)
+                    VALUES ('holdout.journey_pct', '*', '0', ?, 'test')""", operator);
             return null;
         });
         config.invalidate();

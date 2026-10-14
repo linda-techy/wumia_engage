@@ -61,6 +61,9 @@ class CampaignTest {
                     INSERT INTO config_versions (key, selector, value, changed_by, reason)
                     VALUES ('holdout.global_pct', '*', '0', ?, 'test: no random holdout')""", owner);
             Sql.update(c, """
+                    INSERT INTO config_versions (key, selector, value, changed_by, reason)
+                    VALUES ('holdout.journey_pct', '*', '0', ?, 'test: no random holdout')""", owner);
+            Sql.update(c, """
                     INSERT INTO templates (key, channel, category, status) VALUES
                       (?, 'push', 'marketing', 'active'), (?, 'whatsapp', 'marketing', 'active'),
                       (?, 'whatsapp', 'marketing', 'active'), (?, 'whatsapp', 'marketing', 'active')

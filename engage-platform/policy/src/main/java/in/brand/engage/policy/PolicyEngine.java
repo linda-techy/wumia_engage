@@ -164,8 +164,10 @@ public class PolicyEngine {
             }
         }
 
-        // 10. Holdouts. Control is measured, not messaged.
-        if (req.journeyKey() != null) {
+        // 10. Holdouts. Control is measured, not messaged. The journey holdout (P5-T09) is
+        //     for marketing only: an order update or a failed-payment notice is never
+        //     withheld to measure it. Campaigns keep their own control group (05-campaigns.md).
+        if (req.journeyKey() != null && template.category() == MARKETING && !req.journeyKey().startsWith("campaign:")) {
             var pct = snapshot.decimalValue("holdout.journey_pct", req.journeyKey());
             if (inControl(c, req, req.journeyKey(), pct))
                 return out.block(BlockReason.HOLDOUT_CONTROL, Map.of("experiment", req.journeyKey()));

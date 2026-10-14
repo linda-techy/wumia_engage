@@ -53,6 +53,7 @@ class WinbackTest {
                 st.execute("TRUNCATE config_versions CASCADE");
             }
             setConfig(c, "holdout.global_pct", "0");
+            setConfig(c, "holdout.journey_pct", "0");
             setConfig(c, "budget.whatsapp.marketing.daily_paise", "0");
             for (var t : List.of("winback_v1", "winback_offer_v1")) {
                 Sql.update(c, """
