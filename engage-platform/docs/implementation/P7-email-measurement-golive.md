@@ -171,7 +171,14 @@ ON CONFLICT (key) DO NOTHING;
 
 ---
 
-### ☐ P7-T06 — Security review + abuse
+### ◐ P7-T06 — Security review + abuse
+
+> **Code part done 2026-10-15; the pen test, credential rotation and backup rehearsal wait for production.** The full record is in [docs/qa/p7-security.md](../qa/p7-security.md).
+>
+> - **Rate limiter:** production runs 3–10 ingest pods, so it is now Postgres-backed (`rate_windows`, unlogged, V37, purged hourly). The admin login limiter stays in memory (2 pods, plus the per-account database lock).
+> - **`stock_waitlist`:** at most 50 waiting alerts per identity; the 51st answers 429.
+> - **Fuzzing:** `EndpointFuzzTest` is a seeded property-style run with no new dependency, rather than Jazzer. It covers every storefront (signed), pixel, thank-you, link and webhook endpoint, plus signed Shopify webhooks drained through the inbox. No 5xx and no stack traces.
+> - **Found and fixed:** Micronaut's default 500 put the exception message (which can hold customer data) in the response. `UnexpectedErrorHandler` in both APIs now logs the cause under a reference and returns only the reference. A tokenless checkout payload is now skipped instead of retried.
 
 - Replace the in-memory rate limiter (P2-T01) with a Postgres-backed one only if pods > 2; otherwise document why in-memory is enough.
 - `stock_waitlist` ≤ 50 rows per identity (a check in the handler).

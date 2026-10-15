@@ -99,6 +99,7 @@ public class StorefrontProxyController {
             case STORED -> HttpResponse.ok(Map.of("deviceId", result.deviceId()));
             case FILTERED -> HttpResponse.accepted();
             case UNKNOWN_COPY -> HttpResponse.unprocessableEntity();
+            case FULL -> HttpResponse.status(HttpStatus.TOO_MANY_REQUESTS);
         };
     }
 
@@ -191,7 +192,11 @@ public class StorefrontProxyController {
     }
 
     private static HttpResponse<?> status(Outcome outcome) {
-        return outcome == Outcome.STORED ? HttpResponse.ok() : HttpResponse.accepted();
+        return switch (outcome) {
+            case STORED -> HttpResponse.ok();
+            case FULL -> HttpResponse.status(HttpStatus.TOO_MANY_REQUESTS);
+            case FILTERED, UNKNOWN_COPY -> HttpResponse.accepted();
+        };
     }
 
     /** The page's origin as the browser sent it, else the shop's own domain. */

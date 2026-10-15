@@ -45,7 +45,7 @@ class ThankYouOptInTest {
             rs.next();
             assertTrue(rs.getString(1).endsWith("_test"), "refusing to clean " + rs.getString(1));
             st.execute("""
-                TRUNCATE webhook_inbox, events, orders, order_refunds, pending_optins, conversions, checkouts, carts,
+                TRUNCATE rate_windows, webhook_inbox, events, orders, order_refunds, pending_optins, conversions, checkouts, carts,
                          consents, pending_optins, identity_keys, profiles, identities CASCADE""");
             // V12 seeds this, but admin-api's tests TRUNCATE operators CASCADE, which
             // empties consent_copy_versions (created_by references operators).
