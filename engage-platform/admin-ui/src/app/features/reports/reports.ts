@@ -119,7 +119,7 @@ export function lastMonth(now = new Date()): string {
                       <div class="text-xs text-slate-500">{{ r.incrementalLowPaise | inr }} to {{ r.incrementalHighPaise | inr }}</div>
                     </td>
                     <td class="p-2 text-right">{{ r.messagingCostPaise | inr }}</td>
-                    <td class="p-2 text-right">{{ roi(r.roi) }}</td>
+                    <td class="p-2 text-right">{{ r.significant ? roi(r.roi) : "—" }}</td>
                   </tr>
                 }
               </tbody>

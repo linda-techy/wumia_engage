@@ -141,7 +141,11 @@ const LIVE = ['SCHEDULED', 'RUNNING'];
               Held back: {{ r.holdout.control }} people. In the {{ r.windowDays }} days after the start, messaged customers spent
               {{ r.holdout.revenuePerTreatedPaise | inr }} each against {{ r.holdout.revenuePerControlPaise | inr }} for those held back
               @if (r.holdout.enoughData && r.holdout.liftPct !== null) {
-                ({{ r.holdout.liftPct > 0 ? '+' : '' }}{{ r.holdout.liftPct.toFixed(1) }}%).
+                ({{ r.holdout.liftPct > 0 ? '+' : '' }}{{ r.holdout.liftPct.toFixed(1) }}%,
+                likely between {{ signed(r.holdout.liftLowPct) }} and {{ signed(r.holdout.liftHighPct) }}).
+                @if (chance(r.holdout)) { <strong>That range includes zero: the difference could still be chance.</strong> }
+                @else if ((r.holdout.liftPct ?? 0) > 0) { <strong>A real lift, not chance.</strong> }
+                @else { <strong>Messaged customers spent less: worth a look.</strong> }
               } @else {
                 (too few people yet to tell; 30 in each group are needed).
               }
@@ -171,6 +175,15 @@ export default class CampaignDetailPage {
   readonly report = httpResource<CampaignReport>(() =>
     this.campaign.value()?.startedAt ? `/api/campaigns/${encodeURIComponent(this.id())}/report` : undefined);
   rate = rate;
+
+  signed(v: number | null): string {
+    return v === null ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(0)}%`;
+  }
+
+  /** The 95% range of the lift spans zero. */
+  chance(h: CampaignReport['holdout']): boolean {
+    return h.liftLowPct === null || h.liftHighPct === null || (h.liftLowPct < 0 && h.liftHighPct > 0);
+  }
   /** The review checklist; Approve stays off until it is ticked. */
   readonly reviewed = signal(false);
 

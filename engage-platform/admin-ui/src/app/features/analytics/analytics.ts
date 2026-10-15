@@ -53,7 +53,9 @@ type Tab = 'overview' | 'campaigns' | 'spend' | 'quality';
           <section class="mb-6 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
             <div class="card"><p class="label">Sent</p><p class="stat">{{ t.sent }}</p></div>
             <div class="card"><p class="label">Delivered</p><p class="stat">{{ rate(t.delivered, t.sent) }}</p><p class="text-xs text-slate-500">{{ t.delivered }}</p></div>
-            <div class="card"><p class="label">Clicked</p><p class="stat">{{ rate(t.clicked, t.delivered) }}</p><p class="text-xs text-slate-500">{{ t.clicked }} of delivered</p></div>
+            @let push = pushRow(o);
+            <div class="card"><p class="label">Clicked (push)</p><p class="stat">{{ push ? rate(push.clicked, push.delivered) : '—' }}</p>
+              <p class="text-xs text-slate-500">{{ push?.clicked ?? 0 }} of delivered; WhatsApp taps are not tracked</p></div>
             <div class="card"><p class="label">Orders</p><p class="stat">{{ t.orders }}</p><p class="text-xs text-slate-500">{{ t.clickOrders }} after a click</p></div>
             <div class="card"><p class="label">Revenue</p><p class="stat">{{ t.revenuePaise | inr }}</p></div>
             <div class="card"><p class="label">Cost</p><p class="stat">{{ t.costPaise | inr }}</p><p class="text-xs text-slate-500">{{ ret(t) }} back per ₹1</p></div>
@@ -198,7 +200,7 @@ type Tab = 'overview' | 'campaigns' | 'spend' | 'quality';
               <td class="num">{{ f.sent }}</td>
               <td class="num">{{ rate(f.delivered, f.sent) }}</td>
               <td class="num">{{ f.read ? rate(f.read, f.delivered) : '—' }}</td>
-              <td class="num">{{ rate(f.clicked, f.delivered) }}</td>
+              <td class="num">{{ clicks(f) }}</td>
               <td class="num">{{ f.blocked + f.failed }}</td>
               <td class="num">{{ f.orders }}</td>
               <td class="num">{{ f.revenuePaise | inr }}</td>
@@ -257,6 +259,18 @@ export default class AnalyticsPage {
   count = (v: number) => String(v);
   channelName = (k: string) => ({ push: 'Push', whatsapp: 'WhatsApp', sms: 'SMS', email: 'Email' })[k] ?? k;
   journeyName = (k: string) => (k === 'campaigns' ? 'Campaigns (all)' : journeyLabel(k));
+
+  /** Only push clicks are tracked: WhatsApp and SMS say so, and a journey with reads but no clicks shows "—", not 0%. */
+  clicks(f: AnalyticsOverview['channels'][number]): string {
+    if (f.key === 'whatsapp' || f.key === 'sms') return 'not tracked';
+    if (f.clicked === 0 && f.read > 0) return '—';
+    return rate(f.clicked, f.delivered);
+  }
+
+  /** The push row: the only channel whose clicks are tracked. */
+  pushRow(o: AnalyticsOverview): AnalyticsOverview['channels'][number] | undefined {
+    return o.channels.find((c) => c.key === 'push');
+  }
 
   usePreset(days: number): void {
     const r = lastDays(days);

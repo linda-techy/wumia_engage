@@ -34,7 +34,7 @@ function isoToIstInput(iso: string | null): string {
     <a [routerLink]="id() ? ['/campaigns', id()] : ['/campaigns']" class="text-sm text-slate-600 underline">← Back</a>
     <header class="mb-6 mt-3">
       <h1 class="text-2xl font-semibold">{{ id() ? 'Edit campaign' : 'New campaign' }}</h1>
-      <p class="text-sm text-slate-500">Copy comes from reviewed templates; you fill in their variables.</p>
+      <p class="text-sm text-slate-500">Pick a template. With “Your own title and text” you write the notification yourself, with a poster.</p>
     </header>
     @if (id() && existing.isLoading()) {
       <app-loading />
@@ -53,7 +53,7 @@ function isoToIstInput(iso: string | null): string {
           <label class="text-sm"><span class="mb-1 block font-medium">Template</span>
             <select class="input" [value]="templateKey()" (change)="templateKey.set(val($event))">
               <option value="" disabled>Pick a template</option>
-              @for (t of templates.value() ?? []; track t.key) { <option [value]="t.key">{{ t.key }}</option> }
+              @for (t of templates.value() ?? []; track t.key) { <option [value]="t.key">{{ t.key === customKey ? 'Your own title and text (poster)' : t.key }}</option> }
             </select>
             @if (templates.hasValue() && templates.value().length === 0) {
               <span class="mt-1 block text-xs text-amber-800">No {{ channel() }} template is eligible.{{ channel() === 'whatsapp' ? ' WhatsApp needs APPROVED marketing templates (Phase 4).' : '' }}</span>
@@ -73,11 +73,11 @@ function isoToIstInput(iso: string | null): string {
               <label class="block text-sm"><span class="mb-1 flex justify-between font-medium">Title
                 <span class="font-normal" [class.text-red-700]="titleLength() > titleMax">{{ titleLength() }}/{{ titleMax }}</span></span>
                 <input class="input" [value]="named('title')" (input)="setNamed('title', val($event))"
-                       placeholder="Dressed for the festivities ✨" /></label>
+                       placeholder="Wedding season sparkle 💍" /></label>
               <label class="block text-sm"><span class="mb-1 flex justify-between font-medium">Text
                 <span class="font-normal" [class.text-red-700]="bodyLength() > bodyMax">{{ bodyLength() }}/{{ bodyMax }}</span></span>
                 <textarea class="input h-20" [value]="named('body')" (input)="setNamed('body', val($event))"
-                          placeholder="The Onam 2026 edit is here: kasavu sarees and festive kurtas."></textarea></label>
+                          placeholder="Gold huggies for every wedding look. Anti-tarnish, under ₹2,000."></textarea></label>
               <p class="text-xs text-slate-500">English only. Past the limit the text is cut with "…". An emoji counts as one character.</p>
             </section>
           }
@@ -161,6 +161,7 @@ export default class CampaignComposerPage {
   readonly titleMax = TITLE_MAX;
   readonly bodyMax = BODY_MAX;
   /** The template whose title and text are written here. */
+  readonly customKey = CUSTOM_PUSH_TEMPLATE;
   readonly custom = computed(() => this.channel() === 'push' && this.templateKey() === CUSTOM_PUSH_TEMPLATE);
   readonly titleLength = computed(() => length(this.named('title')));
   readonly bodyLength = computed(() => length(this.named('body')));
