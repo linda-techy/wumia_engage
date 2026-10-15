@@ -133,8 +133,9 @@ class ConfigTest {
         assertEquals(0L, data.countAudit("config.update"));
     }
 
-    @Test void a_critical_change_waits_for_a_second_operator_and_self_approval_is_409() {
+    @Test void with_four_eyes_on_a_critical_change_waits_for_a_second_operator_and_self_approval_is_409() {
         var second = data.loginWithMfa(client, "second@example.com", "CONFIG_ADMIN");
+        write(admin, "approval.four_eyes", true, "Two config admins now");
 
         var proposed = write(admin, WA_CAP, 2, "Festive week: two WhatsApp offers a day");
         assertEquals("PENDING", proposed.get("status"));
@@ -213,5 +214,21 @@ class ConfigTest {
         assertEquals("3", ((Map<String, Object>) snap.get("resolved")).get("cap.push.marketing.1d|*"));
         assertEquals(404, status(() -> client.toBlocking().retrieve(
                 HttpRequest.GET("/api/config/snapshots/999999999").bearerAuth(viewer), Map.class)));
+    }
+
+    @Test void one_login_reviews_and_approves_its_own_critical_change() {
+        var proposed = write(admin, WA_CAP, 2, "Festive week: two WhatsApp offers a day");
+        assertEquals("PENDING", proposed.get("status"), "a critical change still waits for its review");
+        assertNull(inForce(WA_CAP));
+
+        var approved = decide(admin, proposed.get("proposalId"), "approve");
+        assertEquals("APPROVED", approved.get("status"), "four eyes off by default: the proposer may approve");
+        assertEquals("2", inForce(WA_CAP));
+        assertEquals("true", db.inTx(c -> {
+            try (var ps = Sql.prepare(c, "SELECT self_approved::text FROM config_proposals WHERE id = ?",
+                    ((Number) proposed.get("proposalId")).longValue()); var rs = ps.executeQuery()) {
+                return rs.next() ? rs.getString(1) : null;
+            }
+        }));
     }
 }

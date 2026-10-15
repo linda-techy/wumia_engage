@@ -4,7 +4,7 @@ import { TokenService } from '../../core/auth/token.service';
 import { Api, istInputToIso } from '../../shared/api';
 import { IstPipe, problemDetail } from '../../shared/format';
 import { EmptyState, ErrorState, LoadingState } from '../../shared/states';
-import { ConfigKey, ConfigProposal, Draft, draftFor, parseValue, showValue } from './config-model';
+import { ConfigKey, ConfigProposal, Draft, draftFor, fourEyesOn, parseValue, showValue } from './config-model';
 
 const CHANNELS = ['whatsapp', 'push', 'email', 'sms', 'rcs'];
 
@@ -52,7 +52,11 @@ const CHANNELS = ['whatsapp', 'push', 'email', 'sms', 'rcs'];
                   <td>{{ p.proposal.proposedBy }}</td>
                   <td class="whitespace-nowrap">
                     @if (mine(p.proposal)) {
-                      <button type="button" class="btn py-1" [disabled]="busy()" (click)="decide(p.proposal, 'withdraw')">Withdraw</button>
+                      @if (!fourEyes() && canEdit()) {
+                        <button type="button" class="btn-primary py-1" [disabled]="busy()" (click)="decide(p.proposal, 'approve')"
+                                title="One login is enough: check the change, then approve it yourself">Approve</button>
+                      }
+                      <button type="button" class="btn ml-1 py-1" [disabled]="busy()" (click)="decide(p.proposal, 'withdraw')">Withdraw</button>
                     } @else if (canEdit()) {
                       <button type="button" class="btn-primary py-1" [disabled]="busy()" (click)="decide(p.proposal, 'approve')">Approve</button>
                       <button type="button" class="btn ml-1 py-1" [disabled]="busy()" (click)="decide(p.proposal, 'reject')">Reject</button>
@@ -188,6 +192,8 @@ export default class SettingsPage {
   readonly config = httpResource<ConfigKey[]>(() => '/api/config');
   readonly keys = computed(() => (this.config.hasValue() ? this.config.value() : []));
   readonly pending = computed(() => this.keys().flatMap((key) => key.pending.map((proposal) => ({ key, proposal }))));
+  /** A second approver is required (Settings: approval.four_eyes); off = one login is enough. */
+  readonly fourEyes = computed(() => fourEyesOn(this.keys()));
   readonly canEdit = computed(() => this.#tokens.has('CONFIG_ADMIN'));
 
   readonly editing = signal<ConfigKey | null>(null);

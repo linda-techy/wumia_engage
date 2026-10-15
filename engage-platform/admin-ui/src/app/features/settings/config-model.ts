@@ -113,3 +113,14 @@ export function showValue(v: unknown): string {
   }
   return typeof v === 'object' ? JSON.stringify(v) : String(v);
 }
+
+/**
+ * approval.four_eyes as it stands (V39/V40). Off by default: one login is
+ * enough, so a proposer may approve their own critical change.
+ */
+export function fourEyesOn(keys: ConfigKey[]): boolean {
+  const k = keys.find((x) => x.key === 'approval.four_eyes');
+  if (!k) return true;
+  const v = k.inForce.find((x) => x.selector === '*')?.value ?? k.defaultValue;
+  return v === true || v === 'true';
+}

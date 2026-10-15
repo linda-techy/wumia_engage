@@ -416,6 +416,10 @@ The owner's decision: review steps for every campaign, and one login can do them
   - a checklist ("I have checked the text, the poster, the link and the audience").
 
   Approve stays disabled until the checklist is ticked, and a new dry run unticks it.
+- **Critical settings work the same way (V40):**
+  - A critical change still waits as a proposal; that is its review.
+  - While `approval.four_eyes` is off, the proposer may approve it from Settings. The row is marked `self_approved`, and the database allows a self-decision only with that flag (invariants T4 and T19).
+  - The setting's label is now "Second approver for campaigns and critical settings".
 - **Tests:** `CampaignTest.one_login_reviews_approves_and_starts_its_own_push_campaign`, the four-eyes test with the setting on, and UI rules.
 
 ## Exit gate
