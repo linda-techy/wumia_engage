@@ -141,7 +141,19 @@ ON CONFLICT (key) DO NOTHING;
 
 ---
 
-### ☐ P7-T05 — Privacy
+### ◐ P7-T05 — Privacy
+
+> **Built 2026-10-15 (`V36__privacy.sql`). Still to do: deploy the compliance webhook subscriptions, and the staging erasure drill.**
+>
+> Where the build differs from the text below:
+> - **Migration V36**, not a shared one with T03. It adds `erase_identity(identity, request_ref, actor)`, with helpers `privacy_scrub_orders`, `privacy_scrub_inbox`, `privacy_like_patterns` and `privacy_text`, plus `consent_erasure_proofs`, `privacy_requests`, the tombstone identity `00000000-0000-0000-0000-000000000000`, and `pii_unmask_log.field` `data_request`.
+> - **What erasure covers beyond the plan:** the whole merge tree (start from any id, merged-away or survivor); orders, checkouts and payments matched by phone or email even when not linked to the identity; raw webhook payloads in every source; courier `shipment_events.raw`; anonymous pixel events; export files that mention the person. Matching folds spaces and hyphens between digits, so "+91 98765 43210" is caught. An unprocessed inbox row that mentions them is closed (`last_error` says why), so it cannot re-create them. Sends move to the tombstone with `idempotency_key` and `decision` rewritten.
+> - **Not erased:** `audit_log` and `pii_unmask_log` are append-only and keep the bare identity id, which resolves to no one afterwards (08-deployment-and-ops.md, DPDP obligations). T18 scans every other table.
+> - **Data request:** not an export row. It opens a `privacy_requests` row; the Owner's `POST /api/privacy-requests/{id}/report` builds the JSON on the spot, logged in `pii_unmask_log`, and nothing is stored. Resolving it empties the stored customer id, email and phone.
+> - **Shop redact:** an open request and an ERROR, with the manual runbook in 08 ("Runbook: Shop redact"). Engage serves one store, so the request means the whole database, and that is never automatic.
+> - **Webhooks:** `compliance_topics` added to `shopify.app.dev.toml` and `shopify.app.engage.toml`, same endpoint and HMAC (an unsigned one gets 401). They take effect when the app config is deployed. With the customer allowlist on, a request about a customer we never stored is acknowledged and dropped, which is correct: we hold nothing on them.
+> - **Console:** a Privacy requests page (OWNER) with Download report and Mark done, plus "Erase this customer" at the foot of a customer's page (OWNER; reason, and typing ERASE).
+> - **Tests:** `invariants.sql` T18, now 18/18 on a fresh V1–V36 database; breaking the inbox scrub fails it. `ComplianceWebhookTest` (5), `PrivacyTest` (4), UI specs. The invariants fixture needed `ON CONFLICT DO NOTHING` for `wa_v1`, which a later migration now seeds.
 
 **The same migration (privacy part)**: `erase_identity(p_identity UUID, p_request_ref TEXT)`:
 1. Writes an anonymised proof row for every consent withdrawal (channel, purpose, time, `request_ref`) into `consent_erasure_proofs`.

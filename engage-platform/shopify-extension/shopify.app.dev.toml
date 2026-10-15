@@ -43,3 +43,8 @@ topics = ["checkouts/create", "checkouts/update", "orders/create",
           "inventory_levels/update", "products/update", "app/uninstalled",
           "fulfillments/create", "fulfillments/update"]
 uri = "https://engage-dev.wumika.com/webhooks/shopify"
+
+# Mandatory for every app (Shopify privacy compliance); same endpoint, same HMAC.
+[[webhooks.subscriptions]]
+compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
+uri = "https://engage-dev.wumika.com/webhooks/shopify"

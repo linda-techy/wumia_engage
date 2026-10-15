@@ -166,3 +166,20 @@ export interface SpendReconciliation {
   billUploaded: boolean;
   rows: { category: string; ledgerPaise: number; metaPaise: number | null; diffPct: number | null; flagged: boolean }[];
 }
+
+/** GET /api/privacy-requests (V36, OWNER). No identifiers; result holds counts only. */
+export interface PrivacyRequest {
+  id: number;
+  kind: 'data_request' | 'customer_redact' | 'shop_redact' | 'erase' | string;
+  source: string;
+  externalRef: string | null;
+  status: 'open' | 'done';
+  hasSubject: boolean;
+  result: string | null;
+  reason: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
+  note: string | null;
+}

@@ -118,10 +118,20 @@ Managed Postgres with PITR, 30-day retention. Restore rehearsed quarterly — an
 
 ## DPDP obligations
 
-- **Erasure.** `POST /customers/{id}/erase` cascades through `identity_keys`, `profiles`, `events`, `devices`, `sends`. Consent rows are retained in anonymised form — you must be able to prove a withdrawal was honoured, which is itself a legal basis for keeping that record.
-- **Access.** Export of everything held about an identity, as JSON, via the same async export path.
+- **Erasure.** `erase_identity()` (V36), from `POST /api/customers/{id}/erase` (OWNER, reason required) or Shopify's `customers/redact`. It deletes the person and everything merged into them; their keys, profile, consents, devices, journeys, holdouts and WhatsApp inbound go with the identity. It clears phone, email and notes on their orders, checkouts and payments, and scrubs raw webhook payloads, courier events, anonymous pixel events and export files that mention them. Sends and conversions move to the tombstone identity `00000000-…`, so spend and attribution still add up. Each withdrawal is kept in `consent_erasure_proofs` with no identity, because you must be able to prove a withdrawal was honoured. `audit_log` and `pii_unmask_log` are append-only and keep the bare identity id, which resolves to no one afterwards. Delete the customer in Shopify too: Engage cannot.
+- **Access.** Shopify's `customers/data_request` opens a privacy request. The Owner downloads the report (JSON, built on the spot and logged in `pii_unmask_log`) from Privacy requests, sends it to the store owner within 30 days, and marks it done, which forgets who asked.
 - **Consent evidence.** Every `consents` row carries the exact copy displayed, the page, IP, user agent, and a flag proving the box was not pre-ticked.
 - **Retention.** Events older than 400 days are purged nightly; inactive devices are deactivated at 180 days.
+
+## Runbook: Shop redact
+
+Shopify sends `shop/redact` 48 hours after the store uninstalls the app and expects all of the store's data deleted within 30 days. Engage serves one store, so this means the whole database. It is never automatic: an uninstall by mistake would otherwise wipe every customer.
+
+1. Confirm with the store owner, in writing, that the uninstall was intended and the app is not coming back.
+2. Halt everything from the dashboard header and stop the worker and ingest pods.
+3. Take a final encrypted backup only if the owner asks for one, and agree when it will be destroyed.
+4. Drop the database (and its backups, once the agreed date passes); delete the FCM, Meta and MSG91 credentials; revoke the Shopify app secret.
+5. Mark the privacy request done with the date and who did it. The audit trail goes with the database, so record the deletion outside it as well: an email to the owner is enough.
 
 ## Runbook: quality rating drops
 

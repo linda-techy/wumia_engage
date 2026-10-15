@@ -25,6 +25,7 @@ const NAV: NavItem[] = [
   { path: '/payments', label: 'Payment failures', role: 'VIEWER' },
   { path: '/ingest', label: 'Ingest health', role: 'VIEWER' },
   { path: '/exports', label: 'Exports', role: 'ANALYST' },
+  { path: '/privacy', label: 'Privacy requests', role: 'OWNER' },
   { path: '/operators', label: 'Operators', role: 'OWNER' },
   { path: '/account', label: 'Account', role: 'VIEWER' },
 ];

@@ -7,7 +7,8 @@ INSERT INTO operators (id,email,full_name,password_hash,status) VALUES
  ('00000000-0000-0000-0000-00000000000a','priya@brand.in','Priya','x','active'),
  ('00000000-0000-0000-0000-00000000000b','arun@brand.in','Arun','x','active');
 INSERT INTO identities (id) VALUES ('11111111-1111-1111-1111-111111111111');
-INSERT INTO consent_copy_versions VALUES ('wa_v1','whatsapp','Send me order updates and offers from BRAND on WhatsApp','{transactional,marketing}','cart',NULL,now());
+INSERT INTO consent_copy_versions VALUES ('wa_v1','whatsapp','Send me order updates and offers from BRAND on WhatsApp','{transactional,marketing}','cart',NULL,now())
+ ON CONFLICT DO NOTHING;
 
 -- T1 consent_current returns the latest state
 INSERT INTO consents (identity_id,channel,purpose,state,source,copy_version,occurred_at) VALUES
@@ -132,5 +133,58 @@ INSERT INTO webhook_inbox (source,delivery_id,topic,payload) VALUES ('razorpay',
   ON CONFLICT DO NOTHING;
 DO $$ BEGIN ASSERT (SELECT count(*) FROM webhook_inbox WHERE delivery_id='evt_1')=1, 'T17 inbox dedupe'; END $$;
 
+-- T18 DPDP erasure (V36): erase_identity leaves no trace of the person in any table,
+--     including a merged-away identity, raw webhooks, courier events and pixel events,
+--     while spend still adds up on the tombstone identity.
+INSERT INTO identities (id) VALUES ('44444444-4444-4444-4444-444444444444');
+INSERT INTO identities (id, merged_into) VALUES ('55555555-5555-5555-5555-555555555555','44444444-4444-4444-4444-444444444444');
+INSERT INTO identity_keys (identity_id,kind,value,verified) VALUES
+ ('44444444-4444-4444-4444-444444444444','phone','919812345678',true),
+ ('44444444-4444-4444-4444-444444444444','email','erase.me_t18@example.com',true),
+ ('44444444-4444-4444-4444-444444444444','shopify_customer','7700000000018',true);
+INSERT INTO profiles (identity_id,attrs) VALUES ('44444444-4444-4444-4444-444444444444','{"first_name":"Asha"}');
+INSERT INTO consents (identity_id,channel,purpose,state,source) VALUES
+ ('44444444-4444-4444-4444-444444444444','whatsapp','marketing','granted','cart_attr'),
+ ('44444444-4444-4444-4444-444444444444','whatsapp','marketing','withdrawn','wa_stop_reply');
+INSERT INTO orders (id,order_number,identity_id,phone,phone_source,email,total_paise,created_at) VALUES
+ ('6600000000018','#T18','44444444-4444-4444-4444-444444444444','919812345678','contact','erase.me_t18@example.com',149900,now());
+INSERT INTO checkouts (token,phone,email,total_paise) VALUES ('chk_t18','919812345678','erase.me_t18@example.com',149900);
+INSERT INTO shipments (id,order_id,awb,status,status_at) VALUES (918,'6600000000018','AWB18','delivered',now());
+INSERT INTO shipment_events (shipment_id,source_event,status,occurred_at,raw) VALUES
+ (918,'ev18','delivered',now(),'{"customer_phone":"+91 98123 45678"}');
+INSERT INTO sends (identity_id,channel,category,template_key,intent_key,idempotency_key,status,cost_paise,decision) VALUES
+ ('55555555-5555-5555-5555-555555555555','whatsapp','marketing','t','winback',
+  'winback:55555555-5555-5555-5555-555555555555:0','delivered',86,'{"reason":null,"to":"919812345678"}');
+INSERT INTO webhook_inbox (source,delivery_id,topic,payload,processed_at) VALUES
+ ('shopify','d18a','orders/create','{"id":6600000000018,"email":"Erase.Me_T18@example.com"}',now()),
+ ('razorpay','d18b','payment.failed','{"payload":{"payment":{"entity":{"contact":"+91 98123-45678"}}}}',NULL),
+ ('shopify','d18c','orders/create','{"id":6600000000099,"email":"someone.else@example.com"}',NULL);
+INSERT INTO events (identity_id,name,source,props) VALUES (NULL,'checkout_contact','pixel','{"email":"erase.me_t18@example.com"}');
+DO $$ DECLARE r jsonb; BEGIN
+  r := erase_identity('55555555-5555-5555-5555-555555555555', 'T18-ref');   -- via the merged-away id
+  ASSERT (r->>'identities')::int = 2, 'T18 merge tree ' || r::text;
+END $$;
+DO $$ DECLARE tbl text; hits int; pats text[] := ARRAY['%44444444-4444-4444-4444-444444444444%',
+    '%55555555-5555-5555-5555-555555555555%', '%9812345678%', '%98123 45678%', '%erase.me\_t18@example.com%', '%7700000000018%'];
+BEGIN
+  FOR tbl IN SELECT table_name FROM information_schema.tables
+              WHERE table_schema = current_schema() AND table_type = 'BASE TABLE' LOOP
+    EXECUTE format('SELECT count(*) FROM %I t WHERE lower(t::text) LIKE ANY ($1)', tbl) INTO hits USING pats;
+    ASSERT hits = 0, 'T18 erasure left ' || hits || ' row(s) in ' || tbl;
+  END LOOP;
+  ASSERT (SELECT count(*) FROM consent_erasure_proofs WHERE request_ref='T18-ref' AND state='withdrawn')=1, 'T18 proof';
+  ASSERT (SELECT sum(cost_paise) FROM sends WHERE identity_id='00000000-0000-0000-0000-000000000000')=86, 'T18 spend kept';
+  ASSERT (SELECT total_paise FROM orders WHERE id='6600000000018')=149900, 'T18 revenue kept';
+  ASSERT (SELECT processed_at IS NULL FROM webhook_inbox WHERE delivery_id='d18c'), 'T18 someone else untouched';
+  ASSERT (SELECT processed_at IS NOT NULL FROM webhook_inbox WHERE delivery_id='d18b'), 'T18 pending payload closed';
+  ASSERT (SELECT count(*) FROM audit_log WHERE action='privacy.erase' AND entity_id='T18-ref')=1, 'T18 audit';
+END $$;
+DO $$ BEGIN
+  BEGIN PERFORM erase_identity('00000000-0000-0000-0000-000000000000', 'x'); RAISE EXCEPTION 'T18 tombstone erasable';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM LIKE 'T18%' THEN RAISE; END IF;
+  END;
+END $$;
+
 ROLLBACK;
-\echo ALL 17 INVARIANT TESTS PASSED
+\echo ALL 18 INVARIANT TESTS PASSED
