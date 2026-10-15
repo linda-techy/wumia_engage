@@ -186,5 +186,18 @@ DO $$ BEGIN
   END;
 END $$;
 
+-- T19 one login (V40): a proposer may decide their own proposal only when the
+--     row is explicitly marked self_approved; T4 still holds without the flag.
+INSERT INTO config_proposals (id,key,value,reason,proposed_by) VALUES
+ (19,'holdout.global_pct','7','one-login review','00000000-0000-0000-0000-00000000000a');
+DO $$ BEGIN
+  BEGIN UPDATE config_proposals SET status='APPROVED', decided_by='00000000-0000-0000-0000-00000000000a' WHERE id=19;
+        RAISE EXCEPTION 'T19 unflagged self-approval allowed';
+  EXCEPTION WHEN check_violation THEN NULL; END;
+END $$;
+UPDATE config_proposals SET status='APPROVED', decided_by='00000000-0000-0000-0000-00000000000a', decided_at=now(),
+       self_approved=true WHERE id=19;
+DO $$ BEGIN ASSERT (SELECT self_approved FROM config_proposals WHERE id=19), 'T19 flagged self-approval'; END $$;
+
 ROLLBACK;
-\echo ALL 18 INVARIANT TESTS PASSED
+\echo ALL 19 INVARIANT TESTS PASSED

@@ -201,7 +201,11 @@ public class ConfigController {
         });
     }
 
-    /** A second CONFIG_ADMIN approves: the version is inserted now, with approved_by. */
+    /**
+     * Approves a proposal: the version is inserted now, with approved_by. The
+     * proposer may approve their own while {@code approval.four_eyes} is off
+     * (V40: one login is enough); the row is then marked self_approved.
+     */
     @RequiresRole(Role.CONFIG_ADMIN)
     @Post("/proposals/{id}/approve")
     public Map<String, Object> approve(@PathVariable long id) {
@@ -210,8 +214,9 @@ public class ConfigController {
             var p = pendingProposal(c, id);
             var k = key(c, (String) p.get("key"));
             current.require(k.minRole());
-            if (actor.equals(p.get("proposedBy"))) {
-                throw Problems.conflict("four-eyes", "a proposal is approved by someone other than its proposer");
+            boolean self = actor.equals(p.get("proposedBy"));
+            if (self && fourEyes(c)) {
+                throw Problems.conflict("four-eyes", "a proposal is approved by someone other than its proposer (approval.four_eyes is on)");
             }
             var from = (OffsetDateTime) p.get("effectiveFrom");
             var to = (OffsetDateTime) p.get("effectiveTo");
@@ -227,12 +232,24 @@ public class ConfigController {
                     (UUID) p.get("proposedBy"), actor, (String) p.get("reason"));
             Sql.update(c, """
                     UPDATE config_proposals
-                       SET status = 'APPROVED', decided_by = ?, decided_at = now(), applied_version_id = ?
-                     WHERE id = ?""", actor, versionId, id);
+                       SET status = 'APPROVED', decided_by = ?, decided_at = now(), applied_version_id = ?, self_approved = ?
+                     WHERE id = ?""", actor, versionId, self, id);
             audit.record(c, actor, "config.approve", "config_proposal", Long.toString(id), null,
-                    toJson(Map.of("key", k.key(), "selector", selector, "versionId", versionId)));
+                    toJson(Map.of("key", k.key(), "selector", selector, "versionId", versionId, "selfApproved", self)));
             return Map.<String, Object>of("proposalId", id, "status", "APPROVED", "versionId", versionId);
         });
+    }
+
+    /** approval.four_eyes as it stands now, read in the same transaction. */
+    private static boolean fourEyes(Connection c) throws SQLException {
+        try (var ps = Sql.prepare(c, """
+                SELECT COALESCE((SELECT value FROM config_current WHERE key = 'approval.four_eyes' AND selector = '*'),
+                                (SELECT default_value FROM config_keys WHERE key = 'approval.four_eyes'),
+                                'true'::jsonb) = 'true'::jsonb""");
+             var rs = ps.executeQuery()) {
+            rs.next();
+            return rs.getBoolean(1);
+        }
     }
 
     @RequiresRole(Role.CONFIG_ADMIN)

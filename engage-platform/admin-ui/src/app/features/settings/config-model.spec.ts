@@ -1,4 +1,5 @@
 import { parseValue, showValue } from './config-model';
+import { fourEyesOn } from './config-model';
 
 const draft = (over: Partial<{ text: string; flag: boolean; from: string; to: string }>) => ({
   text: '',
@@ -29,5 +30,13 @@ describe('config values', () => {
     expect(parseValue(q, draft({ from: '21:00', to: '09:00' }))).toEqual({ ok: true, value: { from: '21:00', to: '09:00' } });
     expect(parseValue(q, draft({ from: '09:00', to: '09:00' })).ok).toBe(false);
     expect(showValue({ from: '21:00', to: '09:00' })).toBe('21:00–09:00');
+  });
+
+  it('one login is enough unless a second approver is switched on', () => {
+    const key = (inForce: unknown[], defaultValue: unknown) =>
+      ({ key: 'approval.four_eyes', inForce: inForce.map((value) => ({ selector: '*', value })), defaultValue }) as never;
+    expect(fourEyesOn([key([], false)])).toBe(false);
+    expect(fourEyesOn([key([true], false)])).toBe(true);
+    expect(fourEyesOn([])).toBe(true);
   });
 });
