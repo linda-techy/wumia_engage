@@ -46,6 +46,9 @@ class CampaignExecutorTest {
             Sql.update(c, """
                     INSERT INTO config_versions (key, selector, value, changed_by, reason)
                     VALUES ('holdout.global_pct', '*', '0', ?, 'test')""", operator);
+            Sql.update(c, """
+                    INSERT INTO config_versions (key, selector, value, changed_by, reason)
+                    VALUES ('holdout.journey_pct', '*', '0', ?, 'test')""", operator);
             return null;
         });
         config.invalidate();
@@ -56,13 +59,13 @@ class CampaignExecutorTest {
         var campaign = campaign(6000, null, null);
         var people = recipients(campaign, 3);
 
-        assertEquals(3, executor.runOnce());
+        assertEquals(3, executor.runBatch(campaign));
         assertEquals(3, push.all.size());
         assertEquals(3L, count("SELECT count(*) FROM campaign_recipients WHERE campaign_id = '" + campaign
                 + "' AND state = 'sent' AND send_id IS NOT NULL"));
         assertEquals(3L, count("SELECT count(*) FROM sends WHERE intent_key = 'campaign:" + campaign + "' AND status = 'sent'"));
 
-        executor.runOnce();
+        executor.runBatch(campaign);
         assertEquals("COMPLETED", status(campaign));
         assertEquals(people.size(), push.all.size(), "nobody twice");
     }
@@ -71,8 +74,8 @@ class CampaignExecutorTest {
         var campaign = campaign(10, null, null);           // bucket holds 10, refills 1 every 6 s
         recipients(campaign, 30);
 
-        int first = executor.runOnce();
-        int second = executor.runOnce();
+        int first = executor.runBatch(campaign);
+        int second = executor.runBatch(campaign);
         assertEquals(10, first, "one bucket's worth");
         assertTrue(second <= 1, "an immediate second pass finds the bucket empty, got " + second);
     }
@@ -80,12 +83,12 @@ class CampaignExecutorTest {
     @Test void a_pause_stops_the_run_within_one_batch() {
         var campaign = campaign(10, null, null);
         recipients(campaign, 30);
-        assertEquals(10, executor.runOnce());
+        assertEquals(10, executor.runBatch(campaign));
 
         db.inTx(c -> Sql.update(c, "UPDATE campaigns SET status = 'PAUSED', paused_reason = 'operator' WHERE id = ?", campaign));
         db.inTx(c -> Sql.update(c, "UPDATE campaign_rate_buckets SET tokens = capacity WHERE campaign_id = ?", campaign));
 
-        assertEquals(0, executor.runOnce());
+        assertEquals(0, executor.runBatch(campaign));
         assertEquals(20L, count("SELECT count(*) FROM campaign_recipients WHERE campaign_id = '" + campaign + "' AND state = 'pending'"));
     }
 
@@ -98,7 +101,7 @@ class CampaignExecutorTest {
                 VALUES (?, 'whatsapp', 'marketing', 'x', ?, ?, 'sent', 1000)""",
                 spender, "campaign:" + campaign, "budget-test-" + campaign));
 
-        assertEquals(0, executor.runOnce());
+        assertEquals(0, executor.runBatch(campaign));
         assertEquals("PAUSED", status(campaign));
         assertEquals("budget_cap", text("SELECT paused_reason FROM campaigns WHERE id = '" + campaign + "'"));
         assertEquals(0, push.all.size());
@@ -108,7 +111,7 @@ class CampaignExecutorTest {
         var campaign = campaign(6000, null, 360);         // push now, WhatsApp 6 h later to non-clickers
         var person = recipients(campaign, 1).getFirst();
 
-        executor.runOnce();
+        executor.runBatch(campaign);
         assertEquals(1, push.all.size());
         assertEquals("waiting|1", text("""
                 SELECT status || '|' || step_index FROM cascade_runs

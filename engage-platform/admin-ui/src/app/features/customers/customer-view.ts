@@ -6,6 +6,7 @@ import { CustomerView, IdentityKey, Row } from '../../core/api/models';
 import { TokenService } from '../../core/auth/token.service';
 import { InrPipe, IstPipe, problemDetail } from '../../shared/format';
 import { EmptyState, ErrorState, LoadingState } from '../../shared/states';
+import { EraseCustomer } from '../privacy/erase-customer';
 
 const KEY_LABELS: Record<string, string> = {
   email: 'Email',
@@ -24,7 +25,7 @@ const KEY_LABELS: Record<string, string> = {
  */
 @Component({
   selector: 'app-customer-view',
-  imports: [RouterLink, InrPipe, IstPipe, LoadingState, ErrorState, EmptyState],
+  imports: [RouterLink, InrPipe, IstPipe, LoadingState, ErrorState, EmptyState, EraseCustomer],
   template: `
     <a routerLink="/customers" class="text-sm text-slate-600 underline">← Find another customer</a>
     @if (customer.isLoading() && !customer.hasValue()) {
@@ -230,6 +231,8 @@ const KEY_LABELS: Record<string, string> = {
           }
         </div>
       </section>
+
+      <app-erase-customer [identityId]="id()" />
     }
   `,
 })

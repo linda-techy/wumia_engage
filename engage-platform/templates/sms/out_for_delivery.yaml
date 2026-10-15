@@ -1,0 +1,10 @@
+# DLT: see order_shipped.yaml.
+key: sms_out_for_delivery
+channel: sms
+category: utility
+dlt_template_id: PENDING
+msg91_template_id: PENDING
+locales:
+  en: { body: "Your WUMIKA order {{order_no}} is out for delivery today. Track it here: https://wumika.com/apps/push/t/{{track_ref}} -WUMIKA" }
+vars: [order_no, track_ref]
+samples: { order_no: "#1042", track_ref: "2s-AbCdEfGhIjK" }

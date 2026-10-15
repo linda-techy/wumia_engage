@@ -1,0 +1,10 @@
+# Abandoned checkout (P5-T03): the free fallback when WhatsApp is not possible,
+# and the second nudge ~4 h after a WhatsApp reminder.
+key: push_checkout_v1
+channel: push
+category: marketing
+cooldown: PT12H
+locales:
+  en: { title: "Your checkout is saved", body: "{{product}} is waiting. Finish your order in a few taps." }
+vars: [product, url, image]
+samples: { product: "Kundan Jhumka Earrings" }

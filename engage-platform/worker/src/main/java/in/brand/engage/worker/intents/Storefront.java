@@ -35,6 +35,35 @@ public class Storefront {
                 + "?variant=" + URLEncoder.encode(variantId, StandardCharsets.UTF_8);
     }
 
+    /** {@code products/<handle>[?variant=<id>]}: the WhatsApp button suffix after {@code https://wumika.com/}. */
+    static String productPath(String handle, String variantId) {
+        var path = "products/" + URLEncoder.encode(handle, StandardCharsets.UTF_8);
+        return variantId == null || variantId.isBlank() ? path
+                : path + "?variant=" + URLEncoder.encode(variantId, StandardCharsets.UTF_8);
+    }
+
+    /** A path on the storefront, e.g. Shopify's checkout recovery path; no leading slash. */
+    public String path(String path) {
+        return base + "/" + path.replaceAll("^/+", "");
+    }
+
+    /**
+     * The path and query of Shopify's {@code abandoned_checkout_url}, without
+     * the leading slash, so it opens on our domain (the WhatsApp button is
+     * {@code https://wumika.com/{{checkout_path}}}). Null or unreadable → the cart.
+     */
+    static String checkoutPath(String recoveryUrl) {
+        if (recoveryUrl == null || recoveryUrl.isBlank()) return "cart";
+        try {
+            var u = java.net.URI.create(recoveryUrl.strip());
+            var path = u.getRawPath() == null ? "" : u.getRawPath().replaceAll("^/+", "");
+            if (path.isEmpty()) return "cart";
+            return u.getRawQuery() == null ? path : path + "?" + u.getRawQuery();
+        } catch (IllegalArgumentException e) {
+            return "cart";
+        }
+    }
+
     static String base(String storefrontBaseUrl, String shopDomain) {
         if (storefrontBaseUrl != null && !storefrontBaseUrl.isBlank()) return storefrontBaseUrl.replaceAll("/+$", "");
         if (shopDomain == null || shopDomain.isBlank()) {

@@ -43,10 +43,13 @@ public class ShopifyInboxHandler implements InboxHandler {
     private final InventoryHandler inventory;
     private final PriceHandler prices;
     private final int matchWindowMinutes;
+    private final ComplianceHandler compliance;
 
     public ShopifyInboxHandler(IdentityResolver identities, ConsentWriter consents, EventWriter events,
                                InventoryHandler inventory, PriceHandler prices, FulfillmentHandler fulfillments,
-                               EngageProperties.Razorpay razorpay, EngageProperties.Consent consent) {
+                               EngageProperties.Razorpay razorpay, EngageProperties.Consent consent,
+                               ComplianceHandler compliance) {
+        this.compliance = compliance;
         this.fulfillments = fulfillments;
         this.identities = identities;
         this.noticeSince = noticeSince(consent.checkoutNoticeSince());
@@ -95,6 +98,7 @@ public class ShopifyInboxHandler implements InboxHandler {
             }
             case "fulfillments/create", "fulfillments/update" -> fulfillments.handle(c, item);
             case "app/uninstalled" -> uninstalled(c, item);
+            case "customers/redact", "customers/data_request", "shop/redact" -> compliance.handle(c, item);
             default -> { /* acknowledged; other topics are consumed in later phases */ }
         }
     }
@@ -123,6 +127,10 @@ public class ShopifyInboxHandler implements InboxHandler {
              var rs = ps.executeQuery()) {
             if (!rs.next()) return;
             var token = rs.getString("token");
+            if (token == null) {
+                LOG.warn("shopify checkout {} has no token: skipped", item.deliveryId());
+                return;
+            }
             var cartToken = CartTokens.normalise(rs.getString("cart_token"));
             var customerId = rs.getString("customer_id");
             var phone = Phone.pick(rs.getString("contact_phone_raw"), rs.getString("shipping_phone_raw"));

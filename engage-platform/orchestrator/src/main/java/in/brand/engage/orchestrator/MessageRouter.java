@@ -9,6 +9,7 @@ import in.brand.engage.core.messaging.Channel;
 import in.brand.engage.orchestrator.templates.MessageTemplate;
 import in.brand.engage.orchestrator.templates.Renderer;
 import in.brand.engage.orchestrator.templates.TemplateRegistry;
+import in.brand.engage.orchestrator.templates.WaTemplateGate;
 import in.brand.engage.policy.Decision;
 import in.brand.engage.policy.PolicyEngine;
 import jakarta.inject.Singleton;
@@ -44,10 +45,14 @@ public class MessageRouter {
     private final TemplateRegistry templates;
     private final Renderer renderer;
     private final BeaconSignature beacons;
+    private final WaTemplateGate waGate;
+    private final EmailLinks emailLinks;
     private final Map<Channel, ChannelAdapter> adapters = new EnumMap<>(Channel.class);
 
     public MessageRouter(PolicyEngine policy, SendRepository sends, TemplateRegistry templates, Renderer renderer,
-                         BeaconSignature beacons, List<ChannelAdapter> adapters) {
+                         BeaconSignature beacons, WaTemplateGate waGate, EmailLinks emailLinks, List<ChannelAdapter> adapters) {
+        this.waGate = waGate;
+        this.emailLinks = emailLinks;
         this.policy = policy;
         this.sends = sends;
         this.templates = templates;
@@ -56,6 +61,15 @@ public class MessageRouter {
         for (var a : adapters) {
             if (this.adapters.put(a.channel(), a) != null) {
                 throw new IllegalStateException("two adapters for channel " + a.channel());
+            }
+        }
+        if (this.adapters.containsKey(Channel.SMS)) {
+            var pending = templates.all().stream()
+                    .filter(t -> t.channel() == Channel.SMS && (t.sms() == null || t.sms().pending()))
+                    .map(MessageTemplate::key).toList();
+            if (!pending.isEmpty()) {
+                LOG.error("SMS is on (MSG91_AUTH_KEY) but {} are not registered on DLT yet: every send of them fails "
+                        + "dlt_pending. Put the DLT and MSG91 ids in templates/sms/.", pending);
             }
         }
     }
@@ -93,6 +107,54 @@ public class MessageRouter {
         if (template == null) return fail(cmd, sendId, "template_not_in_registry", false, false, List.of());
 
         RenderedMessage message;
+        if (cmd.channel() == Channel.WHATSAPP) {
+            try {
+                var wa = renderer.whatsapp(template, allow.locale(), cmd.vars());
+                if (wa.call() == null && !allow.freeWindow()) {
+                    // A free-form reply outside the 24 h window: Meta would refuse it (131047).
+                    return fail(cmd, sendId, "outside_service_window", false, false, List.of());
+                }
+                if (wa.call() != null) {
+                    var refusal = waGate.refusal(wa.call().name(), wa.call().language());
+                    if (refusal != null) return fail(cmd, sendId, refusal, false, false, List.of());
+                }
+                message = new RenderedMessage(cmd.channel(), template.key(), sendId, cmd.intentKey(), "", wa.body(),
+                        cmd.vars().getOrDefault("url", ""), null, null, cmd.ttl(), false, null, wa.call());
+            } catch (IllegalArgumentException e) {
+                LOG.error("send {}: cannot render {}: {}", sendId, template.key(), e.getMessage());
+                return fail(cmd, sendId, "render_failed", false, false, List.of());
+            }
+            return deliver(cmd, allow, sendId, adapter, message);
+        }
+        if (cmd.channel() == Channel.EMAIL) {
+            try {
+                var vars = new java.util.HashMap<>(cmd.vars());
+                if (vars.get("url") != null) vars.put("url", Utm.apply(vars.get("url"), "email", cmd.intentKey(), sendId));
+                var unsubscribe = emailLinks.unsubscribeUrl(cmd.identityId());
+                var e = renderer.email(template, allow.locale(), vars, unsubscribe);
+                message = new RenderedMessage(cmd.channel(), template.key(), sendId, cmd.intentKey(), e.subject(), e.text(),
+                        vars.getOrDefault("url", ""), null, null, cmd.ttl(), false, null, null, null,
+                        new in.brand.engage.channels.EmailContent(e.subject(), e.html(), e.text(), unsubscribe,
+                                allow.effectiveCategory() == Category.MARKETING));
+            } catch (IllegalArgumentException | IllegalStateException e) {
+                LOG.error("send {}: cannot render {}: {}", sendId, template.key(), e.getMessage());
+                return fail(cmd, sendId, "render_failed", false, false, List.of());
+            }
+            return deliver(cmd, allow, sendId, adapter, message);
+        }
+        if (cmd.channel() == Channel.SMS) {
+            // Not registered on DLT yet: the operator would drop it after MSG91 said "success".
+            if (template.sms() == null || template.sms().pending()) return fail(cmd, sendId, "dlt_pending", false, false, List.of());
+            try {
+                var sms = renderer.sms(template, cmd.vars());
+                message = new RenderedMessage(cmd.channel(), template.key(), sendId, cmd.intentKey(), "", sms.body(),
+                        "", null, null, cmd.ttl(), false, null, null, sms.call());
+            } catch (IllegalArgumentException e) {
+                LOG.error("send {}: cannot render {}: {}", sendId, template.key(), e.getMessage());
+                return fail(cmd, sendId, "render_failed", false, false, List.of());
+            }
+            return deliver(cmd, allow, sendId, adapter, message);
+        }
         try {
             var r = renderer.render(template, allow.locale(), cmd.vars());
             if (r.url() == null) throw new IllegalArgumentException("template " + template.key() + " needs variable 'url'");
@@ -105,12 +167,18 @@ public class MessageRouter {
             return fail(cmd, sendId, "render_failed", false, false, List.of());
         }
 
+        return deliver(cmd, allow, sendId, adapter, message);
+    }
+
+    private SendResult deliver(SendCommand cmd, Decision.Allow allow, long sendId, ChannelAdapter adapter,
+                               RenderedMessage message) {
         try {
             var result = adapter.send(message, allow.addresses());
             sends.markSent(sendId, cmd.channel(), allow.effectiveCategory(), allow.unitCostPaise(), result);
             return new SendResult.Sent(sendId, result.delivered());
         } catch (ChannelException.Permanent e) {
-            return fail(cmd, sendId, e.code(), e.suppress(), false, e.prunes());
+            sends.markFailed(sendId, cmd.identityId(), cmd.channel(), e.code(), e.suppress(), e.prunes());
+            return new SendResult.Failed(sendId, e.code(), false, e.escalateImmediately());
         } catch (ChannelException.Transient e) {
             LOG.warn("send {}: transient provider failure: {}", sendId, e.getMessage());
             return fail(cmd, sendId, e.code(), false, true, e.prunes());

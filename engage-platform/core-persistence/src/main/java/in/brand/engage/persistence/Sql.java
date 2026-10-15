@@ -42,6 +42,8 @@ public final class Sql {
             case Boolean b -> ps.setBoolean(i, b);
             case UUID u -> ps.setObject(i, u);
             case OffsetDateTime t -> ps.setObject(i, t);
+            case java.time.LocalDate d -> ps.setObject(i, d);
+            case java.math.BigDecimal d -> ps.setBigDecimal(i, d);
             case String[] arr -> ps.setArray(i, ps.getConnection().createArrayOf("text", arr));
             case byte[] bytes -> ps.setBytes(i, bytes);
             default -> throw new IllegalArgumentException("unsupported parameter type " + v.getClass());

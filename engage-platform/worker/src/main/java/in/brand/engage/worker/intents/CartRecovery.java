@@ -1,10 +1,13 @@
 package in.brand.engage.worker.intents;
 
 import in.brand.engage.orchestrator.CascadeDefinition;
+import in.brand.engage.orchestrator.CascadeDefinition.Step;
 import in.brand.engage.orchestrator.DefaultOrchestrator;
+import in.brand.engage.orchestrator.Guard;
 import in.brand.engage.orchestrator.MessageIntent;
 import in.brand.engage.orchestrator.Priority;
 import in.brand.engage.persistence.Sql;
+import in.brand.engage.policy.ConfigResolver;
 import in.brand.engage.worker.Event;
 import in.brand.engage.worker.EventConsumer;
 import io.micronaut.context.annotation.Bean;
@@ -13,15 +16,26 @@ import jakarta.inject.Singleton;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * {@code cart_recovery} step 1 (phase-3 §4): a push 45 minutes after the last
- * cart change. Every change restarts the cascade (cancel the live run, start a
- * new one), an emptied cart ends it, and {@code order_placed} for the cart
- * ends it. Push only in P3; email and WhatsApp steps arrive in P4/P5 behind
- * the same trigger.
+ * {@code cart_recovery} (P5-T04): items left in the cart, no checkout started.
+ * WhatsApp first, as most Indian D2C brands do (owner's decision,
+ * 2026-10-10), push as the free fallback and second nudge. No SMS.
+ *
+ * <pre>
+ * t+45 min  WhatsApp cart_reminder_v1        marketing opt-in, not INCAPABLE, cart ≥ wa_min_cart_paise
+ *           (skipped → the push goes at once instead)
+ * +4 h      Push     push_cart_recovery_v1   a live browser subscription
+ * +20 h     Email    email_cart_v1           email marketing consent (skipped until SES is set up)
+ * </pre>
+ *
+ * Every cart change restarts the run (cancel the live one, start a new one),
+ * an emptied cart ends it, and {@code order_placed} for the cart ends it. A
+ * cart whose checkout was started recently belongs to {@code checkout_abandon},
+ * which has the buyer's phone and Shopify's saved checkout.
  *
  * <p>Anonymous carts are skipped: without a linked identity there is nobody
  * to reach. The subject is the cart token, which already belongs to one person.
@@ -30,14 +44,15 @@ import java.util.Map;
 public class CartRecovery implements EventConsumer {
 
     public static final String INTENT = "cart_recovery";
-    static final Duration DELAY = Duration.ofMinutes(45);
     static final Duration TTL = Duration.ofHours(12);
 
     private final DefaultOrchestrator orchestrator;
+    private final ConfigResolver config;
     private final String cartUrl;
 
-    public CartRecovery(DefaultOrchestrator orchestrator, Storefront storefront) {
+    public CartRecovery(DefaultOrchestrator orchestrator, ConfigResolver config, Storefront storefront) {
         this.orchestrator = orchestrator;
+        this.config = config;
         this.cartUrl = storefront.cart();
     }
 
@@ -46,8 +61,12 @@ public class CartRecovery implements EventConsumer {
         @Bean
         @Singleton
         CascadeDefinition cartRecovery() {
-            return new CascadeDefinition(INTENT, Priority.MID_INTENT,
-                    List.of(CascadeDefinition.Step.push("push_cart_recovery_v1", TTL)));
+            return new CascadeDefinition(INTENT, Priority.MID_INTENT, List.of(
+                    Step.whatsapp("cart_reminder_v1")
+                            .require(Guard.WA_MARKETING, Guard.WA_CAPABLE_OR_UNKNOWN, Guard.hasVar(CheckoutAbandon.WA_OK))
+                            .waitAfter(Duration.ofHours(4)),
+                    Step.push("push_cart_recovery_v1", TTL).waitAfter(Duration.ofHours(20)),
+                    Step.email("email_cart_v1").require(Guard.HAS_EMAIL_MARKETING)));
         }
     }
 
@@ -68,10 +87,18 @@ public class CartRecovery implements EventConsumer {
 
         // The cart as it is now, not as the event saw it: a later change may already be stored.
         try (var ps = Sql.prepare(c, """
-                SELECT identity_id, item_count, converted_at IS NOT NULL AS converted,
-                       (SELECT l->>'title' FROM jsonb_array_elements(lines) l
-                         ORDER BY (l->>'price_paise')::bigint DESC NULLS LAST LIMIT 1) AS product
-                  FROM carts WHERE cart_token = ?""", cartToken);
+                SELECT ct.identity_id, ct.item_count, ct.total_paise, ct.converted_at IS NOT NULL AS converted,
+                       p.attrs->>'first_name' AS first_name,
+                       (SELECT l->>'title' FROM jsonb_array_elements(ct.lines) l
+                         ORDER BY (l->>'price_paise')::bigint DESC NULLS LAST LIMIT 1) AS product,
+                       (SELECT l->>'product_id' FROM jsonb_array_elements(ct.lines) l
+                         ORDER BY (l->>'price_paise')::bigint DESC NULLS LAST LIMIT 1) AS product_id,
+                       EXISTS (SELECT 1 FROM checkouts k
+                                WHERE k.cart_token = ct.cart_token AND k.identity_id IS NOT NULL
+                                  AND k.completed_at IS NULL AND k.order_id IS NULL
+                                  AND k.updated_at > ? - interval '24 hours') AS in_checkout
+                  FROM carts ct LEFT JOIN profiles p ON p.identity_id = ct.identity_id
+                 WHERE ct.cart_token = ?""", e.occurredAt().atOffset(java.time.ZoneOffset.UTC), cartToken);
              var rs = ps.executeQuery()) {
             if (!rs.next()) return List.of();
             var identityId = rs.getObject("identity_id", java.util.UUID.class);
@@ -87,9 +114,20 @@ public class CartRecovery implements EventConsumer {
             if (identityId == null) return List.of();
 
             orchestrator.cancel(c, INTENT, cartToken, "cart_changed");
+            if (rs.getBoolean("in_checkout")) return List.of();       // checkout_abandon has it
+
+            var snapshot = config.snapshot();
+            long total = rs.getLong("total_paise");
+            Map<String, String> vars = new HashMap<>();
             // Lead with the most expensive item: the one most worth coming back for.
-            return List.of(new MessageIntent(identityId, INTENT, cartToken,
-                    Map.of("product", product, "url", cartUrl), e.occurredAt().plus(DELAY)));
+            vars.put("product", product);
+            vars.put("url", cartUrl);
+            ProductImages.put(vars, ProductImages.byProductId(c, rs.getString("product_id")));
+            vars.put("name", CheckoutAbandon.firstName(rs.getString("first_name")));
+            vars.put("cart_value_paise", Long.toString(total));
+            if (total >= snapshot.longValue("journey.cart_recovery.wa_min_cart_paise", "*")) vars.put(CheckoutAbandon.WA_OK, "1");
+            var delay = Duration.ofMinutes(snapshot.longValue("journey.cart_recovery.start_delay_minutes", "*"));
+            return List.of(new MessageIntent(identityId, INTENT, cartToken, Map.copyOf(vars), e.occurredAt().plus(delay)));
         }
     }
 }

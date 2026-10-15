@@ -118,3 +118,68 @@ export interface CopyVersion {
   grants: number;
   createdAt: string;
 }
+
+/** GET /api/support-requests (V33). No contact details; the reply text is fetched on its own. */
+export interface SupportRequest {
+  id: number;
+  kind: 'delivery' | 'after_delivery' | string;
+  status: 'open' | 'done';
+  identityId: string;
+  orderId: string | null;
+  orderNumber: string | null;
+  awb: string | null;
+  courier: string | null;
+  messages: number;
+  hasText: boolean;
+  note: string | null;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** GET /api/reports/lift, /api/journeys/{key}/incrementality (P7-T03). Money in paise. */
+export interface JourneyLift {
+  journey: string;
+  firstAssigned: string | null;
+  enoughData: boolean;
+  why: string | null;
+  treated: number;
+  control: number;
+  revenuePerTreatedPaise: number;
+  revenuePerControlPaise: number;
+  liftPct: number | null;
+  liftLowPct: number | null;
+  liftHighPct: number | null;
+  significant: boolean;
+  incrementalPaise: number;
+  incrementalLowPaise: number;
+  incrementalHighPaise: number;
+  messagingCostPaise: number;
+  roi: number | null;
+  weekly: { weekIst: string; treatedRevenuePaise: number; treatedPeople: number; controlRevenuePaise: number; controlPeople: number }[];
+}
+
+/** GET /api/reports/spend-reconciliation?month=YYYY-MM: our WhatsApp ledger against Meta's bill. */
+export interface SpendReconciliation {
+  month: string;
+  billUploaded: boolean;
+  rows: { category: string; ledgerPaise: number; metaPaise: number | null; diffPct: number | null; flagged: boolean }[];
+}
+
+/** GET /api/privacy-requests (V36, OWNER). No identifiers; result holds counts only. */
+export interface PrivacyRequest {
+  id: number;
+  kind: 'data_request' | 'customer_redact' | 'shop_redact' | 'erase' | string;
+  source: string;
+  externalRef: string | null;
+  status: 'open' | 'done';
+  hasSubject: boolean;
+  result: string | null;
+  reason: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
+  note: string | null;
+}

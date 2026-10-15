@@ -2,7 +2,7 @@
 -- updated_at decides: a late or replayed webhook never overwrites a newer one.
 -- Tags and type are lower-cased so segment values match regardless of case.
 -- Parameter 1: delivery_id (X-Shopify-Webhook-Id)
-INSERT INTO products (product_id, handle, title, product_type, tags, size_position, updated_at)
+INSERT INTO products (product_id, handle, title, product_type, tags, size_position, image_url, updated_at)
 SELECT p->>'id', NULLIF(p->>'handle', ''), NULLIF(p->>'title', ''),
        NULLIF(lower(btrim(p->>'product_type')), ''),
        COALESCE(ARRAY(SELECT lower(btrim(t)) FROM unnest(string_to_array(p->>'tags', ',')) t
@@ -10,11 +10,14 @@ SELECT p->>'id', NULLIF(p->>'handle', ''), NULLIF(p->>'title', ''),
        (SELECT (o->>'position')::smallint
           FROM jsonb_array_elements(CASE WHEN jsonb_typeof(p->'options') = 'array' THEN p->'options' ELSE '[]' END) o
          WHERE lower(btrim(o->>'name')) IN ('size', 'sizes') LIMIT 1),
+       -- The main photo (push large image); only an https URL, as Shopify's CDN gives.
+       (SELECT u FROM (VALUES (COALESCE(p#>>'{image,src}', p#>>'{images,0,src}'))) v(u) WHERE u LIKE 'https://%'),
        (p->>'updated_at')::timestamptz
   FROM webhook_inbox i CROSS JOIN LATERAL (SELECT i.payload AS p) x
  WHERE i.source = 'shopify' AND i.delivery_id = ?
    AND p->>'id' IS NOT NULL AND p->>'updated_at' IS NOT NULL
 ON CONFLICT (product_id) DO UPDATE
    SET handle = EXCLUDED.handle, title = EXCLUDED.title, product_type = EXCLUDED.product_type,
-       tags = EXCLUDED.tags, size_position = EXCLUDED.size_position, updated_at = EXCLUDED.updated_at
+       tags = EXCLUDED.tags, size_position = EXCLUDED.size_position, image_url = EXCLUDED.image_url,
+       updated_at = EXCLUDED.updated_at
  WHERE products.updated_at <= EXCLUDED.updated_at

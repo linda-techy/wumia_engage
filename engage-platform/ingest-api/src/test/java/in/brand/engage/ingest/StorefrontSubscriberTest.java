@@ -313,4 +313,20 @@ class StorefrontSubscriberTest {
         assertNull(one("SELECT notified_at FROM stock_waitlist WHERE identity_id = ? AND variant_id = '4456'",
                 allowlistedIdentity), "the next restock must reach them again");
     }
+
+    @Test
+    void fifty_waiting_size_alerts_is_the_most_one_shopper_can_have() throws SQLException {
+        try (Connection c = dataSource.getConnection(); var ps = c.prepareStatement("""
+                INSERT INTO stock_waitlist (identity_id, variant_id, product_handle)
+                SELECT ?, 'cap-' || n, 'p' FROM generate_series(1, 50) n""")) {
+            ps.setObject(1, allowlistedIdentity);
+            ps.executeUpdate();
+        }
+        assertEquals(429, post(signedUri("/notify-me", ALLOWLISTED_CUSTOMER),
+                Map.of("anonId", anon(), "variantId", "cap-51", "productHandle", "p", "sizeLabel", "M")));
+        assertEquals(200, post(signedUri("/notify-me", ALLOWLISTED_CUSTOMER),
+                Map.of("anonId", anon(), "variantId", "cap-7", "productHandle", "p", "sizeLabel", "M")),
+                "asking again for one already waiting is not a new alert");
+        assertEquals(50, count("SELECT count(*) FROM stock_waitlist WHERE identity_id = ?", allowlistedIdentity));
+    }
 }

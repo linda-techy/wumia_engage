@@ -6,6 +6,7 @@ import { problemDetail } from '../../shared/format';
 import { ErrorState, LoadingState } from '../../shared/states';
 import { SegmentRow } from '../segments/segments';
 import { Campaign } from './campaign-rules';
+import { PosterPicker } from './poster-picker';
 
 interface Var {
   key: string;
@@ -27,7 +28,7 @@ function isoToIstInput(iso: string | null): string {
  */
 @Component({
   selector: 'app-campaign-composer',
-  imports: [RouterLink, LoadingState, ErrorState],
+  imports: [RouterLink, LoadingState, ErrorState, PosterPicker],
   template: `
     <a [routerLink]="id() ? ['/campaigns', id()] : ['/campaigns']" class="text-sm text-slate-600 underline">← Back</a>
     <header class="mb-6 mt-3">
@@ -64,9 +65,13 @@ function isoToIstInput(iso: string | null): string {
             </select></label>
         </section>
 
+        @if (channel() === 'push') {
+          <app-poster-picker [value]="image()" (changed)="setImage($event)" />
+        }
+
         <section class="card space-y-2">
           <h2 class="text-sm font-semibold">Template variables</h2>
-          <p class="text-xs text-slate-500">For example collection, festival, url (https://), image.</p>
+          <p class="text-xs text-slate-500">For example collection, festival, url (https://).</p>
           @for (v of vars(); track $index; let i = $index) {
             <div class="flex gap-2">
               <input class="input w-40 font-mono" placeholder="name" [value]="v.key" (input)="setVar(i, { key: val($event) })" aria-label="Variable name" />
@@ -128,6 +133,15 @@ export default class CampaignComposerPage {
   readonly templateKey = signal('');
   readonly segmentId = signal('');
   readonly vars = signal<Var[]>([{ key: 'url', value: 'https://' }]);
+  /** The poster, kept as the template variable {@code image}. */
+  readonly image = computed(() => this.vars().find((v) => v.key === 'image')?.value || null);
+
+  setImage(url: string | null): void {
+    this.vars.update((vs) => {
+      const rest = vs.filter((v) => v.key !== 'image');
+      return url ? [...rest, { key: 'image', value: url }] : rest;
+    });
+  }
   readonly scheduledAt = signal('');
   readonly rate = signal('');
   readonly holdout = signal('');

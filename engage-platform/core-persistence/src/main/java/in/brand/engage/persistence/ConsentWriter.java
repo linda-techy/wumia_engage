@@ -137,6 +137,32 @@ public class ConsentWriter {
      * recorded (replay), or when the state in force at that moment was already
      * the same (so repeated customers/update webhooks do not bloat the ledger).
      */
+    /**
+     * One consent statement covering several channel/purpose pairs: a STOP
+     * reply, a START reply, Meta's 131050. Stamped with when the person said
+     * it; {@code ref} (e.g. the WhatsApp message id) makes a replay write
+     * nothing (invariant 10). A grant names its copy version when the words
+     * are registered, else none (the evidence then records what was said).
+     *
+     * @param targets pairs of {channel, purpose}
+     * @return rows written
+     */
+    public int statement(Connection c, UUID identityId, String state, String source, String copyVersion,
+                         String ref, java.time.Instant at, java.util.List<String[]> targets) throws SQLException {
+        var channels = targets.stream().map(t -> t[0]).toArray(String[]::new);
+        var purposes = targets.stream().map(t -> t[1]).toArray(String[]::new);
+        return Sql.update(c, """
+                INSERT INTO consents (identity_id, channel, purpose, state, source, copy_version, evidence, occurred_at)
+                SELECT ?, CAST(t.ch AS channel), CAST(t.pur AS purpose), CAST(? AS consent_state), ?, ?,
+                       jsonb_build_object('ref', ?::text), ?
+                  FROM unnest(CAST(? AS text[]), CAST(? AS text[])) AS t(ch, pur)
+                 WHERE NOT EXISTS (SELECT 1 FROM consents x
+                                    WHERE x.identity_id = ? AND x.channel = CAST(t.ch AS channel)
+                                      AND x.purpose = CAST(t.pur AS purpose) AND x.evidence->>'ref' = ?::text)""",
+                identityId, state, source, copyVersion, ref, at.atOffset(java.time.ZoneOffset.UTC),
+                channels, purposes, identityId, ref);
+    }
+
     public void syncShopifyEmailConsent(Connection c, UUID identityId, String shopifyState, String ref,
                                         OffsetDateTime statedAt) throws SQLException {
         String state = switch (shopifyState == null ? "" : shopifyState) {

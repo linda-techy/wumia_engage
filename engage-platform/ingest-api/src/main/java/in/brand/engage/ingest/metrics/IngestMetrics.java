@@ -66,6 +66,15 @@ public class IngestMetrics {
                 .register(registry).record(took);
     }
 
+    /** Meta billed a WhatsApp message in another category than we sent it as (P4-T04): alert on any. */
+    public void waCategoryDrift(String sent, String billed) {
+        Counter.builder("engage.wa.category.drift")
+                .description("WhatsApp messages Meta billed in a different category than sent")
+                .tag("sent", sent == null ? "unknown" : sent)
+                .tag("billed", billed == null ? "unknown" : billed)
+                .register(registry).increment();
+    }
+
     /** Set by the inbox housekeeping job from the database. */
     public void inbox(long pendingRows, long oldestSeconds, long deadRows) {
         pending.set(pendingRows);

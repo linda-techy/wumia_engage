@@ -96,6 +96,8 @@ Definitions are JSON (`{all|any: [...]}`, `{not: {...}}`, `{field, op, value}`),
 | Method | Path | Role | Notes |
 |---|---|---|---|
 | GET | `/campaigns` | `VIEWER` | Latest 200 |
+| POST | `/media` | `CAMPAIGN_EDIT` | Push poster: body = the JPEG or PNG file (≤ 1 MB), `X-File-Name` optional; returns `{id, url, width, height, wide}` (V38) |
+| GET | `/media` | `CAMPAIGN_EDIT` | The latest 30 posters |
 | GET | `/campaigns/templates?channel=` | `VIEWER` | The picker: push = active marketing; WhatsApp = APPROVED marketing, quality not RED. Enforced on write too |
 | GET | `/campaigns/{id}` | `VIEWER` | With estimate, recipient counts by state, `approvalRequired` |
 | POST | `/campaigns` | `CAMPAIGN_EDIT` | Creates `DRAFT` |
@@ -157,7 +159,10 @@ Journey *definitions* are code and are not editable through the API. Their *conf
 | POST | `/inspector` | `ANALYST` | `{phone, reason}`: runs, attempts and sends for one exact number, masked. Writes `pii_unmask_log`; counts toward the unmask limit |
 | GET | `/templates` | any | Registry templates with Meta state per language; category mismatches flagged |
 | POST | `/customers/{id}/suppress` | `CAMPAIGN_SEND` | Manual suppression |
-| POST | `/customers/{id}/erase` | `OWNER` | DPDP erasure; cascades, irreversible |
+| POST | `/customers/{id}/erase` | `OWNER` | DPDP erasure, `{reason}` (≥ 5 characters); irreversible; recorded as a done privacy request (V36) |
+| GET | `/privacy-requests` | `OWNER` | `?status=open\|done`; Shopify data requests, redactions, shop redactions, console erasures; no identifiers |
+| POST | `/privacy-requests/{id}/report` | `OWNER` | Open data request only: everything held, built on the spot; logged in `pii_unmask_log` |
+| POST | `/privacy-requests/{id}/resolve` | `OWNER` | `{note}`; empties the request's identifiers; audited |
 
 Lookup is exact-match by design. A prefix search over phone numbers is a database enumeration tool.
 
@@ -168,6 +173,9 @@ The consent timeline is the most useful view on this screen during a complaint: 
 | Method | Path | Role | Notes |
 |---|---|---|---|
 | GET | `/reports/spend` | `VIEWER` | By day/channel/category, `?from=&to=` |
+| GET | `/reports/lift` | `ANALYST` | Every journey against its holdout: lift, 95% range, incremental ₹, cost, ROI, weekly rows. `?days=56` (P7-T03) |
+| POST | `/reports/meta-billing` | `CONFIG_ADMIN` | Meta's WhatsApp bill as `text/csv` `month,category,amount_inr`, one month; audited |
+| GET | `/reports/spend-reconciliation` | `VIEWER` | WhatsApp ledger vs Meta's bill per category, over 1% flagged. `?month=YYYY-MM` |
 | GET | `/reports/deliverability` | `VIEWER` | Funnel per channel |
 | GET | `/reports/blocks` | `VIEWER` | Block reasons over time |
 | GET | `/reports/quality` | `VIEWER` | Meta quality per number and per template |

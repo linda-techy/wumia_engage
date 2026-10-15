@@ -1,0 +1,12 @@
+# checkout_abandon, last step (P7-T01): ~12 h after the last WhatsApp step.
+key: email_checkout_v1
+channel: email
+category: marketing
+locales:
+  en:
+    title: "Your WUMIKA checkout is saved"
+    body: "Hi {{name}},\n\nYou were a few steps away from ordering {{product}}. Your details are saved, so it only takes a moment to finish."
+buttons:
+  - { text: "Complete your order", url: "{{url}}" }
+vars: [name, product, url]
+samples: { name: "Priya", product: "Kundan Jhumka Earrings", url: "https://wumika.com/checkouts/cn/hWN4abc123/recover" }

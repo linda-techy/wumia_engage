@@ -462,6 +462,9 @@ public class CampaignController {
             if (e.getValue() == null || e.getValue().length() > 300) throw Problems.badRequest("variable values are 1 to 300 characters");
         }
         if (vars.containsKey("url") && !vars.get("url").startsWith("https://")) throw Problems.badRequest("url must be https://");
+        if (vars.containsKey("image") && !vars.get("image").startsWith("https://")) {
+            throw Problems.badRequest("image must be https:// (upload a poster, or paste an https link)");
+        }
 
         var scheduledAt = b.scheduledAt();
         if (scheduledAt != null && scheduledAt.isAfter(OffsetDateTime.now().plusDays(90))) {

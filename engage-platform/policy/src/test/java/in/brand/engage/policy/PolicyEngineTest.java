@@ -45,6 +45,7 @@ class PolicyEngineTest {
         data.resetConfig();
         // The 5% global default would put a random 1 in 20 marketing test identities in control.
         data.setConfig("holdout.global_pct", "*", "0");
+        data.setConfig("holdout.journey_pct", "*", "0");    // V32 defaults it to 10%
         config.invalidate();
         data.template(PUSH_MKT, PUSH, MARKETING, "active");
         data.template(PUSH_UTIL, PUSH, UTILITY, "active");
@@ -325,6 +326,28 @@ class PolicyEngineTest {
                 policy.decide(DecisionRequest.of(id, PUSH, PUSH_MKT).forJourney("cart_recovery")));
         assertEquals("cart_recovery", block.detail().get("experiment"));
         assertEquals("control", data.holdoutBucket(id, "cart_recovery"));
+    }
+
+    @Test void transactional_sends_are_never_held_out_of_their_journey() {
+        var id = pushSubscriber();
+        data.setConfig("holdout.journey_pct", "order_shipped", "100");
+        config.invalidate();
+        assertInstanceOf(Decision.Allow.class, policy.decide(DecisionRequest.of(id, PUSH, PUSH_UTIL).forJourney("order_shipped")),
+                "a delivery update is not withheld to measure it");
+    }
+
+    @Test void campaigns_keep_their_own_control_group() {
+        var id = pushSubscriber();
+        data.setConfig("holdout.journey_pct", "*", "100");
+        config.invalidate();
+        assertInstanceOf(Decision.Allow.class, policy.decide(DecisionRequest.of(id, PUSH, PUSH_MKT).forJourney("campaign:42")));
+        assertBlocked(BlockReason.HOLDOUT_CONTROL, policy.decide(DecisionRequest.of(id, PUSH, PUSH_MKT).forJourney("winback")));
+    }
+
+    @Test void marketing_journeys_hold_out_10_percent_by_default() {
+        data.resetConfig();                                    // drops this class's 0% override
+        config.invalidate();
+        assertEquals(0, new BigDecimal("10").compareTo(config.snapshot().decimalValue("holdout.journey_pct", "cart_recovery")));
     }
 
     @Test void holdout_bucket_is_stable_across_two_calls_and_a_pct_change() {

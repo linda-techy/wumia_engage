@@ -48,6 +48,9 @@ class CartRecoveryTest {
             Sql.update(c, """
                     INSERT INTO config_versions (key, selector, value, changed_by, reason)
                     VALUES ('holdout.global_pct', '*', '0', ?, 'test')""", operator(c));
+            Sql.update(c, """
+                    INSERT INTO config_versions (key, selector, value, changed_by, reason)
+                    VALUES ('holdout.journey_pct', '*', '0', ?, 'test')""", operator(c));
             return null;
         });
         config.invalidate();
@@ -62,7 +65,7 @@ class CartRecoveryTest {
 
         var send = lastSend(cart);
         assertEquals("sent|push_cart_recovery_v1", send);
-        assertEquals("exhausted|sent", run(cart));
+        assertEquals("waiting|", run(cart), "the email step follows in 20 h");
         assertEquals("Still in your bag: Linen Kurta", push.last.title(), "the ₹1,700 kurta, not the ₹799 dupatta");
         assertTrue(push.last.url().contains("/cart?utm_source=engage&utm_medium=push&utm_campaign=cart_recovery"),
                 push.last.url());
@@ -74,7 +77,7 @@ class CartRecoveryTest {
         var cart = cart(id, 1, false);
         cartUpdated(id, cart, clock.instant().minus(Duration.ofMinutes(50)));
         dispatcher.dispatchOnce();
-        assertEquals("exhausted|sent", run(cart));
+        assertEquals("waiting|", run(cart), "the email step follows in 20 h");
 
         // As ingest-api writes it when the service worker's signed click beacon arrives.
         long runId = count("SELECT id FROM cascade_runs WHERE subject_key = ? ORDER BY id DESC LIMIT 1", cart);
@@ -82,6 +85,25 @@ class CartRecoveryTest {
         dispatcher.dispatchOnce();
 
         assertEquals("succeeded|clicked", run(cart));
+    }
+
+    @Test void a_whatsapp_reply_or_button_tap_succeeds_but_a_read_does_not() {
+        var id = subscriber(true);
+        var cart = cart(id, 1, false);
+        cartUpdated(id, cart, clock.instant().minus(Duration.ofMinutes(50)));
+        dispatcher.dispatchOnce();
+        // Stand the push send in for a WhatsApp one, as Meta's wamid would identify it.
+        long sendId = count("SELECT s.id FROM sends s JOIN cascade_runs r ON r.id = s.cascade_run_id WHERE r.subject_key = ?", cart);
+        var wamid = "wamid.test-" + UUID.randomUUID();
+        db.inTx(c -> Sql.update(c, "UPDATE sends SET channel = 'whatsapp', provider_id = ? WHERE id = ?", wamid, sendId));
+
+        event(id, "wa_read", "{\"send_id\":" + sendId + "}", clock.instant());
+        dispatcher.dispatchOnce();
+        assertEquals("waiting|", run(cart), "a read is not engagement for a promotional cascade");
+
+        event(id, "fit_ok", "{\"message_id\":\"m1\",\"context_wamid\":\"" + wamid + "\"}", clock.instant());
+        dispatcher.dispatchOnce();
+        assertEquals("succeeded|replied", run(cart));
     }
 
     @Test void a_recent_change_waits_45_minutes_and_the_tick_sends_it() {
@@ -107,7 +129,7 @@ class CartRecoveryTest {
         dispatcher.dispatchOnce();
 
         assertEquals("blocked|push_cart_recovery_v1", lastSend(cart));
-        assertEquals("exhausted|blocked:NO_MARKETING_CONSENT", run(cart));
+        assertEquals("exhausted|skipped:HAS_EMAIL_MARKETING", run(cart), "push blocked, then no email consent either");
     }
 
     @Test void every_cart_change_restarts_the_cascade_with_one_live_run() {

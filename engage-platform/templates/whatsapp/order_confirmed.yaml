@@ -1,0 +1,9 @@
+# Utility (P0-T02, phase-4 §7). Sent once an opted-in order is placed. No
+# promotional words anywhere: one makes Meta approve it as marketing (~7x price).
+key: order_confirmed_v1
+channel: whatsapp
+category: utility
+locales:
+  en:      { body: "Hi {{name}}, your WUMIKA order {{order_no}} is confirmed. Total {{amount}}. We will message you here when it ships." }
+vars: [name, order_no, amount]
+samples: { name: "Priya", order_no: "#1042", amount: "₹12,499" }

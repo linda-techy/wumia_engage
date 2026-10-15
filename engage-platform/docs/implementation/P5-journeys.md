@@ -26,7 +26,15 @@ The revenue journeys run through the orchestrator: payment recovery (utility), c
 
 ---
 
-### ☐ P5-T01 — Journey framework
+### ◐ P5-T01 — Journey framework
+
+> **Collisions built 2026-10-11.** `CollisionTest` (21) runs the 4 × 4 priority table, the 12 h window, its expiry, the setting, other people's runs, and sends outside a cascade.
+>
+> Where the build differs from the text below:
+> - **`policy/CollisionCheck`** runs in the policy engine after consent and before quiet hours, so a collision is a block, not a deferral. Requests carry `cascadeRunId` (`DecisionRequest.inRun`), and policy reads the run's priority from `cascade_runs`. The block records which journey and run held it.
+> - **The rule:** a cascade of priority P is blocked while the same person has a cascade of priority 2 or 3 below P, live or ended within `journey.collision.suppress_hours` (default 12). In practice, checkout and back-in-stock hold cart, price-drop, browse and win-back messages, and cart and price-drop hold browse and win-back. Transactional cascades never block and are never blocked.
+> - **V29:** the setting, plus `cascade_runs (identity_id, updated_at DESC)` for the "recently ended" read.
+> - **Not built yet:** the `Journey` / `JourneyRegistry` / `JourneyParams` classes (each journey is an `EventConsumer` with its own definition, and parameters are read from config directly), the `checkout_started` / `checkout_completed` / `cart_emptied` events (journeys read the checkout and cart rows instead), and `profile_recompute()`.
 
 **Migration `V<next>__journey_config.sql`**
 ```sql
@@ -99,7 +107,23 @@ policy/src/main/java/in/brand/engage/policy/CollisionCheck.java           # HIGH
 
 ---
 
-### ☐ P5-T02 — `payment_failed` (utility)
+### ◐ P5-T02 — `payment_failed` (utility)
+
+> **Built 2026-10-11 on fakes.** `PaymentFailedTest` (8), `PayLinkControllerTest` (3). Live check pending: ADR-002 (the Razorpay match-rate spike, P0-T06) is not recorded yet; the templates need Meta approval, and the SMS needs DLT.
+>
+> Where the build differs from the text below:
+> - **Steps:**
+>   1. +5 min (`first_delay_minutes`, from the event's time), WhatsApp `payment_failed_v1`. Its button opens the saved checkout, or the cart when the payment matched no checkout.
+>   2. +25 min, push `push_payment_retry_v1`.
+>   3. +2 h, WhatsApp `payment_failed_r2_v1`, or `payment_failed_r2b_v1` when `failure_kind` is CUSTOMER_CANCELLED (an alternate template).
+>   4. +6 h, SMS `sms_payment_link` with the new `WA_UNREAD` guard: no WhatsApp of the run was read.
+>
+>   A failure processed 30+ min late carries `late`, so the `lacksVar("late")` guard skips the first WhatsApp and the push goes first.
+> - **No `CHECKOUT_STILL_OPEN` guard:** a captured payment, `order_placed`, or a completed checkout for the same checkout cancels the run.
+> - **Hand-over:** the failure cancels `checkout_abandon` for the checkout, and `checkout_abandon` won't start on a checkout with a failed payment.
+> - **SMS link:** `https://wumika.com/apps/push/pay/<ref>`, where `<ref>` is a signed run reference (`TrackRef.ofPayment`), made at send time by the `pay_ref` StepVars provider. `PayLinkController` redirects it on the store's domain to the run's saved checkout. Unsafe paths and other journeys fall back to `/cart`. The SMS shows the Razorpay ref and Rs amount (a failed checkout has no order number).
+> - **Success:** only `converted`. A click is not a payment.
+> - **V30:** `journey.payment_failed.first_delay_minutes`.
 
 Consumes `payment_failed_confirmed`, which `RazorpayInboxHandler` already writes with `payment_id`, `amount_paise`, `checkout_token` (nullable), `match_method` and `failure_kind`. Steps and copy: phase-5 §2.1.
 
@@ -122,7 +146,35 @@ t+6h      SMS       sms_payment_link       require WA_INCAPABLE_OR_UNREAD
 
 ---
 
-### ☐ P5-T03 — `checkout_abandon` (marketing)
+### ◐ P5-T03 — `checkout_abandon` (marketing)
+
+> **Built 2026-10-10, ahead of T01** (branch `p5/abandon-whatsapp`). The owner asked for what most Indian D2C brands do, so this is WhatsApp-led. `CheckoutAbandonTest` (8) covers both journeys. Live check pending: the marketing templates need Meta approval, and customers need a WhatsApp marketing opt-in.
+>
+> Where the build differs from the text below:
+> - **Steps:**
+>   1. At t+30 min (`stall_minutes`), WhatsApp `checkout_reminder_v1`. Its button reopens Shopify's saved checkout (`abandoned_checkout_url`, path and query on our domain). If the step is skipped, the push goes at once instead.
+>   2. 4 h later, push `push_checkout_v1`.
+>   3. 20 h later, WhatsApp `checkout_offer_v1`, only if an operator has set `journey.abandon.discount_code` and `journey.abandon.discount_label`. Codes are created in Shopify admin; the live store app is read-only.
+>
+>   Email (SES) joins in P7.
+> - **WhatsApp guards:** `WA_MARKETING`, not INCAPABLE (UNKNOWN numbers are tried, because Meta bills only delivered messages), and the cart at least `wa_min_cart_paise`. The default minimum is 0, meaning every cart. Policy still applies consent, caps (1 marketing WhatsApp a day by default), quiet hours and the daily budget.
+> - **Who gets the discount** (V26, owner's decision 2026-10-10):
+>   - at most one discount message per customer per `journey.abandon.discount_cooldown_days` (default 60). Both offers already sent and an offer still waiting in another live run count;
+>   - optionally only customers with no past order (`journey.abandon.discount_new_customers_only`, default off);
+>   - a customer who doesn't qualify still gets the reminders; the last step is skipped.
+>
+>   Pair this with "Limit to one use per customer" on the code in Shopify admin.
+> - **Unique codes** (V27, 2026-10-11): with `journey.abandon.discount_mode = unique`, `JourneyDiscount` creates the code in Shopify when the discount WhatsApp is due, so codes are made only for runs that reach that step. It's a `StepVars` provider; steps name one with `withVarsFrom`. Each code:
+>   - is `WUM` plus 8 characters, avoiding look-alikes (0, O, 1, I, L);
+>   - is single use, once per customer, for the whole order;
+>   - gives `discount_percent` off (default 10), valid for `discount_valid_hours` (default 48), with an optional minimum order.
+>
+>   The code is kept on the run, so a retry reuses it. If Shopify refuses (for example, the app lacks `write_discounts`), the discount step is skipped with the reason recorded. Default mode is `shared`.
+> - **Scope:** `write_discounts` is added to `shopify.app.dev.toml` (wumikaEngage-dev). The owner deploys it and approves it on wumika-dev, then on the live app (`shopify.app.engage.toml`) after testing. `config/local.env` points at the live store, so a dev-store test runs with `config/devstore.env`.
+> - **No guard-only step 0.** Every `checkout_updated` restarts the wait. A completed checkout or `order_placed` ends the run, and starting it ends `cart_recovery` for the same cart.
+> - **No SMS step** (CLAUDE.md §3.2).
+> - **Not built yet:** the hand-over from `payment_failed`, which waits for T02.
+> - **V25** adds the cart and checkout keys from the T01 migration, plus the two discount keys.
 
 Trigger: a checkout with contact (phone or email) and `last_step` set, not completed within `stall_minutes`, with **no** `payment_failed_confirmed` for it. Implemented as a delayed check: on `checkout_updated`, dispatch the intent with `notBefore = +stall_minutes`; step 0 is a guard-only step that verifies the stall is still true.
 
@@ -140,7 +192,9 @@ t+20h     Email     email_checkout           require channelLive(EMAIL), EMAIL_M
 
 ---
 
-### ☐ P5-T04 — `cart_recovery` (full)
+### ◐ P5-T04 — `cart_recovery` (full)
+
+> **Built 2026-10-10**, with T03. WhatsApp `cart_reminder_v1` at t+45 min (`start_delay_minutes`), with the same guards as T03 and `journey.cart_recovery.wa_min_cart_paise` (default 0). Its button opens the cart. A skipped WhatsApp step means the push goes at once; otherwise `push_cart_recovery_v1` follows 4 h later. A cart whose checkout was updated in the last 24 h is left to `checkout_abandon`. Unlike the text below, UNKNOWN numbers are tried, by the owner's decision: an undelivered WhatsApp costs nothing.
 
 Replaces the P3 single-step definition with phase-5 §4. Start delay 45 min after the **last** cart change; every change restarts the run. Cancelled by `order_placed`, `cart_emptied`, `checkout_started`. WhatsApp only if `WA_CAPABLE` (never `UNKNOWN`: marketing does not pay to discover capability) and cart ≥ `wa_min_cart_paise`.
 
@@ -148,13 +202,31 @@ Replaces the P3 single-step definition with phase-5 §4. Start delay 45 min afte
 
 ---
 
-### ☐ P5-T05 — `back_in_stock` WhatsApp step
+### ◐ P5-T05 — `back_in_stock` WhatsApp step
+
+> **Built 2026-10-12.** `BackInStockTest` now has 10 tests (4 new). Live check pending: Meta approval of `back_in_stock_v1`.
+>
+> Where the build differs from the text below:
+> - **Guards:** `WA_MARKETING` and not INCAPABLE, not `WA_CAPABLE`: the owner's "Indian D2C" decision, since an undelivered WhatsApp is not billed.
+> - **Who gets it:** shoppers who didn't click the push (a click ends the run), 15 minutes after it. Those the push can't reach get it at once, because a blocked push step is skipped.
+> - **The template** has no size, so one copy serves sized and one-size items. Its button opens the variant (`product_path`).
+> - **`variant_sold_out`** (already emitted by the inventory handler on positive → 0) cancels every live run for the variant, matched by the subject's variant part.
 
 Adds `whatsapp("back_in_stock_v1").require(WA_CAPABLE, WA_MARKETING)` 15 minutes after the push, for runs without a push click. The fan-out cap (restocked quantity × 20) applies to the run count, not per step. If stock hits 0 again before the WhatsApp step, the run is cancelled (`variant_sold_out` event from P1-T03's inventory handler, emitted on positive → 0).
 
 ---
 
-### ☐ P5-T06 — `post_purchase_fit`
+### ◐ P5-T06 — `post_purchase_fit`
+
+> **Built 2026-10-12 as a "how do you like it?" instead of a fit check** (owner's choice: Wumika sells jewellery, where size matters for few pieces). `PostPurchaseTest` (6), `WaPayloadsTest`, plus quick-reply cases in `WhatsAppTemplateTest` and `WhatsAppTemplatesPayloadTest`. Live check pending: Meta approval of `review_ask_v1`.
+>
+> Where the build differs from the text below:
+> - **When:** `journey.post_purchase.delay_days` (default 3, V31) after `order_delivered`, at 11:00 IST.
+> - **What:** WhatsApp `review_ask_v1` (marketing; opt-in and not INCAPABLE) naming the order's most expensive line, with quick replies **Love it** (`review_love`) and **Need help** (`review_help`).
+> - **Who:** once per order, however many parcels. Not sent for cancelled or refunded orders; a cancellation or refund before the send cancels it.
+> - **Love it:** a free-form `review_thanks` reply in the window the tap opened, with the product page for a photo or review.
+> - **Need help:** a free-form `review_help` reply, plus a `support_requested` event (order id) for the team. Nothing in the admin console shows it yet.
+> - **Quick replies are new:** template buttons may be `{text, reply}`, and lint requires one kind per template, at most 3, payloads in event-name form. The adapter sends `quick_reply` components with the payloads, submission uses `QUICK_REPLY` buttons, and ingest's quick-reply allowlist adds `review_love` and `review_help`.
 
 Trigger: `order_delivered` + 3 days. `delivered_fitcheck_v1` (utility) with three quick replies. Reply handling in the P4-T04 inbound path emits `fit_ok`, `fit_small`, `fit_large`.
 
@@ -167,7 +239,17 @@ Trigger: `order_delivered` + 3 days. `delivered_fitcheck_v1` (utility) with thre
 
 ---
 
-### ☐ P5-T07 — `ndr_rescue`
+### ◐ P5-T07 — `ndr_rescue`
+
+> **Built 2026-10-15 as manual handling** (owner's decision: no automatic courier update; staff update Shiprocket by hand). `DeliveryRepliesTest` (3), `SupportTest` (3), and two `PostPurchaseTest` cases. Live check pending: a real NDR on the dev store.
+>
+> Where the build differs from the text below:
+> - **No Shiprocket write.** Our WhatsApp runs on the Cloud API, which has no inbox, so staff see customers' replies in the admin console's new **Support requests** page (V33 `support_requests`).
+> - **Delivery replies:** any WhatsApp message within 72 h of the customer's `ndr_raised_v1` (the one it quotes, else the latest), or the `ndr_reschedule` button, opens a `delivery` request for that parcel with the reply text. Later messages are appended, one open request per parcel. The first one emits `delivery_reply`, and the customer gets one free `delivery_ack` reply: "we have passed your message to our delivery team…".
+> - **"Need help"** taps from the review message (T06) open `after_delivery` requests.
+> - **Console:** `GET /api/support-requests` (VIEWER) shows order, AWB and courier, but no contact details or text. `POST /{id}/reply` (ANALYST) returns the text through `PiiAccess`, logged as field `support_reply` (V34) and counted in the 50-a-day limit. `POST /{id}/resolve` (ANALYST) records a note and is audited.
+> - **Retention:** reply text is kept only on support requests, and cleared 30 days after resolution (worker, 02:00 IST). Every other inbound message is still stored as ids only.
+> - **admin-api tests now migrate `engage_test` themselves,** like the other modules. They used to depend on another module's tests running first.
 
 Trigger: `delivery_failed` (P1-T02). `ndr_raised_v1` at t+0, quiet-hours exempt, quick replies [Retry tomorrow] [Change address] [Cancel]. SMS `sms_ndr` at t+3 h without a reply. Success is a **reply only**, not a read.
 
@@ -177,7 +259,25 @@ Replies call the aggregator's NDR action API (ADR-005) through a `CourierActions
 
 ---
 
-### ☐ P5-T08 — `winback` + nightly recompute
+### ◐ P5-T08 — `winback` + nightly recompute
+
+> **Built 2026-10-11 (win-back only)**, as most Indian D2C brands run it (owner's decision). `WinbackTest` (8). Live check pending: Meta approval of `winback_v1` / `winback_offer_v1`.
+>
+> Where the build differs from the text below:
+> - **Who:** `LapsedCustomers` runs at 01:30 IST and emits `became_lapsed` once per lapse, with dedupe key `lapsed:<identity>:<last order time>`. A customer qualifies when both hold:
+>   - their last non-cancelled order is `journey.winback.lapsed_days` old (default 90);
+>   - they haven't visited for `no_visit_days` (default 30): no linked browsing, cart, checkout, push click or WhatsApp reply.
+>
+>   Only customers who crossed the line in the last 7 days are picked, so the first run after a deploy doesn't message everyone who lapsed long ago.
+> - **Steps:**
+>   1. At 11:00 IST, WhatsApp `winback_v1`, a warm "here's what's new" with a button to `link_path` (default `collections/all`). If the step is skipped, the push goes at once instead.
+>   2. 7 days later, push `push_winback_v1`.
+>   3. 7 days after that, WhatsApp `winback_offer_v1`, only if a win-back discount is set: shared code, or `unique` single-use codes through `JourneyDiscount` (`discount_config` = `journey.winback`).
+>
+>   Email joins in P7. Any order ends the run, and there is one live win-back per customer.
+> - **Guards:** WhatsApp needs a marketing opt-in and a number not known to be INCAPABLE. The margin-band guard is not built; instead, customers who had at least half their spend refunded, or two RTO parcels, get the reminders but never the discount.
+> - **Not built yet:** the nightly `profile_recompute` with margin and AOV bands (needed by segments later), and the 100,000-identity performance check.
+> - **V28:** the winback keys.
 
 **Nightly job** (01:30 IST, advisory lock): for identities with an order, call `profile_recompute`; then compute `net_margin_band` (`high`/`mid`/`low` by tertile of `net_paise_365d`) and `aov_band`; emit `became_lapsed` once when `last_order_at` crosses `lapsed_days`, dedupe key `lapsed:<identity>:<last_order_at>`.
 
@@ -193,7 +293,15 @@ At most one win-back run per identity per `cooldown_days` (a guard reading `casc
 
 ---
 
-### ☐ P5-T09 — Holdouts on every journey
+### ◐ P5-T09 — Holdouts on every journey
+
+> **Built 2026-10-14.** Three new `PolicyEngineTest` cases: transactional is never held out, campaigns are exempt, and the default is 10%. Live check pending: the 7-day split query on staging traffic.
+>
+> Where the build differs from the text below:
+> - **No per-journey default rows.** `config_versions` needs a real operator, so V32 sets `holdout.journey_pct`'s default to 10 for all journeys, and the policy engine applies the journey holdout to **marketing sends only**. Transactional journeys (order updates, `payment_failed`) are therefore never held out.
+> - **Campaigns** (`campaign:<id>`) are exempt: they have their own control group.
+> - **One marketing journey the text marked 0% now holds out 10%:** `post_purchase` (the review ask). Set its selector to 0 in the admin console to change that.
+> - **Test setups** zero `holdout.journey_pct` alongside `holdout.global_pct`.
 
 Each journey's key is its holdout experiment. Default control share 10% for marketing journeys, **0% for transactional ones** (`payment_failed`, `order_tracking`, `ndr_rescue`, `post_purchase_fit`): withholding a delivery update to measure it is not acceptable. The global holdout (V2 `holdout.global_pct`) applies to marketing only.
 

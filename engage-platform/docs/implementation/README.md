@@ -23,7 +23,7 @@ When a task and a design doc disagree, the task wins, because it was written aga
 | 1 | [P1 — Core platform](P1-core-platform.md) | 1–2 | ◐ **Built and verified** (V1–V6, ingest-api). Gap tasks: T01 done; T03 done (inventory → `variant_restocked`, V9; verified on the dev store); T04 done (cancelled, paid, refunds, `price_dropped`, uninstall logged; the uninstall halt waits for P6-T02); T05 done (inbox housekeeping, `/prometheus` behind `METRICS_TOKEN`); T02 done (Shopify fulfillments + Shiprocket, ADR-005); T06: no staging; prod on AWS later; migrate job and memory caps live on dev; dev-server rebuild checklist `deploy/REBUILD.md`. |
 | 2 | [P2 — Shopify storefront + FCM push](P2-shopify-storefront-push.md) | 2–4 | ◐ T01–T03 done; first dev-store subscriber and a test push delivered. T04 built, JS unit tests done (18, in CI; device matrix in T09 remains); T06 built and active on wumika-dev (web pixel + `/pixel/events`; checkout check pending); T08 done (nightly dormant sweep, V11 views, `engage_push_tokens` gauge on the worker); T05 built (Thank you page WhatsApp block, session-token verifier, V12 copy; dev-store check pending); T09 open; T07 has `push_v1` only |
 | 3 | [P3 — Policy engine + push sending](P3-policy-and-push.md) | 4–5 | ◐ T01–T06 done (policy engine, migration V8; templates as code; FCM adapter, real push delivered to a dev device; router + orchestrator; worker; signed click beacons, UTMs, ArchUnit). T07: all four intents built (`cart_recovery`, `back_in_stock`, `price_drop`, `browse_abandon`); dev-store checks for the last two pending |
-| 4 | [P4 — WhatsApp, SMS, orchestrator](P4-whatsapp-sms-orchestrator.md) | 5–7 | ☐ Blocked on Meta verification + DLT |
+| 4 | [P4 — WhatsApp, SMS, orchestrator](P4-whatsapp-sms-orchestrator.md) | 5–7 | ◐ Built on fakes (T01–T08); live checks wait for Meta verification, template approval and DLT |
 | 5 | [P5 — Journeys](P5-journeys.md) | 7–9 | ☐ Blocked on the Razorpay spike (P0-T06) |
 | 6 | [P6 — Admin console + campaigns](P6-admin-console-campaigns.md) | 9–11 | ☐ |
 | 7 | [P7 — Email, measurement, go-live](P7-email-measurement-golive.md) | 11–12 | ☐ |
@@ -42,10 +42,10 @@ engage/
 ├─ persistence/         P3 ✓  Db, Sql, SqlFiles, IdentityResolver (extracted from ingest-api)
 ├─ ingest-api/          P1 ✓  webhooks + storefront endpoints (Shopify, Razorpay, Meta, courier, pixel)
 ├─ policy/              P3 ✓  PolicyEngine, ConfigResolver, KillSwitch, Holdouts
-├─ channels/            P3 ◐  FCM ✓; ChannelAdapter + FCM (P3), WhatsApp + SMS (P4), SES (P7)
-├─ orchestrator/        P3 ◐  templates ✓, router + single-step orchestrator ✓; MessageOrchestrator, MessageRouter, cascades (P4), CapabilityService (P4)
+├─ channels/            P4 ◐  FCM ✓, WhatsApp Cloud API ✓, MSG91 SMS ✓ (P4); SES (P7)
+├─ orchestrator/        P4 ◐  templates (push, WhatsApp, SMS) ✓, router ✓, multi-step cascades with guards and signals ✓ (CapabilityService is in core-persistence)
 ├─ journeys/            P5    journey definitions: event → intent
-├─ worker/              P3 ◐  event dispatch, tick, sweeper ✓; Micronaut app: event dispatch, cascade ticker, campaign executor, jobs
+├─ worker/              P4 ◐  event dispatch, tick, sweeper, campaign executor ✓; WhatsApp template sync, order_tracking ✓
 ├─ admin-api/           P6 ◐  Micronaut app: operators, RBAC, config, campaigns, reports. Console v0 built (auth + MFA, ingest health, customer 360 + reveal, payment failures, consent copy)
 ├─ admin-ui/            P6 ◐  Angular 22. Console v0 built: sign-in + MFA (QR enrolment), ingest health, customer 360 + audited reveal, payment failures, consent copy
 ├─ shopify-extension/   P2    Shopify CLI app: theme app extension, web pixel, Thank-you extension
@@ -75,7 +75,9 @@ engage/
 | V19 | P6-T05 ✓ | `order_lines` and `products` (type, tags, size option) for segment predicates, written by ingest from order and `products/update` payloads, backfilled from the inbox's 7 days |
 | V20 | P6-T06 ✓ | campaign follow-up step (`follow_up_channel`, `follow_up_template_key`, `follow_up_after_minutes`), `ttl_seconds`, `paused_reason`; an index for summing a campaign's spend |
 | V21 | P6-T08 ✓ | `operator_recovery_codes`, `exports`, `export_files` (the file until object storage exists) |
-| next | P4 | `wa_phone_numbers` + history (quality, tier); WhatsApp config keys |
+| V22 | P4-T04 ✓ | `sends.billed_at` / `billed_category` (spend booked once from Meta's status, in the billed category); `wa_inbound` (ids only, no text) |
+| V23 | P4-T03 ✓ | `wa_phone_numbers` + history (quality, tier); `wa_templates` keyed by Meta's `(provider_name, language)`; `wa.*` config keys |
+| V24 | P4-T06 ✓ | `rate.sms.utility_paise` config key (default 20 paise; verify against the MSG91 rate card) |
 | next | P5 | journey parameter config keys with defaults; `profile_recompute()` |
 | next | P7 | `holdout_lift_weekly`, `spend_by_intent_daily`; `email.daily_cap`; `consent_erasure_proofs` + `erase_identity()` |
 

@@ -6,6 +6,8 @@
 
 Marketing email takes the free second and third touches in cascades. Every journey reports incremental revenue against its holdout. The system has survived a 10× load test, a security review and an erasure drill, and the go-live checklist is signed.
 
+**Decision (owner, 2026-10-15):** the platform concentrates on WhatsApp, SMS and push. Marketing email is sent with **Shopify Email** (its abandoned-checkout automation and newsletters), not through Engage. The SES channel built in T01/T02 stays off (no `EMAIL_FROM`), so journeys skip their email steps (`channel_off`) and nobody gets a duplicate email from us. The warm-up and the engaged-audience guard are not built; build them only if email comes back into Engage.
+
 ## Tasks
 
 | ID | Task | Owner | Est. | Depends on |
@@ -21,7 +23,16 @@ Marketing email takes the free second and third touches in cascades. Every journ
 
 ---
 
-### ☐ P7-T01 — Email channel
+### ◐ P7-T01 — Email channel
+
+> **Built 2026-10-15 on fakes** (no SES account yet; P0-T07). Tests: `SesAdapterTest` 5, `SigV4Test` 2 (AWS's published vectors), `SnsSignatureVerifierTest` 4, `UnsubscribeTokenTest` 2, `EmailFeedbackTest` 6, `EmailTemplateTest` 3, `EmailStepTest` 1. Live check pending: the SES domain (SPF, DKIM, DMARC), production access, and the SNS topic.
+>
+> Where the build differs from the text below:
+> - **No AWS SDK.** `SesAdapter` calls SES v2 with the JDK HTTP client and its own Signature V4 (`SigV4`), like the WhatsApp and MSG91 adapters. The adapter is on only with `EMAIL_FROM` set; credentials are `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` (+ optional `AWS_SESSION_TOKEN`). EC2 instance roles are not read yet.
+> - **Unsubscribe:** `List-Unsubscribe` carries `<PUBLIC_BASE_URL/u/{token}>` (+ the mailto when `EMAIL_UNSUBSCRIBE_MAILTO` is set) and `List-Unsubscribe-Post`. `UnsubscribeToken` (core-domain) is HMAC-signed and keyed from the Shopify app secret, so it never expires. `GET /u/{token}` shows a page and changes nothing (mail scanners open links); `POST` withdraws email marketing once (an `email_unsubscribed` event) and is a no-op after that.
+> - **Bounces:** `POST /webhooks/ses` checks signature version 2, a certificate from `sns.<region>.amazonaws.com` (fetched and cached by `SnsCertificates`) and `SES_SNS_TOPIC_ARN`; it auto-confirms the subscription. `SesInboxHandler` turns a hard bounce into a permanent suppression and three soft bounces in 7 days into a 30-day suppression. A complaint suppresses and withdraws email marketing.
+> - **`channelLive` is generic:** a step whose channel has no adapter is skipped (`channel_off:<channel>`) without waiting, for email and any other channel.
+> - **Email steps** go last in `cart_recovery` (+20 h after the push), `checkout_abandon` (+12 h after the offer step) and `winback` (+3 d after the offer step), guarded by `HAS_EMAIL_MARKETING`. Placed last, they don't shift the other steps' timing while email is off.
 
 **Files**
 ```
@@ -45,7 +56,15 @@ core-domain/src/main/java/in/brand/engage/aws/SnsSignatureVerifier.java
 
 ---
 
-### ☐ P7-T02 — Templates + warm-up
+### ◐ P7-T02 — Templates + warm-up
+
+> **Templates built 2026-10-15; warm-up not yet.**
+>
+> Where the build differs from the text below:
+> - **No MJML.** Email templates are YAML like the others (`templates/email/*.yaml`: title = subject, body = paragraphs, one URL button), rendered into one branded table layout in code (`EmailLayout`). That gives inline styles, a preheader, a footer with the unsubscribe link, and an HTML-escaped plain-text alternative, with no Node toolchain in the Java build.
+> - **Lint:** marketing only, subject ≤ 70 characters with the samples, exactly one URL button, rendered HTML < 100 KB.
+> - **Templates:** `email_cart_v1`, `email_checkout_v1`, `email_winback_v1`.
+> - **Not built yet:** the `email.daily_cap` warm-up and the `email_engaged_days` guard. Build them before the first real send.
 
 - `templates/email/*.mjml` compiled with `mjml` at build time into `templates/email/dist/*.html`, plus a `.txt` alternative for each. The lint (P3-T03) fails a build whose HTML exceeds 100 KB or lacks the unsubscribe placeholder.
 - Warm-up: config key `email.daily_cap` (added in the P7 migration) with **effective-dated versions**, entered by an operator through the P6 config API (so each has an actor and a reason), for weeks 1–4 (500, 2,000, 8,000, then removed). The policy engine counts today's email marketing sends against it and defers the rest to tomorrow 09:00 IST.
@@ -55,7 +74,17 @@ core-domain/src/main/java/in/brand/engage/aws/SnsSignatureVerifier.java
 
 ---
 
-### ☐ P7-T03 — Measurement
+### ◐ P7-T03 — Measurement
+
+> **Built 2026-10-15 (`V35__measurement.sql`); the staging "done when" waits for staging data.**
+>
+> Where the build differs from the text below:
+> - **No `email.daily_cap`.** Email is Shopify Email's job (owner's decision 2026-10-15), so there is no warm-up cap. V35 holds only the two views, an index on `holdouts (experiment, bucket, assigned_at)`, `meta_billing (month, category, amount_paise)` and `spend_reconciliations`.
+> - **Report:** `GET /api/reports/lift?days=56` gives one row per experiment (`global` plus each journey key), and `GET /api/journeys/{key}/incrementality?days=30` gives one journey (404 before it has a holdout). Both are ANALYST. Revenue per person is net of refunds, leaves out cancelled orders, counts only orders after the person entered the experiment and within the window, and counts people who bought nothing as zero. `LiftStats.welch` gives the 95% interval: Welch–Satterthwaite df, with the t quantile from a Cornish–Fisher expansion that is within 0.01 of the tables from df 3. "Incremental" is the per-person difference × treated count, with the same interval. Messaging cost is `sends.cost_paise` for the journey's intent; for `global` it is every non-campaign marketing send. ROI = incremental ÷ cost. `enoughData` needs the experiment to be 28 days old **and** 30 people in each group, and `significant` is never true without it. Each row also carries the weekly breakdown from `holdout_lift_weekly`.
+> - **Meta bill:** `POST /api/reports/meta-billing` (CONFIG_ADMIN, audited `meta_billing.upload`, `text/csv`) takes `month,category,amount_inr`, one month per upload; a second upload of the same month replaces it. Errors name the line. `GET /api/reports/spend-reconciliation?month=YYYY-MM` (VIEWER) compares the WhatsApp `spend_ledger` with the bill per category and flags anything over 1% off.
+> - **Job:** `SpendReconciliation`, run by `WorkerJobs.reconcileSpend` at **06:00 IST on the 1st to the 15th**, not just the 1st: Meta's invoice lands a few days into the month. It checks last month once the bill is uploaded, records each category in `spend_reconciliations`, and logs an ERROR for more than 1% off. Until the bill is uploaded it logs a WARN each morning. FCM is free and is not reconciled.
+> - **Console:** a Reports page (nav "Reports"). It shows journey lift in staff words with the 95% range, "not enough data yet: …" and "could still be chance", plus last month's ledger against the bill with the CSV upload for config admins.
+> - **Tests:** `LiftStatsTest` (table quantiles, a worked example, a seeded 20% lift inside its interval, no lift not significant), `ReportsTest` (lift, cost and ROI on seeded buckets; the 4-week and 30-person rules; roles; reconciliation flagging; a bad CSV), `SpendReconciliationTest`.
 
 **Migration `V<next>__measurement_and_privacy.sql`** (lift views part)
 ```sql
@@ -112,7 +141,19 @@ ON CONFLICT (key) DO NOTHING;
 
 ---
 
-### ☐ P7-T05 — Privacy
+### ◐ P7-T05 — Privacy
+
+> **Built 2026-10-15 (`V36__privacy.sql`). Still to do: deploy the compliance webhook subscriptions, and the staging erasure drill.**
+>
+> Where the build differs from the text below:
+> - **Migration V36**, not a shared one with T03. It adds `erase_identity(identity, request_ref, actor)`, with helpers `privacy_scrub_orders`, `privacy_scrub_inbox`, `privacy_like_patterns` and `privacy_text`, plus `consent_erasure_proofs`, `privacy_requests`, the tombstone identity `00000000-0000-0000-0000-000000000000`, and `pii_unmask_log.field` `data_request`.
+> - **What erasure covers beyond the plan:** the whole merge tree (start from any id, merged-away or survivor); orders, checkouts and payments matched by phone or email even when not linked to the identity; raw webhook payloads in every source; courier `shipment_events.raw`; anonymous pixel events; export files that mention the person. Matching folds spaces and hyphens between digits, so "+91 98765 43210" is caught. An unprocessed inbox row that mentions them is closed (`last_error` says why), so it cannot re-create them. Sends move to the tombstone with `idempotency_key` and `decision` rewritten.
+> - **Not erased:** `audit_log` and `pii_unmask_log` are append-only and keep the bare identity id, which resolves to no one afterwards (08-deployment-and-ops.md, DPDP obligations). T18 scans every other table.
+> - **Data request:** not an export row. It opens a `privacy_requests` row; the Owner's `POST /api/privacy-requests/{id}/report` builds the JSON on the spot, logged in `pii_unmask_log`, and nothing is stored. Resolving it empties the stored customer id, email and phone.
+> - **Shop redact:** an open request and an ERROR, with the manual runbook in 08 ("Runbook: Shop redact"). Engage serves one store, so the request means the whole database, and that is never automatic.
+> - **Webhooks:** `compliance_topics` added to `shopify.app.dev.toml` only, same endpoint and HMAC. `shopify.app.engage.toml` (the live store's app) is deliberately left without them until production go-live (P7-T07), so no deploy of it can start erasing live customers' data from a dev machine (an unsigned one gets 401). They take effect when the app config is deployed. With the customer allowlist on, a request about a customer we never stored is acknowledged and dropped, which is correct: we hold nothing on them.
+> - **Console:** a Privacy requests page (OWNER) with Download report and Mark done, plus "Erase this customer" at the foot of a customer's page (OWNER; reason, and typing ERASE).
+> - **Tests:** `invariants.sql` T18, now 18/18 on a fresh V1–V36 database; breaking the inbox scrub fails it. `ComplianceWebhookTest` (5), `PrivacyTest` (4), UI specs. The invariants fixture needed `ON CONFLICT DO NOTHING` for `wa_v1`, which a later migration now seeds.
 
 **The same migration (privacy part)**: `erase_identity(p_identity UUID, p_request_ref TEXT)`:
 1. Writes an anonymised proof row for every consent withdrawal (channel, purpose, time, `request_ref`) into `consent_erasure_proofs`.
@@ -130,7 +171,14 @@ ON CONFLICT (key) DO NOTHING;
 
 ---
 
-### ☐ P7-T06 — Security review + abuse
+### ◐ P7-T06 — Security review + abuse
+
+> **Code part done 2026-10-15; the pen test, credential rotation and backup rehearsal wait for production.** The full record is in [docs/qa/p7-security.md](../qa/p7-security.md).
+>
+> - **Rate limiter:** production runs 3–10 ingest pods, so it is now Postgres-backed (`rate_windows`, unlogged, V37, purged hourly). The admin login limiter stays in memory (2 pods, plus the per-account database lock).
+> - **`stock_waitlist`:** at most 50 waiting alerts per identity; the 51st answers 429.
+> - **Fuzzing:** `EndpointFuzzTest` is a seeded property-style run with no new dependency, rather than Jazzer. It covers every storefront (signed), pixel, thank-you, link and webhook endpoint, plus signed Shopify webhooks drained through the inbox. No 5xx and no stack traces.
+> - **Found and fixed:** Micronaut's default 500 put the exception message (which can hold customer data) in the response. `UnexpectedErrorHandler` in both APIs now logs the cause under a reference and returns only the reference. A tokenless checkout payload is now skipped instead of retried.
 
 - Replace the in-memory rate limiter (P2-T01) with a Postgres-backed one only if pods > 2; otherwise document why in-memory is enough.
 - `stock_waitlist` ≤ 50 rows per identity (a check in the handler).

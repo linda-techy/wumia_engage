@@ -1,0 +1,10 @@
+# Win-back (P5-T08): the free fallback when WhatsApp is not possible, and a
+# nudge a week after the WhatsApp.
+key: push_winback_v1
+channel: push
+category: marketing
+cooldown: P7D
+locales:
+  en: { title: "New at WUMIKA", body: "Fresh pieces have arrived since your last visit. Take a look." }
+vars: [url, image]
+samples: {}

@@ -1,0 +1,14 @@
+# post_purchase (P5-T06, owner's choice 2026-10-12: a "how do you like it?"
+# for every delivered order, as Indian jewellery brands do, instead of a
+# size fit check). Three days after delivery. Marketing: needs a WhatsApp
+# marketing opt-in. A tap opens the 24 h window, so the answer is a free reply.
+key: review_ask_v1
+channel: whatsapp
+category: marketing
+locales:
+  en: { body: "Hi {{name}}, your {{product}} arrived a few days ago. How are you liking it?" }
+buttons:
+  - { text: "Love it", reply: "review_love" }
+  - { text: "Need help", reply: "review_help" }
+vars: [name, product]
+samples: { name: "Priya", product: "Kundan Jhumka Earrings" }

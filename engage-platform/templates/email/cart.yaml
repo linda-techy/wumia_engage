@@ -1,0 +1,14 @@
+# cart_recovery, last step (P7-T01): a free touch ~a day after the cart was
+# left, for people WhatsApp did not reach or who did not come back. Rendered
+# into the brand layout (EmailLayout); the title is the subject.
+key: email_cart_v1
+channel: email
+category: marketing
+locales:
+  en:
+    title: "Still thinking about {{product}}?"
+    body: "Hi {{name}},\n\n{{product}} is still in your WUMIKA bag. We have kept it there for you.\n\nTake another look whenever you are ready."
+buttons:
+  - { text: "View your bag", url: "{{url}}" }
+vars: [name, product, url]
+samples: { name: "Priya", product: "Kundan Jhumka Earrings", url: "https://wumika.com/cart" }

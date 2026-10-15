@@ -60,6 +60,22 @@ engage:
     # Shared with the web pixel's settings (webPixelCreate). Public by nature:
     # it keeps out casual traffic only. Empty = /pixel/events answers 503.
     write-key: ${PIXEL_WRITE_KEY:}
+  meta:
+    # WhatsApp Cloud API webhooks (P4-T01). The APP secret (App settings ->
+    # Basic), not the access token. Empty = every webhook is 401.
+    app-secret: ${WA_APP_SECRET:}
+    # Any string you choose, typed into Meta's webhook setup. Empty = 403.
+    verify-token: ${WA_WEBHOOK_VERIFY_TOKEN:}
+  ses:
+    # Email bounces and complaints (P7-T01): the SNS topic the SES configuration
+    # set "engage" publishes to. Its subscription is https://<ingest>/webhooks/ses.
+    # Empty = every SNS message is 401.
+    topic-arn: ${SES_SNS_TOPIC_ARN:}
+  msg91:
+    # SMS delivery reports (P4-T06). Any long random string; the report URL in
+    # MSG91 is https://<ingest host>/webhooks/sms?token=<it>. Empty = every
+    # report is 401.
+    dlr-token: ${MSG91_DLR_TOKEN:}
   privacy:
     # Empty = refuse to start (fail closed). * = every customer.
     customer-allowlist-emails: ${CUSTOMER_ALLOWLIST_EMAILS:}

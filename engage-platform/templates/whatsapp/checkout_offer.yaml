@@ -1,0 +1,12 @@
+# Abandoned checkout, last reminder (P5-T03): ~24 h after the first. Sent only
+# when an operator has set journey.abandon.discount_code (a code created in
+# Shopify admin) and its label; otherwise this step is skipped.
+key: checkout_offer_v1
+channel: whatsapp
+category: marketing
+locales:
+  en: { body: "Hi {{name}}, {{product}} is still waiting for you. Use code {{code}} for {{discount}} on your WUMIKA order." }
+buttons:
+  - { text: "Complete order", url: "https://wumika.com/{{checkout_path}}" }
+vars: [name, product, code, discount, checkout_path]
+samples: { name: "Priya", product: "Kundan Jhumka Earrings", code: "WUMIKA10", discount: "10% off", checkout_path: "checkouts/cn/hWN4abc123/recover" }

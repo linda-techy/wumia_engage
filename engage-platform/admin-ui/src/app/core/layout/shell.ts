@@ -13,16 +13,19 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   { path: '/dashboard', label: 'Dashboard', role: 'VIEWER' },
+  { path: '/reports', label: 'Reports', role: 'VIEWER' },
   { path: '/campaigns', label: 'Campaigns', role: 'VIEWER' },
   { path: '/segments', label: 'Segments', role: 'VIEWER' },
   { path: '/inspector', label: 'Journey inspector', role: 'ANALYST' },
   { path: '/customers', label: 'Customers', role: 'VIEWER' },
+  { path: '/support', label: 'Support requests', role: 'VIEWER' },
   { path: '/settings', label: 'Settings', role: 'VIEWER' },
   { path: '/templates', label: 'Templates', role: 'VIEWER' },
   { path: '/consent-copy', label: 'Consent copy', role: 'VIEWER' },
   { path: '/payments', label: 'Payment failures', role: 'VIEWER' },
   { path: '/ingest', label: 'Ingest health', role: 'VIEWER' },
   { path: '/exports', label: 'Exports', role: 'ANALYST' },
+  { path: '/privacy', label: 'Privacy requests', role: 'OWNER' },
   { path: '/operators', label: 'Operators', role: 'OWNER' },
   { path: '/account', label: 'Account', role: 'VIEWER' },
 ];

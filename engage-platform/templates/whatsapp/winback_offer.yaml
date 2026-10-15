@@ -1,0 +1,11 @@
+# Win-back, last message (~14 days after the first): only when a discount is
+# set (journey.winback.discount_*), shared or a single-use code per customer.
+key: winback_offer_v1
+channel: whatsapp
+category: marketing
+locales:
+  en: { body: "Hi {{name}}, here is something to welcome you back: {{discount}} on your next WUMIKA order with code {{code}}." }
+buttons:
+  - { text: "Shop the collection", url: "https://wumika.com/{{link_path}}" }
+vars: [name, discount, code, link_path]
+samples: { name: "Priya", discount: "10% off", code: "WUMK7P2QX9M", link_path: "collections/all" }

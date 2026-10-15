@@ -1,0 +1,12 @@
+# payment_failed (P5-T02), second WhatsApp at ~2 h, when the shopper cancelled
+# the payment themselves (FailureKind.CUSTOMER_CANCELLED): no talk of bank
+# trouble, just that the items are kept. Utility.
+key: payment_failed_r2b_v1
+channel: whatsapp
+category: utility
+locales:
+  en: { body: "Hi {{name}}, the payment for your WUMIKA order was cancelled (ref {{payment_id}}). Your items are still held if you want to complete it." }
+buttons:
+  - { text: "Complete payment", url: "https://wumika.com/{{pay_path}}" }
+vars: [name, payment_id, pay_path]
+samples: { name: "Priya", payment_id: "pay_O6gPwJ3yP9rJ3k", pay_path: "checkouts/cn/hWN4abc123/recover" }

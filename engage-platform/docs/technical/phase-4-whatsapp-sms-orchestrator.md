@@ -100,7 +100,7 @@ CREATE TABLE wa_templates (
 
 The `message_template_status_update` and `message_template_quality_update` webhook fields keep this table current between syncs. A template that drops to RED quality is paused locally the moment the webhook arrives.
 
-**Hindi code in Meta's language list.** Hinglish is written in Latin script, and Meta has no separate Hinglish language code. Submit Hinglish copy under the Hindi or English language code as your approval process allows, and record the choice in the YAML. Test that the language you send matches what was approved, because a mismatch returns a 132xxx error.
+**As built (2026-10-10): templates are English only, by the owner's decision; the note below applies if Hinglish copy is added later.** **Hindi code in Meta's language list.** Hinglish is written in Latin script, and Meta has no separate Hinglish language code. Submit Hinglish copy under the Hindi or English language code as your approval process allows, and record the choice in the YAML. Test that the language you send matches what was approved, because a mismatch returns a 132xxx error.
 
 ---
 

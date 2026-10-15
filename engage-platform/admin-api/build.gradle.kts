@@ -20,6 +20,10 @@ dependencies {
 
     testImplementation("io.micronaut:micronaut-http-client")
     testImplementation("com.tngtech.archunit:archunit-junit5:1.5.1")   // ControllerRolesTest
+    // Tests migrate engage_test themselves, like the other modules: without it they
+    // depended on another module's tests having run first (seen with V33, 2026-10-15).
+    testImplementation("io.micronaut.flyway:micronaut-flyway")
+    testRuntimeOnly("org.flywaydb:flyway-database-postgresql")
     implementation(project(":policy"))                                 // campaign dry runs (P6-T06)
 }
 
@@ -82,6 +86,9 @@ tasks.withType<Test>().configureEach {
     if (envFile.exists()) {
         val env = readEnvFile(envFile).toMutableMap()
         env["DB_NAME"] = env["TEST_DB_NAME"] ?: "engage_test"
+        // Tests never reach a real provider, whatever local.env holds: no WhatsApp,
+        // template sync or SMS adapter is created (fakes stand in where needed).
+        listOf("WA_PHONE_NUMBER_ID", "WA_ACCESS_TOKEN", "WA_BUSINESS_ACCOUNT_ID", "MSG91_AUTH_KEY", "EMAIL_FROM", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN").forEach { env[it] = "" }
         // Deterministic test keys: never the operator's real ones.
         // 64 hex = 32 bytes: SecretBox.keyFromHex accepts nothing shorter.
         env["ADMIN_MFA_KEY"] = "0123456789abcdef".repeat(4)
@@ -93,4 +100,9 @@ tasks.withType<Test>().configureEach {
         environment(env)
     }
     testLogging { events("failed"); exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
+}
+
+// Tests migrate engage_test themselves (see policy/build.gradle.kts).
+tasks.processTestResources {
+    from(rootProject.file("db/migration")) { into("db/migration") }
 }

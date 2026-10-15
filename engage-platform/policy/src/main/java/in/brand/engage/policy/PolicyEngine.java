@@ -31,7 +31,8 @@ import java.util.Map;
  * <p>No side effects except the holdout assignment row, plus a
  * {@code config_snapshots} row when the config cache is refreshed.
  *
- * <p>Not yet enforced: {@code HIGHER_PRIORITY_ACTIVE} (P5).
+ * <p>{@code HIGHER_PRIORITY_ACTIVE} (P5-T01, {@link CollisionCheck}) runs after
+ * consent and before quiet hours, so a collision is a block, never a deferral.
  */
 @Singleton
 public class PolicyEngine {
@@ -45,10 +46,12 @@ public class PolicyEngine {
     private final Usage usage;
     private final Holdouts holdouts;
     private final Clock clock;
+    private final CollisionCheck collisions;
 
     public PolicyEngine(Db db, ConfigResolver config, KillSwitch killSwitch, Templates templates,
                         TemplateCooldowns cooldowns, SubjectLoader subjects, Usage usage, Holdouts holdouts,
-                        Clock clock) {
+                        Clock clock, CollisionCheck collisions) {
+        this.collisions = collisions;
         this.db = db;
         this.config = config;
         this.killSwitch = killSwitch;
@@ -116,6 +119,16 @@ public class PolicyEngine {
             }
         }
 
+        // 4b. Collisions (P5-T01): a more important journey owns this person for now.
+        if (req.cascadeRunId() != null) {
+            var blocker = collisions.blocker(c, req.cascadeRunId(), now,
+                    java.time.Duration.ofHours(snapshot.longValue("journey.collision.suppress_hours", "*")));
+            if (blocker.isPresent()) {
+                return out.block(BlockReason.HIGHER_PRIORITY_ACTIVE,
+                        Map.of("by", blocker.get().intentKey(), "run", blocker.get().runId()));
+            }
+        }
+
         // 5. WhatsApp service window: a reply inside it is a free service message.
         boolean freeWindow = channel == WHATSAPP && subject.inServiceWindow(now);
         var category = freeWindow && req.isReply() ? SERVICE : template.category();
@@ -151,8 +164,10 @@ public class PolicyEngine {
             }
         }
 
-        // 10. Holdouts. Control is measured, not messaged.
-        if (req.journeyKey() != null) {
+        // 10. Holdouts. Control is measured, not messaged. The journey holdout (P5-T09) is
+        //     for marketing only: an order update or a failed-payment notice is never
+        //     withheld to measure it. Campaigns keep their own control group (05-campaigns.md).
+        if (req.journeyKey() != null && template.category() == MARKETING && !req.journeyKey().startsWith("campaign:")) {
             var pct = snapshot.decimalValue("holdout.journey_pct", req.journeyKey());
             if (inControl(c, req, req.journeyKey(), pct))
                 return out.block(BlockReason.HOLDOUT_CONTROL, Map.of("experiment", req.journeyKey()));

@@ -13,6 +13,7 @@ plugins {
 java { toolchain { languageVersion = JavaLanguageVersion.of(25) } }
 
 dependencies {
+    api(project(":core-domain"))                         // Channel, Category (CapabilityService)
     api("jakarta.inject:jakarta.inject-api:2.0.1")
     api("jakarta.transaction:jakarta.transaction-api:2.0.1")
     implementation("org.slf4j:slf4j-api")                // ConsentWriter warnings

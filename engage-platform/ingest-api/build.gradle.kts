@@ -90,12 +90,18 @@ tasks.withType<Test>().configureEach {
     if (envFile.exists()) {
         val env = readEnvFile(envFile).toMutableMap()
         env["DB_NAME"] = env["TEST_DB_NAME"] ?: "engage_test"
+        // Tests never reach a real provider, whatever local.env holds: no WhatsApp,
+        // template sync or SMS adapter is created (fakes stand in where needed).
+        listOf("WA_PHONE_NUMBER_ID", "WA_ACCESS_TOKEN", "WA_BUSINESS_ACCOUNT_ID", "MSG91_AUTH_KEY", "EMAIL_FROM", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN").forEach { env[it] = "" }
         env["FLYWAY_ON_STARTUP"] = "true"
         // Tests use synthetic fixtures (priya.k@example.com), never the real allowlist.
         env["CUSTOMER_ALLOWLIST_EMAILS"] = "priya.k@example.com"
         // -1 binds to a random free port: tests must not fight the running
         // ingest-api service on 8081 for the fixed port.
         env["INGEST_PORT"] = "-1"
+        // Deterministic Meta secrets: never the real app secret.
+        env["WA_APP_SECRET"] = "test-meta-app-secret"
+        env["WA_WEBHOOK_VERIFY_TOKEN"] = "test-verify-token"
         environment(env)
     }
     testLogging { events("failed"); exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }

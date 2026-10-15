@@ -1,0 +1,14 @@
+# Abandoned checkout, first reminder (P5-T03): ~30 min after the last checkout
+# activity. Marketing (Meta lists cart and checkout reminders as marketing):
+# needs a WhatsApp marketing opt-in, ~₹0.86 when delivered. No discount here:
+# most people finish from the reminder alone.
+# The button reopens Shopify's saved checkout (abandoned_checkout_url).
+key: checkout_reminder_v1
+channel: whatsapp
+category: marketing
+locales:
+  en: { body: "Hi {{name}}, you left {{product}} in your WUMIKA checkout. Your details are saved, so finishing your order takes a few seconds." }
+buttons:
+  - { text: "Complete order", url: "https://wumika.com/{{checkout_path}}" }
+vars: [name, product, checkout_path]
+samples: { name: "Priya", product: "Kundan Jhumka Earrings", checkout_path: "checkouts/cn/hWN4abc123/recover" }

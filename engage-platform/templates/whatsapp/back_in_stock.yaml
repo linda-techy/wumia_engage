@@ -1,0 +1,12 @@
+# back_in_stock (P5-T05): 15 min after the push, for shoppers who did not
+# click it, or at once for those with no push subscription. Marketing: needs
+# a WhatsApp marketing opt-in. True by construction: they asked to be told.
+key: back_in_stock_v1
+channel: whatsapp
+category: marketing
+locales:
+  en: { body: "Good news: {{product}} is back in stock at WUMIKA. You asked us to let you know when it returned." }
+buttons:
+  - { text: "View the piece", url: "https://wumika.com/{{product_path}}" }
+vars: [product, product_path]
+samples: { product: "Kundan Jhumka Earrings", product_path: "products/kundan-jhumka-earrings?variant=44012345678901" }

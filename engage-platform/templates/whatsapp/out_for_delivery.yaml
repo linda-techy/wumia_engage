@@ -1,0 +1,7 @@
+key: out_for_delivery_v1
+channel: whatsapp
+category: utility
+locales:
+  en:      { body: "Your WUMIKA order {{order_no}} is out for delivery today with {{courier}}. Please keep your phone reachable." }
+vars: [order_no, courier]
+samples: { order_no: "#1042", courier: "Delhivery" }

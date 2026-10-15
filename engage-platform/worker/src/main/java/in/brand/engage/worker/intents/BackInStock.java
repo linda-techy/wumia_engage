@@ -1,6 +1,8 @@
 package in.brand.engage.worker.intents;
 
 import in.brand.engage.orchestrator.CascadeDefinition;
+import in.brand.engage.orchestrator.DefaultOrchestrator;
+import in.brand.engage.orchestrator.Guard;
 import in.brand.engage.orchestrator.MessageIntent;
 import in.brand.engage.orchestrator.Priority;
 import in.brand.engage.persistence.Sql;
@@ -31,6 +33,12 @@ import java.util.UUID;
  * <p>TTL one hour, urgency high, stale tokens allowed (the shopper asked for
  * this). The subject is {@code <variant>:<identity>}: one live run per
  * person, not one per variant across everyone.
+ *
+ * <p>P5-T05: a WhatsApp ({@code back_in_stock_v1}) 15 minutes after the push
+ * for shoppers who did not click it (a click ends the run), or at once for
+ * those the push cannot reach. Marketing opt-in, not INCAPABLE. If the
+ * variant sells out again before then ({@code variant_sold_out}), the
+ * pending runs end: a message about stock that is gone again disappoints.
  */
 @Singleton
 public class BackInStock implements EventConsumer {
@@ -40,9 +48,11 @@ public class BackInStock implements EventConsumer {
     static final String NO_SIZE_TEMPLATE = "push_back_in_stock_nosize_v1";
 
     private final Storefront storefront;
+    private final DefaultOrchestrator orchestrator;
 
-    public BackInStock(Storefront storefront) {
+    public BackInStock(Storefront storefront, DefaultOrchestrator orchestrator) {
         this.storefront = storefront;
+        this.orchestrator = orchestrator;
     }
 
     @Factory
@@ -52,18 +62,25 @@ public class BackInStock implements EventConsumer {
         CascadeDefinition backInStock() {
             return new CascadeDefinition(INTENT, Priority.HIGH_INTENT, List.of(
                     CascadeDefinition.Step.push("push_back_in_stock_v1", Duration.ofHours(1))
-                            .urgent().staleDevicesAllowed().orTemplate(NO_SIZE_TEMPLATE)));
+                            .urgent().staleDevicesAllowed().orTemplate(NO_SIZE_TEMPLATE)
+                            .waitAfter(Duration.ofMinutes(15)),
+                    CascadeDefinition.Step.whatsapp("back_in_stock_v1")
+                            .require(Guard.WA_MARKETING, Guard.WA_CAPABLE_OR_UNKNOWN)));
         }
     }
 
     @Override
     public boolean accepts(String eventName) {
-        return eventName.equals("variant_restocked");
+        return eventName.equals("variant_restocked") || eventName.equals("variant_sold_out");
     }
 
     @Override
     public List<MessageIntent> handle(Connection c, Event e) throws SQLException {
         var variantId = e.props().get("variant_id");
+        if (variantId != null && e.name().equals("variant_sold_out")) {
+            soldOut(c, variantId);
+            return List.of();
+        }
         int quantity = parseInt(e.props().get("quantity"));
         if (variantId == null || quantity <= 0) return List.of();
         var handle = e.props().get("product_handle");
@@ -73,20 +90,26 @@ public class BackInStock implements EventConsumer {
 
         var intents = new ArrayList<MessageIntent>();
         try (var ps = Sql.prepare(c, """
+                WITH due AS MATERIALIZED (
+                       SELECT identity_id, variant_id FROM stock_waitlist
+                        WHERE variant_id = ? AND notified_at IS NULL
+                        ORDER BY created_at LIMIT ?
+                          FOR UPDATE SKIP LOCKED)
                 UPDATE stock_waitlist w SET notified_at = now()
-                  FROM (SELECT identity_id, variant_id FROM stock_waitlist
-                         WHERE variant_id = ? AND notified_at IS NULL
-                         ORDER BY created_at LIMIT ?
-                           FOR UPDATE SKIP LOCKED) due
+                  FROM due
                  WHERE w.identity_id = due.identity_id AND w.variant_id = due.variant_id
                 RETURNING w.identity_id, w.size_label, w.product_handle""", variantId, limit);
              var rs = ps.executeQuery()) {
+            var images = new HashMap<String, java.util.Optional<String>>();
             while (rs.next()) {
                 var identityId = rs.getObject("identity_id", UUID.class);
                 var rowHandle = handle != null ? handle : rs.getString("product_handle");
                 var vars = new HashMap<String, String>();
+                if (!images.containsKey(rowHandle)) images.put(rowHandle, java.util.Optional.ofNullable(ProductImages.byHandle(c, rowHandle)));
+                images.get(rowHandle).ifPresent(u -> vars.put("image", u));
                 vars.put("product", productTitle != null ? productTitle : fromHandle(rowHandle));
                 vars.put("url", storefront.product(rowHandle, variantId));
+                vars.put("product_path", Storefront.productPath(rowHandle, variantId));
                 var size = size(rs.getString("size_label"), variantTitle);
                 if (size != null) vars.put("size", size);
                 else vars.put(CascadeDefinition.TEMPLATE_VAR, NO_SIZE_TEMPLATE);
@@ -94,6 +117,19 @@ public class BackInStock implements EventConsumer {
             }
         }
         return intents;
+    }
+
+    /** Ends the pending alerts for a variant that sold out again before they went. */
+    private void soldOut(Connection c, String variantId) throws SQLException {
+        var subjects = new ArrayList<String>();
+        try (var ps = Sql.prepare(c, """
+                SELECT subject_key FROM cascade_runs
+                 WHERE intent_key = ? AND split_part(subject_key, ':', 1) = ? AND status IN ('active', 'waiting')""",
+                INTENT, variantId);
+             var rs = ps.executeQuery()) {
+            while (rs.next()) subjects.add(rs.getString(1));
+        }
+        for (var s : subjects) orchestrator.cancel(c, INTENT, s, "variant_sold_out");
     }
 
     /** What the shopper saw on the notify-me button, else Shopify's variant title; none for a one-size item. */

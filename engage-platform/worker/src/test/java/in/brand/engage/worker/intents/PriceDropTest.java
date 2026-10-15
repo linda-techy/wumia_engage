@@ -29,6 +29,9 @@ class PriceDropTest {
     @Inject TestClock clock;
     @Inject Db db;
     @Inject WorkerTestBeans.FakePush push;
+    @Inject WorkerTestBeans.FakeWhatsApp wa;
+    @Inject in.brand.engage.orchestrator.DefaultOrchestrator orchestrator;
+    static final String TEMPLATE = "price_drop_v1";
 
     String variant;
 
@@ -47,10 +50,21 @@ class PriceDropTest {
             Sql.update(c, """
                     INSERT INTO config_versions (key, selector, value, changed_by, reason)
                     VALUES ('holdout.global_pct', '*', '0', ?, 'test')""", operator(c));
+            Sql.update(c, """
+                    INSERT INTO config_versions (key, selector, value, changed_by, reason)
+                    VALUES ('holdout.journey_pct', '*', '0', ?, 'test')""", operator(c));
+            Sql.update(c, """
+                    INSERT INTO config_versions (key, selector, value, changed_by, reason)
+                    VALUES ('budget.whatsapp.marketing.daily_paise', '*', '0', ?, 'test')""", operator(c));
+            Sql.update(c, """
+                    INSERT INTO wa_templates (key, language, provider_name, requested_category, approved_category, status, quality)
+                    VALUES (?, 'en', ?, 'marketing', 'marketing', 'APPROVED', 'GREEN')
+                    ON CONFLICT (provider_name, language) DO UPDATE SET status = 'APPROVED', quality = 'GREEN'""", TEMPLATE, TEMPLATE);
             return null;
         });
         config.invalidate();
         push.all.clear();
+        wa.reset();
         variant = "v" + UUID.randomUUID().toString().substring(0, 8);
     }
 
@@ -120,6 +134,30 @@ class PriceDropTest {
         dropped(variant, 149900, 149900);
 
         assertEquals(0, push.all.size());
+    }
+
+    @Test void without_a_push_click_whatsapp_follows_two_hours_later() {
+        var priya = subscriber();
+        whatsapp(priya);
+        cart(priya, variant, null);
+        dropped(variant, 189900, 149900);
+        assertEquals(1, push.all.size());
+        assertTrue(wa.all.isEmpty());
+
+        tickAt(clock.instant().plus(Duration.ofMinutes(121)));
+        var call = wa.all.getLast().whatsapp();
+        assertEquals("price_drop_v1", call.name());
+        assertEquals(java.util.List.of("Linen Kurta", "₹1,499", "₹1,899"), call.bodyParams());
+        assertEquals(java.util.List.of("products/linen-kurta?variant=" + variant), call.urlButtonSuffixes());
+    }
+
+    @Test void without_a_push_device_whatsapp_goes_at_once() {
+        var asha = identity();
+        whatsapp(asha);
+        cart(asha, variant, null);
+        dropped(variant, 189900, 149900);
+        assertTrue(push.all.isEmpty());
+        assertEquals(1, wa.all.size());
     }
 
     @Test void rupees_are_written_the_indian_way() {
@@ -193,6 +231,36 @@ class PriceDropTest {
              var rs = ps.executeQuery()) {
             rs.next();
             return rs.getObject(1, UUID.class);
+        }
+    }
+
+    /** A phone and a WhatsApp marketing opt-in. */
+    private void whatsapp(UUID id) {
+        var phone = "919" + String.format("%09d", java.util.concurrent.ThreadLocalRandom.current().nextLong(1_000_000_000L));
+        db.inTx(c -> {
+            Sql.update(c, "INSERT INTO identity_keys (identity_id, kind, value, verified) VALUES (?, 'phone', ?, true)", id, phone);
+            return Sql.update(c, """
+                    INSERT INTO consents (identity_id, channel, purpose, state, source, occurred_at)
+                    VALUES (?, 'whatsapp', 'marketing', 'granted', 'test', now() - interval '60 days')""", id);
+        });
+    }
+
+    private void tickAt(Instant t) {
+        clock.setIst(t.atZone(java.time.ZoneId.of("Asia/Kolkata")).toLocalDateTime().toString());
+        orchestrator.tick(200);
+    }
+
+    @Test void the_push_carries_the_product_photo_sized_for_a_phone() {
+        db.inTx(c -> in.brand.engage.persistence.Sql.update(c, """
+                INSERT INTO products (product_id, handle, title, image_url, updated_at)
+                VALUES ('img-8801', 'linen-kurta', 'Linen Kurta', 'https://cdn.shopify.com/s/files/1/kurta.jpg?v=17', now())
+                ON CONFLICT (product_id) DO UPDATE SET image_url = EXCLUDED.image_url, handle = EXCLUDED.handle, updated_at = now()"""));
+        try {
+            cart(subscriber(), variant, null);
+            dropped(variant, 189900, 149900);
+            assertEquals("https://cdn.shopify.com/s/files/1/kurta.jpg?v=17&width=1024", push.all.getFirst().image());
+        } finally {
+            db.inTx(c -> in.brand.engage.persistence.Sql.update(c, "DELETE FROM products WHERE product_id = 'img-8801'"));
         }
     }
 }

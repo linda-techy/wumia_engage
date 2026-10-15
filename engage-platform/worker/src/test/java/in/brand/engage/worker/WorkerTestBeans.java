@@ -3,7 +3,10 @@ package in.brand.engage.worker;
 import in.brand.engage.channels.ChannelAdapter;
 import in.brand.engage.channels.DispatchResult;
 import in.brand.engage.channels.RenderedMessage;
+import in.brand.engage.channels.ChannelException;
 import in.brand.engage.channels.push.FcmAdapter;
+import in.brand.engage.channels.sms.Msg91Adapter;
+import in.brand.engage.channels.whatsapp.WhatsAppCloudAdapter;
 import in.brand.engage.core.messaging.Addresses;
 import in.brand.engage.core.messaging.Channel;
 import in.brand.engage.orchestrator.CascadeDefinition;
@@ -95,6 +98,73 @@ public class WorkerTestBeans {
             last = m;
             all.add(m);
             return new DispatchResult(null, a.push().size(), List.of());
+        }
+    }
+
+    /** WhatsApp that never leaves the JVM; answers as scripted (default: accepted). */
+    @Singleton
+    @Replaces(WhatsAppCloudAdapter.class)
+    public static class FakeWhatsApp implements ChannelAdapter {
+        public final List<RenderedMessage> all = new java.util.concurrent.CopyOnWriteArrayList<>();
+        public volatile ChannelException fail;
+
+        @Override public Channel channel() { return Channel.WHATSAPP; }
+
+        @Override public DispatchResult send(RenderedMessage m, Addresses a) throws ChannelException {
+            all.add(m);
+            if (fail != null) throw fail;
+            return new DispatchResult("wamid.test-" + m.sendId(), 1, List.of());
+        }
+
+        public void reset() {
+            all.clear();
+            fail = null;
+        }
+    }
+
+    /** Shopify discount codes that never leave the JVM: records each one, or refuses as scripted. */
+    @Singleton
+    @Replaces(in.brand.engage.worker.intents.ShopifyDiscountCodes.class)
+    public static class FakeDiscounts implements in.brand.engage.worker.intents.DiscountCodes {
+        public final List<Spec> created = new java.util.concurrent.CopyOnWriteArrayList<>();
+        public volatile Failed refuse;
+
+        @Override public void create(Spec spec) throws Failed {
+            if (refuse != null) throw refuse;
+            created.add(spec);
+        }
+
+        public void reset() {
+            created.clear();
+            refuse = null;
+        }
+    }
+
+    /** Email that never leaves the JVM. */
+    @Singleton
+    @Replaces(in.brand.engage.channels.email.SesAdapter.class)
+    public static class FakeEmail implements ChannelAdapter {
+        public final List<RenderedMessage> all = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+        @Override public Channel channel() { return Channel.EMAIL; }
+
+        @Override public DispatchResult send(RenderedMessage m, Addresses a) {
+            all.add(m);
+            return new DispatchResult("ses-" + m.sendId(), 1, List.of());
+        }
+    }
+
+    /** SMS that never leaves the JVM. */
+    @Singleton
+    @Replaces(Msg91Adapter.class)
+    public static class FakeSms implements ChannelAdapter {
+        public final List<RenderedMessage> all = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+        @Override public Channel channel() { return Channel.SMS; }
+
+        @Override public DispatchResult send(RenderedMessage m, Addresses a) {
+            all.add(m);
+            return new DispatchResult("req-" + m.sendId(), 1, List.of());
         }
     }
 }

@@ -1,0 +1,14 @@
+# price_drop (owner's decision 2026-10-15: WhatsApp too, as Indian D2C brands
+# do): 2 h after the push for people who did not click it, or at once when
+# the push cannot reach them. For an item in their open cart or on its
+# waitlist. Real numbers, no "sale" framing. Marketing; one a day per person.
+key: price_drop_v1
+channel: whatsapp
+category: marketing
+cooldown: P1D
+locales:
+  en: { body: "Good news: the price of {{product}} has dropped to {{new_price}} at WUMIKA (it was {{old_price}})." }
+buttons:
+  - { text: "View the piece", url: "https://wumika.com/{{product_path}}" }
+vars: [product, new_price, old_price, product_path]
+samples: { product: "Kundan Jhumka Earrings", new_price: "₹12,499", old_price: "₹14,999", product_path: "products/kundan-jhumka-earrings?variant=44012345678901" }

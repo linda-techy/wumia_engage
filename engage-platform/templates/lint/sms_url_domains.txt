@@ -1,0 +1,4 @@
+# Domains an SMS may link to. Each must also be whitelisted on the DLT portal
+# (TRAI, 2024): a link to any other domain is blocked by the operator.
+# One host per line; subdomains of a listed host are allowed.
+wumika.com

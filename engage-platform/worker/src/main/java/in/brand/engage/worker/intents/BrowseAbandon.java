@@ -21,8 +21,13 @@ import java.util.UUID;
 /**
  * {@code browse_abandon} (phase-3 §4): three or more product views in one
  * browsing session, no add-to-cart, and the session over (30 minutes idle);
- * a push 4 hours after that. Push only, permanently: the intent is too weak to
- * pay for WhatsApp.
+ * a push 4 hours after that.
+ *
+ * <p>WhatsApp the next day (owner's decision 2026-10-15, replacing "push only,
+ * the intent is too weak to pay for WhatsApp"), but only for strong interest:
+ * the same piece viewed at least {@value #MIN_REPEAT_VIEWS} times in the
+ * session, and the push not clicked (a click ends the run). Marketing opt-in,
+ * not INCAPABLE.
  *
  * <p>Views come from the web pixel (P2-T06), which carries no identity. A
  * browser is reached only when the push embed has <em>already</em> linked its
@@ -39,6 +44,8 @@ public class BrowseAbandon implements EventConsumer {
 
     public static final String INTENT = "browse_abandon";
     static final int MIN_VIEWS = 3;
+    static final int MIN_REPEAT_VIEWS = 2;
+    static final String STRONG = "strong";
     static final Duration IDLE = Duration.ofMinutes(30);
     static final Duration DELAY = Duration.ofHours(4);
     static final Duration TTL = Duration.ofHours(24);
@@ -56,8 +63,12 @@ public class BrowseAbandon implements EventConsumer {
         @Bean
         @Singleton
         CascadeDefinition browseAbandon() {
-            return new CascadeDefinition(INTENT, Priority.LOW_INTENT,
-                    List.of(CascadeDefinition.Step.push("push_browse_abandon_v1", TTL)));
+            return new CascadeDefinition(INTENT, Priority.LOW_INTENT, List.of(
+                    CascadeDefinition.Step.push("push_browse_abandon_v1", TTL).waitAfter(Duration.ofHours(20)),
+                    CascadeDefinition.Step.whatsapp("browse_reminder_v1")
+                            .require(in.brand.engage.orchestrator.Guard.WA_MARKETING,
+                                     in.brand.engage.orchestrator.Guard.WA_CAPABLE_OR_UNKNOWN,
+                                     in.brand.engage.orchestrator.Guard.hasVar(STRONG))));
         }
     }
 
@@ -95,6 +106,9 @@ public class BrowseAbandon implements EventConsumer {
         vars.put("url", session.variantId() != null
                 ? storefront.product(session.handle(), session.variantId())
                 : storefront.product(session.handle()));
+        vars.put("product_path", Storefront.productPath(session.handle(), session.variantId()));
+        ProductImages.put(vars, ProductImages.byHandle(c, session.handle()));
+        if (session.topViews() >= MIN_REPEAT_VIEWS) vars.put(STRONG, "1");
         return List.of(new MessageIntent(identityId, INTENT, subject, vars, e.occurredAt().plus(IDLE).plus(DELAY)));
     }
 
@@ -107,7 +121,8 @@ public class BrowseAbandon implements EventConsumer {
         }
     }
 
-    record Session(int views, boolean addedToCart, String title, String handle, String variantId) {}
+    /** @param topViews how often the lead product was viewed in the session */
+    record Session(int views, boolean addedToCart, String title, String handle, String variantId, int topViews) {}
 
     /**
      * The browser's session up to {@code upTo}: its pixel events back to the
@@ -131,7 +146,7 @@ public class BrowseAbandon implements EventConsumer {
                 SELECT (SELECT count(*) FROM s WHERE name = 'product_viewed') AS views,
                        EXISTS (SELECT 1 FROM s WHERE name = 'product_added_to_cart') AS added,
                        top.props->>'product_title' AS title, top.props->>'product_handle' AS handle,
-                       top.props->>'variant_id' AS variant_id
+                       top.props->>'variant_id' AS variant_id, best.n AS top_views
                   FROM (SELECT props->>'product_id' AS product_id, count(*) AS n, max(occurred_at) AS last
                           FROM s WHERE name = 'product_viewed' AND props->>'product_handle' IS NOT NULL
                          GROUP BY 1 ORDER BY n DESC, last DESC LIMIT 1) best
@@ -143,7 +158,7 @@ public class BrowseAbandon implements EventConsumer {
              var rs = ps.executeQuery()) {
             if (!rs.next()) return null;
             return new Session(rs.getInt("views"), rs.getBoolean("added"), rs.getString("title"),
-                    rs.getString("handle"), rs.getString("variant_id"));
+                    rs.getString("handle"), rs.getString("variant_id"), rs.getInt("top_views"));
         }
     }
 }

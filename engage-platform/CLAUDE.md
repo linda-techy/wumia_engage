@@ -103,6 +103,8 @@ CascadeDefinition.of("cart_recovery")
     .build();
 ```
 
+**As built (owner's decision, 2026-10-10):** `cart_recovery` and `checkout_abandon` run the Indian D2C pattern instead. WhatsApp goes first (UNKNOWN numbers included, since Meta bills only delivered messages), push is the fallback and second nudge, and a discount WhatsApp goes at about 24 h only if an operator sets a code. See P5-T03/T04 in `docs/implementation/P5-journeys.md`.
+
 There is no SMS step. Promotional SMS is not built: DND registration blocks it for a large share of Indian numbers, and the ROI does not justify DLT promotional scrubbing. SMS appears only in transactional cascades (`order_tracking`, `ndr_rescue`, `payment_failed`).
 
 **Paise literals.** ₹1,500 is `1_500_00` (150,000 paise). Write rupee thresholds with the underscore before the last two digits so the paise are visible. `150_00` is ₹150, and that mistake is easy to make and hard to spot in review.

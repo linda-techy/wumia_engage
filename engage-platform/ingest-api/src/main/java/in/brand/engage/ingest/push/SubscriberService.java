@@ -49,7 +49,10 @@ public class SubscriberService {
 
     private static final Logger LOG = LoggerFactory.getLogger(SubscriberService.class);
 
-    public enum Outcome { STORED, FILTERED, UNKNOWN_COPY }
+    public enum Outcome { STORED, FILTERED, UNKNOWN_COPY, FULL }
+
+    /** Size alerts one shopper may have waiting at once (P7-T06): a script cannot grow the table without bound. */
+    static final int MAX_WAITING_ALERTS = 50;
 
     public record Registered(Outcome outcome, Long deviceId) {}
 
@@ -179,6 +182,7 @@ public class SubscriberService {
         return db.inTx(c -> {
             if (!mayStore(c, ctx)) return Outcome.FILTERED;
             var identityId = identities.resolve(c, sessionKeys(ctx, r.anonId()));
+            if (waiting(c, identityId, r.variantId()) >= MAX_WAITING_ALERTS) return Outcome.FULL;
             // Asking again after an alert re-arms it (the variant sold out again), at
             // the back of the queue. Asking again while still waiting changes
             // nothing: the shopper keeps their place.
@@ -195,6 +199,17 @@ public class SubscriberService {
     }
 
     /* ------------------------------- helpers ----------------------------- */
+
+    /** Alerts still waiting for this shopper, not counting the one being asked for again. */
+    private static int waiting(Connection c, java.util.UUID identityId, String variantId) throws SQLException {
+        try (var ps = Sql.prepare(c, """
+                SELECT count(*) FROM stock_waitlist
+                 WHERE identity_id = ? AND notified_at IS NULL AND variant_id <> ?""", identityId, variantId);
+             var rs = ps.executeQuery()) {
+            rs.next();
+            return rs.getInt(1);
+        }
+    }
 
     /**
      * The allowlist, decided before anything is written. With a restricted list

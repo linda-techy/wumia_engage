@@ -1,0 +1,12 @@
+# The Track button opens /apps/push/t/<ref> (the storefront proxy), which
+# redirects to the courier's page. <ref> is a signed shipment reference
+# (TrackRef), so links cannot be walked. No delivery date: we have no ETA source.
+key: order_shipped_v1
+channel: whatsapp
+category: utility
+locales:
+  en:      { body: "Your WUMIKA order {{order_no}} has shipped with {{courier}} (AWB {{awb}}). Track it with the button below." }
+buttons:
+  - { text: "Track order", url: "https://wumika.com/apps/push/t/{{track_ref}}" }
+vars: [order_no, courier, awb, track_ref]
+samples: { order_no: "#1042", courier: "Delhivery", awb: "1234567890123", track_ref: "2s-AbCdEfGhIjK" }

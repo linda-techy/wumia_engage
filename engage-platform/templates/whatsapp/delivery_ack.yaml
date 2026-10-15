@@ -1,0 +1,10 @@
+# The free reply to a customer's answer to a failed-delivery message
+# (ndr_raised_v1). Staff handle the courier by hand (owner's decision,
+# 2026-10-15) from the support requests list in the admin console.
+key: delivery_ack
+channel: whatsapp
+category: service
+locales:
+  en: { body: "Thanks, {{name}}. We have passed your message to our delivery team, and they will arrange the next delivery attempt." }
+vars: [name]
+samples: { name: "Priya" }

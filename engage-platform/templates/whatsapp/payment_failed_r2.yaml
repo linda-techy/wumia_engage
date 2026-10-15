@@ -1,0 +1,13 @@
+# payment_failed (P5-T02), second WhatsApp at ~2 h, when the failure was the
+# bank's, the network's or the gateway's (FailureKind.TECHNICAL, which also
+# covers UPI timeouts). Utility: it is about a real, failed transaction, named
+# by its Razorpay ref; no promotional words.
+key: payment_failed_r2_v1
+channel: whatsapp
+category: utility
+locales:
+  en: { body: "Hi {{name}}, your WUMIKA order is still waiting for payment (ref {{payment_id}}). Payments sometimes fail because of the bank or network. You can try again with another UPI app or card." }
+buttons:
+  - { text: "Complete payment", url: "https://wumika.com/{{pay_path}}" }
+vars: [name, payment_id, pay_path]
+samples: { name: "Priya", payment_id: "pay_O6gPwJ3yP9rJ3k", pay_path: "checkouts/cn/hWN4abc123/recover" }

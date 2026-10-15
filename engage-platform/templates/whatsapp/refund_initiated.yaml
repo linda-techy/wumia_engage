@@ -1,0 +1,7 @@
+key: refund_initiated_v1
+channel: whatsapp
+category: utility
+locales:
+  en:      { body: "Your refund of {{amount}} for WUMIKA order {{order_no}} has been started. It will reach your account in {{days}}." }
+vars: [amount, order_no, days]
+samples: { amount: "₹12,499", order_no: "#1042", days: "5-7 working days" }
