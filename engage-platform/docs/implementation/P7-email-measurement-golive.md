@@ -6,6 +6,8 @@
 
 Marketing email takes the free second and third touches in cascades. Every journey reports incremental revenue against its holdout. The system has survived a 10× load test, a security review and an erasure drill, and the go-live checklist is signed.
 
+**Decision (owner, 2026-10-15):** the platform concentrates on WhatsApp, SMS and push. Marketing email is sent with **Shopify Email** (its abandoned-checkout automation and newsletters), not through Engage. The SES channel built in T01/T02 stays off (no `EMAIL_FROM`), so journeys skip their email steps (`channel_off`) and nobody gets a duplicate email from us. The warm-up and the engaged-audience guard are not built; build them only if email comes back into Engage.
+
 ## Tasks
 
 | ID | Task | Owner | Est. | Depends on |
