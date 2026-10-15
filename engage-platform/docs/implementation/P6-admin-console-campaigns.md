@@ -394,7 +394,7 @@ CREATE TABLE exports (
   - This is the one push template whose copy is written per campaign rather than reviewed in code. The review is the campaign approval step.
 - **Brand logo:**
   - `PUSH_ICON_URL` (square, 192 px) and `PUSH_BADGE_URL` (Android status bar, white on transparent, 96 px) go with every push; https only.
-  - Without them Chrome shows its own icon.
+  - Without them, the icons ingest-api ships at `PUBLIC_BASE_URL/brand/` are used: `push-icon-192.png` (the logo's white W on its red, #CC0101) and `push-badge-96.png` (white W on transparent). Both were cut from the storefront logo, because the wide wordmark would be cropped to its middle letters in Android's round icon.
 - **Where it shows:** Chrome and Edge on Android and Windows. iPhone, Mac Safari and Firefox show the text and the icon only.
 - **No live countdown:** web push has none. An offer's end time goes in the text instead.
 - **Tests:** `MediaTest` (upload rules, roles, dedupe), `MediaServeTest`, `ShopifyLifecycleTest` (photo kept, non-https dropped), `PriceDropTest` (photo in the push), UI spec.

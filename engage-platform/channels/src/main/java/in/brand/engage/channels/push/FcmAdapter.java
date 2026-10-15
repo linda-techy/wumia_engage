@@ -52,16 +52,23 @@ public class FcmAdapter implements ChannelAdapter {
         this(fcm, null, null);
     }
 
+    public FcmAdapter(FcmClient fcm, String icon, String badge) {
+        this(fcm, icon, badge, null);
+    }
+
     /**
      * @param icon  the brand logo beside every notification (PUSH_ICON_URL: https, square, 192 px)
      * @param badge Android's status-bar icon (PUSH_BADGE_URL: https, white on transparent, 96 px)
+     * @param base  PUBLIC_BASE_URL: without the two above, the icons ingest-api ships at /brand
      */
     @jakarta.inject.Inject
     public FcmAdapter(FcmClient fcm, @io.micronaut.context.annotation.Value("${PUSH_ICON_URL:}") String icon,
-                      @io.micronaut.context.annotation.Value("${PUSH_BADGE_URL:}") String badge) {
+                      @io.micronaut.context.annotation.Value("${PUSH_BADGE_URL:}") String badge,
+                      @io.micronaut.context.annotation.Value("${PUBLIC_BASE_URL:}") String base) {
         this.fcm = fcm;
-        this.icon = https(icon);
-        this.badge = https(badge);
+        var shipped = https(base) == null ? null : https(base).replaceAll("/+$", "") + "/brand/";
+        this.icon = https(icon) != null ? https(icon) : shipped == null ? null : shipped + "push-icon-192.png";
+        this.badge = https(badge) != null ? https(badge) : shipped == null ? null : shipped + "push-badge-96.png";
         if (this.icon == null) LOG.warn("PUSH_ICON_URL is not set: notifications show the browser's icon, not the brand logo");
     }
 
