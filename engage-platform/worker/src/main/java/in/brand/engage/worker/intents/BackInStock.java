@@ -11,8 +11,6 @@ import in.brand.engage.worker.EventConsumer;
 import io.micronaut.context.annotation.Bean;
 import io.micronaut.context.annotation.Factory;
 import jakarta.inject.Singleton;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Duration;
@@ -108,8 +106,7 @@ public class BackInStock implements EventConsumer {
                 var vars = new HashMap<String, String>();
                 vars.put("product", productTitle != null ? productTitle : fromHandle(rowHandle));
                 vars.put("url", storefront.product(rowHandle, variantId));
-                vars.put("product_path", "products/" + URLEncoder.encode(rowHandle, StandardCharsets.UTF_8)
-                        + "?variant=" + URLEncoder.encode(variantId, StandardCharsets.UTF_8));
+                vars.put("product_path", Storefront.productPath(rowHandle, variantId));
                 var size = size(rs.getString("size_label"), variantTitle);
                 if (size != null) vars.put("size", size);
                 else vars.put(CascadeDefinition.TEMPLATE_VAR, NO_SIZE_TEMPLATE);

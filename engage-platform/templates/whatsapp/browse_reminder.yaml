@@ -1,0 +1,13 @@
+# browse_abandon (owner's decision 2026-10-15): the day after the push, only
+# for strong interest (the same piece viewed at least twice in the session)
+# and only if the push was not clicked. Marketing; one a day per person.
+key: browse_reminder_v1
+channel: whatsapp
+category: marketing
+cooldown: P1D
+locales:
+  en: { body: "Still thinking about {{product}}? It is still available at WUMIKA, whenever you are ready." }
+buttons:
+  - { text: "View the piece", url: "https://wumika.com/{{product_path}}" }
+vars: [product, product_path]
+samples: { product: "Kundan Jhumka Earrings", product_path: "products/kundan-jhumka-earrings?variant=44012345678901" }

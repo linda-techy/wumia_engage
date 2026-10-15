@@ -31,6 +31,8 @@ class BrowseAbandonTest {
     @Inject TestClock clock;
     @Inject Db db;
     @Inject WorkerTestBeans.FakePush push;
+    @Inject WorkerTestBeans.FakeWhatsApp wa;
+    static final String TEMPLATE = "browse_reminder_v1";
 
     String clientId;
     String anon;
@@ -53,10 +55,18 @@ class BrowseAbandonTest {
             Sql.update(c, """
                     INSERT INTO config_versions (key, selector, value, changed_by, reason)
                     VALUES ('holdout.journey_pct', '*', '0', ?, 'test')""", operator(c));
+            Sql.update(c, """
+                    INSERT INTO config_versions (key, selector, value, changed_by, reason)
+                    VALUES ('budget.whatsapp.marketing.daily_paise', '*', '0', ?, 'test')""", operator(c));
+            Sql.update(c, """
+                    INSERT INTO wa_templates (key, language, provider_name, requested_category, approved_category, status, quality)
+                    VALUES (?, 'en', ?, 'marketing', 'marketing', 'APPROVED', 'GREEN')
+                    ON CONFLICT (provider_name, language) DO UPDATE SET status = 'APPROVED', quality = 'GREEN'""", TEMPLATE, TEMPLATE);
             return null;
         });
         config.invalidate();
         push.all.clear();
+        wa.reset();
         clientId = "cid-" + UUID.randomUUID();
         anon = UUID.randomUUID().toString();
     }
@@ -99,6 +109,44 @@ class BrowseAbandonTest {
         clock.setIst("2026-09-28T16:46:00");
         orchestrator.tick(100);
         assertEquals(1, push.all.size());
+    }
+
+    @Test void the_same_piece_viewed_twice_earns_a_whatsapp_the_next_day() {
+        var id = linkedSubscriber();
+        whatsapp(id);
+        var start = clock.instant().minus(Duration.ofHours(5));
+        view("8801", "Linen Kurta", "linen-kurta", start);
+        view("8802", "Silk Dupatta", "silk-dupatta", start.plus(Duration.ofMinutes(5)));
+        view("8801", "Linen Kurta", "linen-kurta", start.plus(Duration.ofMinutes(9)));
+        dispatcher.dispatchOnce();
+        assertEquals(1, push.all.size());
+        assertTrue(wa.all.isEmpty());
+
+        // 20 h after a noon push is 08:00: quiet hours hold marketing until 09:00 IST.
+        var pushedAt = clock.instant();
+        tickAt(pushedAt.plus(Duration.ofHours(20)).plus(Duration.ofMinutes(1)));
+        assertTrue(wa.all.isEmpty(), "not before 09:00");
+        tickAt(pushedAt.plus(Duration.ofHours(21)).plus(Duration.ofMinutes(1)));
+        assertFalse(wa.all.isEmpty(), attemptsOf(id));
+        var call = wa.all.getLast().whatsapp();
+        assertEquals("browse_reminder_v1", call.name());
+        assertEquals(java.util.List.of("Linen Kurta"), call.bodyParams());
+        assertEquals(java.util.List.of("products/linen-kurta?variant=v8801"), call.urlButtonSuffixes());
+    }
+
+    @Test void three_different_pieces_once_each_is_not_worth_a_whatsapp() {
+        var id = linkedSubscriber();
+        whatsapp(id);
+        var start = clock.instant().minus(Duration.ofHours(5));
+        view("8801", "Linen Kurta", "linen-kurta", start);
+        view("8802", "Silk Dupatta", "silk-dupatta", start.plus(Duration.ofMinutes(5)));
+        view("8803", "Cotton Saree", "cotton-saree", start.plus(Duration.ofMinutes(9)));
+        dispatcher.dispatchOnce();
+        assertEquals(1, push.all.size(), "the push still goes");
+
+        tickAt(clock.instant().plus(Duration.ofHours(20)).plus(Duration.ofMinutes(1)));
+        assertTrue(wa.all.isEmpty());
+        assertEquals("exhausted|skipped:HAS_STRONG", run(id));
     }
 
     @Test void two_views_are_not_enough() {
@@ -224,5 +272,36 @@ class BrowseAbandonTest {
             rs.next();
             return rs.getObject(1, UUID.class);
         }
+    }
+
+    /** A phone and a WhatsApp marketing opt-in. */
+    private void whatsapp(UUID id) {
+        var phone = "919" + String.format("%09d", java.util.concurrent.ThreadLocalRandom.current().nextLong(1_000_000_000L));
+        db.inTx(c -> {
+            Sql.update(c, "INSERT INTO identity_keys (identity_id, kind, value, verified) VALUES (?, 'phone', ?, true)", id, phone);
+            return Sql.update(c, """
+                    INSERT INTO consents (identity_id, channel, purpose, state, source, occurred_at)
+                    VALUES (?, 'whatsapp', 'marketing', 'granted', 'test', now() - interval '60 days')""", id);
+        });
+    }
+
+    private void tickAt(Instant t) {
+        clock.setIst(t.atZone(java.time.ZoneId.of("Asia/Kolkata")).toLocalDateTime().toString());
+        orchestrator.tick(200);
+    }
+
+    private String attemptsOf(UUID identity) {
+        return db.inTx(c -> {
+            var out = new StringBuilder();
+            try (var ps = Sql.prepare(c, """
+                    SELECT r.id || ' ' || r.status || ' vars=' || r.vars::text || ' next=' || r.next_step_at || ' | '
+                           || COALESCE(a.step_index || ':' || a.channel || ':' || a.result || ':' || COALESCE(a.reason, ''), '-')
+                      FROM cascade_runs r LEFT JOIN cascade_attempts a ON a.run_id = r.id
+                     WHERE r.intent_key = 'browse_abandon' AND r.identity_id = ? ORDER BY r.id, a.id""", identity);
+                 var rs = ps.executeQuery()) {
+                while (rs.next()) out.append(rs.getString(1)).append("\n");
+            }
+            return out.toString();
+        });
     }
 }

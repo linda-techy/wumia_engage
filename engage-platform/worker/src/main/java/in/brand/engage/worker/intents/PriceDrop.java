@@ -30,6 +30,12 @@ import java.util.UUID;
  *
  * <p>The subject is {@code <variant>:<identity>}; the template's one-day
  * cooldown keeps a store-wide markdown from sending one push per item.
+ *
+ * <p>WhatsApp too (owner's decision 2026-10-15, as Indian D2C brands do):
+ * {@code price_drop_v1} 2 h after the push for people who did not click it,
+ * or at once for those the push cannot reach. Marketing opt-in, not
+ * INCAPABLE; the template's one-day cooldown and the WhatsApp marketing cap
+ * keep a markdown across many items to one message a day.
  */
 @Singleton
 public class PriceDrop implements EventConsumer {
@@ -48,8 +54,11 @@ public class PriceDrop implements EventConsumer {
         @Bean
         @Singleton
         CascadeDefinition priceDrop() {
-            return new CascadeDefinition(INTENT, Priority.MID_INTENT,
-                    List.of(CascadeDefinition.Step.push("push_price_drop_v1", TTL)));
+            return new CascadeDefinition(INTENT, Priority.MID_INTENT, List.of(
+                    CascadeDefinition.Step.push("push_price_drop_v1", TTL).waitAfter(Duration.ofHours(2)),
+                    CascadeDefinition.Step.whatsapp("price_drop_v1")
+                            .require(in.brand.engage.orchestrator.Guard.WA_MARKETING,
+                                     in.brand.engage.orchestrator.Guard.WA_CAPABLE_OR_UNKNOWN)));
         }
     }
 
@@ -71,7 +80,8 @@ public class PriceDrop implements EventConsumer {
                 "product", title != null && !title.isBlank() ? title : BackInStock.fromHandle(handle),
                 "new_price", rupees(newPrice),
                 "old_price", rupees(oldPrice),
-                "url", storefront.product(handle, variantId));
+                "url", storefront.product(handle, variantId),
+                "product_path", Storefront.productPath(handle, variantId));
 
         var intents = new ArrayList<MessageIntent>();
         try (var ps = Sql.prepare(c, """

@@ -35,6 +35,13 @@ public class Storefront {
                 + "?variant=" + URLEncoder.encode(variantId, StandardCharsets.UTF_8);
     }
 
+    /** {@code products/<handle>[?variant=<id>]}: the WhatsApp button suffix after {@code https://wumika.com/}. */
+    static String productPath(String handle, String variantId) {
+        var path = "products/" + URLEncoder.encode(handle, StandardCharsets.UTF_8);
+        return variantId == null || variantId.isBlank() ? path
+                : path + "?variant=" + URLEncoder.encode(variantId, StandardCharsets.UTF_8);
+    }
+
     /** A path on the storefront, e.g. Shopify's checkout recovery path; no leading slash. */
     public String path(String path) {
         return base + "/" + path.replaceAll("^/+", "");
