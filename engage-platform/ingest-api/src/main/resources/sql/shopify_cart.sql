@@ -10,6 +10,7 @@ SELECT COALESCE(NULLIF(p->>'token', ''), p->>'id')                      AS cart_
                                                                          AS total_paise,
        COALESCE(jsonb_agg(jsonb_build_object(
                   'variant_id',  li->>'variant_id',
+                  'product_id',  li->>'product_id',
                   'title',       li->>'title',
                   'size',        li->>'variant_title',
                   'qty',         (li->>'quantity')::int,

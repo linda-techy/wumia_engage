@@ -76,12 +76,14 @@ public class PriceDrop implements EventConsumer {
         if (variantId == null || handle == null || newPrice <= 0 || newPrice >= oldPrice) return List.of();
 
         var title = e.props().get("product_title");
-        var vars = Map.of(
+        var built = new java.util.HashMap<String, String>(Map.of(
                 "product", title != null && !title.isBlank() ? title : BackInStock.fromHandle(handle),
                 "new_price", rupees(newPrice),
                 "old_price", rupees(oldPrice),
                 "url", storefront.product(handle, variantId),
-                "product_path", Storefront.productPath(handle, variantId));
+                "product_path", Storefront.productPath(handle, variantId)));
+        ProductImages.put(built, ProductImages.byHandle(c, handle));
+        var vars = Map.copyOf(built);
 
         var intents = new ArrayList<MessageIntent>();
         try (var ps = Sql.prepare(c, """

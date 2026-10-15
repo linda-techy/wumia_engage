@@ -91,6 +91,8 @@ public class CartRecovery implements EventConsumer {
                        p.attrs->>'first_name' AS first_name,
                        (SELECT l->>'title' FROM jsonb_array_elements(ct.lines) l
                          ORDER BY (l->>'price_paise')::bigint DESC NULLS LAST LIMIT 1) AS product,
+                       (SELECT l->>'product_id' FROM jsonb_array_elements(ct.lines) l
+                         ORDER BY (l->>'price_paise')::bigint DESC NULLS LAST LIMIT 1) AS product_id,
                        EXISTS (SELECT 1 FROM checkouts k
                                 WHERE k.cart_token = ct.cart_token AND k.identity_id IS NOT NULL
                                   AND k.completed_at IS NULL AND k.order_id IS NULL
@@ -120,6 +122,7 @@ public class CartRecovery implements EventConsumer {
             // Lead with the most expensive item: the one most worth coming back for.
             vars.put("product", product);
             vars.put("url", cartUrl);
+            ProductImages.put(vars, ProductImages.byProductId(c, rs.getString("product_id")));
             vars.put("name", CheckoutAbandon.firstName(rs.getString("first_name")));
             vars.put("cart_value_paise", Long.toString(total));
             if (total >= snapshot.longValue("journey.cart_recovery.wa_min_cart_paise", "*")) vars.put(CheckoutAbandon.WA_OK, "1");

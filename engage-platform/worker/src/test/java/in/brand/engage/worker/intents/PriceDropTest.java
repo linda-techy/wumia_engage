@@ -249,4 +249,18 @@ class PriceDropTest {
         clock.setIst(t.atZone(java.time.ZoneId.of("Asia/Kolkata")).toLocalDateTime().toString());
         orchestrator.tick(200);
     }
+
+    @Test void the_push_carries_the_product_photo_sized_for_a_phone() {
+        db.inTx(c -> in.brand.engage.persistence.Sql.update(c, """
+                INSERT INTO products (product_id, handle, title, image_url, updated_at)
+                VALUES ('img-8801', 'linen-kurta', 'Linen Kurta', 'https://cdn.shopify.com/s/files/1/kurta.jpg?v=17', now())
+                ON CONFLICT (product_id) DO UPDATE SET image_url = EXCLUDED.image_url, handle = EXCLUDED.handle, updated_at = now()"""));
+        try {
+            cart(subscriber(), variant, null);
+            dropped(variant, 189900, 149900);
+            assertEquals("https://cdn.shopify.com/s/files/1/kurta.jpg?v=17&width=1024", push.all.getFirst().image());
+        } finally {
+            db.inTx(c -> in.brand.engage.persistence.Sql.update(c, "DELETE FROM products WHERE product_id = 'img-8801'"));
+        }
+    }
 }

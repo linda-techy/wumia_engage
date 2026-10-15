@@ -96,6 +96,8 @@ Definitions are JSON (`{all|any: [...]}`, `{not: {...}}`, `{field, op, value}`),
 | Method | Path | Role | Notes |
 |---|---|---|---|
 | GET | `/campaigns` | `VIEWER` | Latest 200 |
+| POST | `/media` | `CAMPAIGN_EDIT` | Push poster: body = the JPEG or PNG file (≤ 1 MB), `X-File-Name` optional; returns `{id, url, width, height, wide}` (V38) |
+| GET | `/media` | `CAMPAIGN_EDIT` | The latest 30 posters |
 | GET | `/campaigns/templates?channel=` | `VIEWER` | The picker: push = active marketing; WhatsApp = APPROVED marketing, quality not RED. Enforced on write too |
 | GET | `/campaigns/{id}` | `VIEWER` | With estimate, recipient counts by state, `approvalRequired` |
 | POST | `/campaigns` | `CAMPAIGN_EDIT` | Creates `DRAFT` |

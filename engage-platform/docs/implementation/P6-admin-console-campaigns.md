@@ -376,6 +376,22 @@ CREATE TABLE exports (
 
 ---
 
+### ☑ Added 2026-10-15 — Pictures in push notifications
+
+- **Campaign posters.**
+  - The composer has a Poster image section for push campaigns: upload (JPEG or PNG, ≤ 1 MB, ≤ 2048 px a side, ≥ 300 px wide), reuse one of the last 30, or paste an https link.
+  - It shows a 2:1 preview and a note when the image is not about 2:1, the shape Chrome crops to.
+  - The poster is the campaign's `image` variable; the API refuses an `image` that is not https.
+  - Uploads are stored in `media` (V38), keyed by the SHA-256 of the bytes, and served publicly by ingest-api at `PUBLIC_BASE_URL/media/<sha256>.jpg|png` with a one-year immutable cache and `nosniff`.
+  - The type and size are read from the file, not the browser's word.
+- **Journey pushes carry the product photo.**
+  - products/update keeps the main photo in `products.image_url` (https only).
+  - Cart lines now record `product_id`.
+  - Abandoned cart, abandoned checkout, price drop, browse and back in stock put the photo in `image`, asking Shopify's CDN for 1024 px wide.
+- **Where it shows:** Chrome and Edge on Android and Windows. iPhone, Mac Safari and Firefox show the text and the icon only.
+- **No live countdown:** web push has none. An offer's end time goes in the text instead.
+- **Tests:** `MediaTest` (upload rules, roles, dedupe), `MediaServeTest`, `ShopifyLifecycleTest` (photo kept, non-https dropped), `PriceDropTest` (photo in the push), UI spec.
+
 ## Exit gate
 
 - [ ] All phase-6 acceptance criteria ticked

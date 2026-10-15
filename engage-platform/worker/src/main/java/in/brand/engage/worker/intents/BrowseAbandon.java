@@ -107,6 +107,7 @@ public class BrowseAbandon implements EventConsumer {
                 ? storefront.product(session.handle(), session.variantId())
                 : storefront.product(session.handle()));
         vars.put("product_path", Storefront.productPath(session.handle(), session.variantId()));
+        ProductImages.put(vars, ProductImages.byHandle(c, session.handle()));
         if (session.topViews() >= MIN_REPEAT_VIEWS) vars.put(STRONG, "1");
         return List.of(new MessageIntent(identityId, INTENT, subject, vars, e.occurredAt().plus(IDLE).plus(DELAY)));
     }

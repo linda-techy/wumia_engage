@@ -223,4 +223,18 @@ class ShopifyLifecycleTest {
             return rs.next() ? rs.getString(1) : null;
         }
     }
+
+    @Test
+    void a_product_update_keeps_its_main_photo_for_push_notifications() throws Exception {
+        send("products/update", """
+            {"id": 8802, "title": "Silk Dupatta", "handle": "silk-dupatta", "updated_at": "2026-10-15T10:00:00Z",
+             "image": {"src": "https://cdn.shopify.com/s/files/1/dupatta.jpg?v=3"},
+             "variants": [{"id": 44581230002, "title": "Free", "price": "999.00"}]}""");
+        assertEquals("https://cdn.shopify.com/s/files/1/dupatta.jpg?v=3", q("SELECT image_url FROM products WHERE product_id = '8802'"));
+
+        send("products/update", """
+            {"id": 8802, "title": "Silk Dupatta", "handle": "silk-dupatta", "updated_at": "2026-10-15T11:00:00Z",
+             "image": {"src": "javascript:alert(1)"}, "variants": []}""");
+        assertNull(q("SELECT image_url FROM products WHERE product_id = '8802'"), "only an https photo is kept");
+    }
 }

@@ -107,7 +107,10 @@ public class CheckoutAbandon implements EventConsumer {
                        p.attrs->>'first_name' AS first_name,
                        (SELECT l->>'title' FROM carts ct, jsonb_array_elements(ct.lines) l
                          WHERE ct.cart_token = k.cart_token
-                         ORDER BY (l->>'price_paise')::bigint DESC NULLS LAST LIMIT 1) AS product
+                         ORDER BY (l->>'price_paise')::bigint DESC NULLS LAST LIMIT 1) AS product,
+                       (SELECT l->>'product_id' FROM carts ct, jsonb_array_elements(ct.lines) l
+                         WHERE ct.cart_token = k.cart_token
+                         ORDER BY (l->>'price_paise')::bigint DESC NULLS LAST LIMIT 1) AS product_id
                   FROM checkouts k LEFT JOIN profiles p ON p.identity_id = k.identity_id
                  WHERE k.token = ?""", token);
              var rs = ps.executeQuery()) {
@@ -135,6 +138,7 @@ public class CheckoutAbandon implements EventConsumer {
             vars.put("product", product(rs.getString("product")));
             vars.put("checkout_path", path);
             vars.put("url", storefront.path(path));
+            ProductImages.put(vars, ProductImages.byProductId(c, rs.getString("product_id")));
             vars.put("cart_value_paise", Long.toString(total));
             if (total >= snapshot.longValue("journey.checkout_abandon.wa_min_cart_paise", "*")) vars.put(WA_OK, "1");
             if ("unique".equals(snapshot.text("journey.abandon.discount_mode", "*").strip())) {

@@ -100,10 +100,13 @@ public class BackInStock implements EventConsumer {
                  WHERE w.identity_id = due.identity_id AND w.variant_id = due.variant_id
                 RETURNING w.identity_id, w.size_label, w.product_handle""", variantId, limit);
              var rs = ps.executeQuery()) {
+            var images = new HashMap<String, java.util.Optional<String>>();
             while (rs.next()) {
                 var identityId = rs.getObject("identity_id", UUID.class);
                 var rowHandle = handle != null ? handle : rs.getString("product_handle");
                 var vars = new HashMap<String, String>();
+                if (!images.containsKey(rowHandle)) images.put(rowHandle, java.util.Optional.ofNullable(ProductImages.byHandle(c, rowHandle)));
+                images.get(rowHandle).ifPresent(u -> vars.put("image", u));
                 vars.put("product", productTitle != null ? productTitle : fromHandle(rowHandle));
                 vars.put("url", storefront.product(rowHandle, variantId));
                 vars.put("product_path", Storefront.productPath(rowHandle, variantId));
