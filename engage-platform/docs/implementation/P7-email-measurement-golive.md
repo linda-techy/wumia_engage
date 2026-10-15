@@ -133,7 +133,18 @@ ON CONFLICT (key) DO NOTHING;
 
 ---
 
-### ☐ P7-T04 — Load test
+### ◐ P7-T04 — Load test
+
+> **Scripts built and proven locally 2026-10-15; the staging run waits for staging (P7-T07).**
+>
+> - **`load/k6/webhooks.js`** (k6 v2.3):
+>   - It sends the fixture shapes, made distinct and signed per request, with this mix: pixel 45%, carts 15%, checkouts 15%, Meta statuses 10%, orders 7%, Razorpay 4%, storefront prompt events 4%.
+>   - It runs in `ramping-arrival-rate` mode. Full profile: 0→400/s over 5 min, 15 min hold, 2 min down. Smoke: 20/s for a minute.
+>   - The thresholds encode the pass bar.
+>   - A safety gate in `setup()` refuses production-looking hosts and unconfirmed targets.
+>   - `inventory_levels/update` and SES are left out: they call Shopify and AWS.
+> - **`load/k6/after.sh`:** the inbox drain within 5 min, Hikari timeouts, and the cascade ticker lag through SQL. Anything it cannot read is a FAIL.
+> - **Results:** the local check, and a table for the staging runs, are in [docs/qa/p7-load.md](../qa/p7-load.md).
 
 `load/k6/` with scenarios replaying real webhook shapes (fixtures from P1–P4, re-signed per request): Shopify checkouts/orders/carts, Razorpay, Meta statuses, pixel events. Ramp to 400 events/s for 15 minutes on staging with production-sized Postgres.
 
