@@ -168,6 +168,9 @@ The consent timeline is the most useful view on this screen during a complaint: 
 | Method | Path | Role | Notes |
 |---|---|---|---|
 | GET | `/reports/spend` | `VIEWER` | By day/channel/category, `?from=&to=` |
+| GET | `/reports/lift` | `ANALYST` | Every journey against its holdout: lift, 95% range, incremental ₹, cost, ROI, weekly rows. `?days=56` (P7-T03) |
+| POST | `/reports/meta-billing` | `CONFIG_ADMIN` | Meta's WhatsApp bill as `text/csv` `month,category,amount_inr`, one month; audited |
+| GET | `/reports/spend-reconciliation` | `VIEWER` | WhatsApp ledger vs Meta's bill per category, over 1% flagged. `?month=YYYY-MM` |
 | GET | `/reports/deliverability` | `VIEWER` | Funnel per channel |
 | GET | `/reports/blocks` | `VIEWER` | Block reasons over time |
 | GET | `/reports/quality` | `VIEWER` | Meta quality per number and per template |

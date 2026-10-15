@@ -137,3 +137,32 @@ export interface SupportRequest {
   createdAt: string;
   updatedAt: string;
 }
+
+/** GET /api/reports/lift, /api/journeys/{key}/incrementality (P7-T03). Money in paise. */
+export interface JourneyLift {
+  journey: string;
+  firstAssigned: string | null;
+  enoughData: boolean;
+  why: string | null;
+  treated: number;
+  control: number;
+  revenuePerTreatedPaise: number;
+  revenuePerControlPaise: number;
+  liftPct: number | null;
+  liftLowPct: number | null;
+  liftHighPct: number | null;
+  significant: boolean;
+  incrementalPaise: number;
+  incrementalLowPaise: number;
+  incrementalHighPaise: number;
+  messagingCostPaise: number;
+  roi: number | null;
+  weekly: { weekIst: string; treatedRevenuePaise: number; treatedPeople: number; controlRevenuePaise: number; controlPeople: number }[];
+}
+
+/** GET /api/reports/spend-reconciliation?month=YYYY-MM: our WhatsApp ledger against Meta's bill. */
+export interface SpendReconciliation {
+  month: string;
+  billUploaded: boolean;
+  rows: { category: string; ledgerPaise: number; metaPaise: number | null; diffPct: number | null; flagged: boolean }[];
+}

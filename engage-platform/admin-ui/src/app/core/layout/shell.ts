@@ -13,6 +13,7 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   { path: '/dashboard', label: 'Dashboard', role: 'VIEWER' },
+  { path: '/reports', label: 'Reports', role: 'VIEWER' },
   { path: '/campaigns', label: 'Campaigns', role: 'VIEWER' },
   { path: '/segments', label: 'Segments', role: 'VIEWER' },
   { path: '/inspector', label: 'Journey inspector', role: 'ANALYST' },

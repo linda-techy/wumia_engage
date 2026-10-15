@@ -74,7 +74,17 @@ core-domain/src/main/java/in/brand/engage/aws/SnsSignatureVerifier.java
 
 ---
 
-### ☐ P7-T03 — Measurement
+### ◐ P7-T03 — Measurement
+
+> **Built 2026-10-15 (`V35__measurement.sql`); the staging "done when" waits for staging data.**
+>
+> Where the build differs from the text below:
+> - **No `email.daily_cap`.** Email is Shopify Email's job (owner's decision 2026-10-15), so there is no warm-up cap. V35 holds only the two views, an index on `holdouts (experiment, bucket, assigned_at)`, `meta_billing (month, category, amount_paise)` and `spend_reconciliations`.
+> - **Report:** `GET /api/reports/lift?days=56` gives one row per experiment (`global` plus each journey key), and `GET /api/journeys/{key}/incrementality?days=30` gives one journey (404 before it has a holdout). Both are ANALYST. Revenue per person is net of refunds, leaves out cancelled orders, counts only orders after the person entered the experiment and within the window, and counts people who bought nothing as zero. `LiftStats.welch` gives the 95% interval: Welch–Satterthwaite df, with the t quantile from a Cornish–Fisher expansion that is within 0.01 of the tables from df 3. "Incremental" is the per-person difference × treated count, with the same interval. Messaging cost is `sends.cost_paise` for the journey's intent; for `global` it is every non-campaign marketing send. ROI = incremental ÷ cost. `enoughData` needs the experiment to be 28 days old **and** 30 people in each group, and `significant` is never true without it. Each row also carries the weekly breakdown from `holdout_lift_weekly`.
+> - **Meta bill:** `POST /api/reports/meta-billing` (CONFIG_ADMIN, audited `meta_billing.upload`, `text/csv`) takes `month,category,amount_inr`, one month per upload; a second upload of the same month replaces it. Errors name the line. `GET /api/reports/spend-reconciliation?month=YYYY-MM` (VIEWER) compares the WhatsApp `spend_ledger` with the bill per category and flags anything over 1% off.
+> - **Job:** `SpendReconciliation`, run by `WorkerJobs.reconcileSpend` at **06:00 IST on the 1st to the 15th**, not just the 1st: Meta's invoice lands a few days into the month. It checks last month once the bill is uploaded, records each category in `spend_reconciliations`, and logs an ERROR for more than 1% off. Until the bill is uploaded it logs a WARN each morning. FCM is free and is not reconciled.
+> - **Console:** a Reports page (nav "Reports"). It shows journey lift in staff words with the 95% range, "not enough data yet: …" and "could still be chance", plus last month's ledger against the bill with the CSV upload for config admins.
+> - **Tests:** `LiftStatsTest` (table quantiles, a worked example, a seeded 20% lift inside its interval, no lift not significant), `ReportsTest` (lift, cost and ROI on seeded buckets; the 4-week and 30-person rules; roles; reconciliation flagging; a bad CSV), `SpendReconciliationTest`.
 
 **Migration `V<next>__measurement_and_privacy.sql`** (lift views part)
 ```sql

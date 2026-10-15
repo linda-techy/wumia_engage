@@ -29,6 +29,7 @@ export const routes: Routes = [
       { path: 'customers/:id', loadComponent: () => import('./features/customers/customer-view') },
       { path: 'payments', loadComponent: () => import('./features/payments/payment-failures') },
       { path: 'support', loadComponent: () => import('./features/support/support-requests') },
+      { path: 'reports', loadComponent: () => import('./features/reports/reports') },
       { path: 'consent-copy', loadComponent: () => import('./features/consent/consent-copy') },
     ],
   },

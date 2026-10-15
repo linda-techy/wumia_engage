@@ -27,10 +27,12 @@ public class WorkerJobs {
     private final Db db;
     private final java.util.Optional<WhatsAppTemplates> whatsappTemplates;
     private final in.brand.engage.worker.intents.LapsedCustomers lapsed;
+    private final SpendReconciliation reconciliation;
 
     public WorkerJobs(EventDispatcher events, DefaultOrchestrator orchestrator, CampaignExecutor campaigns,
                       CapabilityService capability, Db db, java.util.Optional<WhatsAppTemplates> whatsappTemplates,
-                      in.brand.engage.worker.intents.LapsedCustomers lapsed) {
+                      in.brand.engage.worker.intents.LapsedCustomers lapsed, SpendReconciliation reconciliation) {
+        this.reconciliation = reconciliation;
         this.whatsappTemplates = whatsappTemplates;
         this.lapsed = lapsed;
         this.events = events;
@@ -98,6 +100,20 @@ public class WorkerJobs {
             if (n > 0) LOG.info("support requests: cleared the reply text of {} resolved requests", n);
         } catch (RuntimeException e) {
             LOG.error("clearing resolved support request text failed", e);
+        }
+    }
+
+    /**
+     * 06:00 IST on the 1st to the 15th: last month's WhatsApp ledger against
+     * Meta's bill (P7-T03), once the bill is uploaded; over 1% off is an ERROR.
+     */
+    @Scheduled(cron = "0 0 6 1-15 * *", zoneId = "Asia/Kolkata")
+    void reconcileSpend() {
+        try {
+            var month = java.time.YearMonth.now(java.time.ZoneId.of("Asia/Kolkata")).minusMonths(1);
+            if (!reconciliation.checked(month)) reconciliation.run(month);
+        } catch (RuntimeException e) {
+            LOG.error("spend reconciliation failed", e);
         }
     }
 
