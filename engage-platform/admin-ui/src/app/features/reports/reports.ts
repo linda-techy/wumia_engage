@@ -17,6 +17,10 @@ export function journeyLabel(key: string): string {
     back_in_stock: 'Back in stock',
     winback: 'Long time no see',
     post_purchase: 'After purchase (review ask)',
+    payment_failed: 'Payment failed',
+    order_tracking: 'Order updates',
+    delivery_ack: 'Delivery replies',
+    wa_stop_confirm: 'WhatsApp STOP confirmation',
   };
   return names[key] ?? key;
 }

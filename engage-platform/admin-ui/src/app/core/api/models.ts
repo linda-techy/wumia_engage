@@ -183,3 +183,84 @@ export interface PrivacyRequest {
   resolvedAt: string | null;
   note: string | null;
 }
+
+/** GET /api/analytics/* (Analytics page). Money in paise; counts are messages or orders. */
+export interface Funnel {
+  key: string;
+  sent: number;
+  delivered: number;
+  read: number;
+  clicked: number;
+  failed: number;
+  blocked: number;
+  costPaise: number;
+  orders: number;
+  revenuePaise: number;
+  clickOrders: number;
+  viewOrders: number;
+}
+
+export interface AnalyticsDay {
+  day: string;
+  channel: string;
+  sent: number;
+  delivered: number;
+  clicked: number;
+  orders: number;
+  revenuePaise: number;
+}
+
+export interface AnalyticsOverview {
+  from: string;
+  to: string;
+  total: Funnel;
+  channels: Funnel[];
+  journeys: Funnel[];
+  daily: AnalyticsDay[];
+  clickDays: number;
+  viewHours: number;
+}
+
+export interface CampaignResultRow {
+  id: string;
+  name: string;
+  channel: string;
+  status: string;
+  startedAt: string | null;
+  recipients: number;
+  funnel: Funnel;
+}
+
+export interface CampaignHoldout {
+  treated: number;
+  control: number;
+  treatedBuyers: number;
+  controlBuyers: number;
+  revenuePerTreatedPaise: number;
+  revenuePerControlPaise: number;
+  liftPct: number | null;
+  liftLowPct: number | null;
+  liftHighPct: number | null;
+  enoughData: boolean;
+}
+
+export interface CampaignReport {
+  id: string;
+  name: string;
+  status: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  recipients: number;
+  total: Funnel;
+  channels: Funnel[];
+  holdout: CampaignHoldout;
+  windowDays: number;
+}
+
+export interface SpendDay { day: string; channel: string; category: string; messages: number; paise: number }
+export interface BlockDay { day: string; channel: string; status: string; reason: string; sends: number }
+export interface WaQuality {
+  numbers: { phoneNumberId: string; quality: string; messagingTier: string | null; event: string; observedAt: string }[];
+  templates: { key: string; language: string; status: string; quality: string; requestedCategory: string;
+    approvedCategory: string | null; syncedAt: string }[];
+}

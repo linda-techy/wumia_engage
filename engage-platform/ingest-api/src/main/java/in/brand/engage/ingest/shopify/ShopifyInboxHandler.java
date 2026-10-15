@@ -264,6 +264,10 @@ public class ShopifyInboxHandler implements InboxHandler {
                         INSERT INTO conversions (identity_id, order_id, value_paise, occurred_at)
                         VALUES (?, ?, ?, ?) ON CONFLICT (order_id) DO NOTHING""",
                         identityId, orderId, total.value(), createdAt);
+                // Which message gets the credit (V41): the latest click, else the latest delivered or read.
+                try (var credit = Sql.prepare(c, "SELECT attribute_conversion(?)", orderId)) {
+                    credit.executeQuery().close();
+                }
                 Sql.update(c, """
                         UPDATE profiles
                            SET attrs = attrs || jsonb_strip_nulls(jsonb_build_object(

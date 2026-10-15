@@ -109,7 +109,7 @@ Definitions are JSON (`{all|any: [...]}`, `{not: {...}}`, `{field, op, value}`),
 | POST | `/campaigns/{id}/pause` | `CAMPAIGN_SEND` | In-flight sends complete |
 | POST | `/campaigns/{id}/resume` | `CAMPAIGN_SEND` | |
 | POST | `/campaigns/{id}/cancel` | `CAMPAIGN_SEND` | Terminal |
-| GET | `/campaigns/{id}/report` | `VIEWER` | Funnel, spend, holdout lift |
+| GET | `/campaigns/{id}/report` | `VIEWER` | Funnel by channel, orders and revenue credited (V41), cost, and messaged against held out over the click window |
 | GET | `/campaigns/{id}/recipients` | `ANALYST` | Paginated, PII masked |
 
 ```http
@@ -172,6 +172,8 @@ The consent timeline is the most useful view on this screen during a complaint: 
 
 | Method | Path | Role | Notes |
 |---|---|---|---|
+| GET | `/analytics/overview` | `VIEWER` | `?from=&to=` (IST days, ≤ 92): funnel by channel and by journey (sent, delivered, read, clicked, failed, blocked, cost, orders, revenue, click/view orders) and a daily series per channel |
+| GET | `/analytics/campaigns` | `VIEWER` | Campaigns started in the range with their funnel |
 | GET | `/reports/spend` | `VIEWER` | By day/channel/category, `?from=&to=` |
 | GET | `/reports/lift` | `ANALYST` | Every journey against its holdout: lift, 95% range, incremental ₹, cost, ROI, weekly rows. `?days=56` (P7-T03) |
 | POST | `/reports/meta-billing` | `CONFIG_ADMIN` | Meta's WhatsApp bill as `text/csv` `month,category,amount_inr`, one month; audited |
