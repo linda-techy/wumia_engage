@@ -422,6 +422,28 @@ The owner's decision: review steps for every campaign, and one login can do them
   - The setting's label is now "Second approver for campaigns and critical settings".
 - **Tests:** `CampaignTest.one_login_reviews_approves_and_starts_its_own_push_campaign`, the four-eyes test with the setting on, and UI rules.
 
+### ☑ Added 2026-10-15 — Analytics
+
+- **Revenue credit (V41).**
+  - Before this, `conversions.last_send_id` was never filled.
+  - `attribute_conversion(order_id)` now runs when an order lands and credits the order last-touch: the latest message clicked within `attribution.click_days` (7), else the latest delivered or read within `attribution.view_hours` (24). The view window is what credits WhatsApp, whose buttons are not tracked.
+  - Order updates, delivery acknowledgements and the STOP confirmation are never credited.
+  - Earlier orders were credited by the migration.
+- **API** (VIEWER, no personal data; dates are IST days, at most 92):
+  - `GET /api/analytics/overview` and `/api/analytics/campaigns`;
+  - `GET /api/campaigns/{id}/report`: funnel by channel, plus messaged against held out over the click window, with Welch's interval;
+  - `GET /api/reports/spend`, `/blocks`, `/quality`.
+  - Revenue is the order total less refunds, cancelled orders left out.
+- **Console:**
+  - An **Analytics** page with 7/30/90-day or custom dates and four tabs:
+    - **Overview:** totals, a day-by-day chart of sent, clicked, orders or revenue in plain SVG, and tables by channel and by journey with rates and return per ₹1.
+    - **Campaigns.**
+    - **Spend and blocks:** policy reasons in plain words.
+    - **WhatsApp quality:** templates, plus number history.
+  - Each started campaign's page has a **Results** section.
+  - Lift against the holdout stays on Reports as the honest measure of what a journey adds.
+- **Tests:** `AnalyticsTest` (credit rules including the order-update exclusion and the window, funnel by channel and journey, campaign report and holdout, range checks), `ShopifyLifecycleTest` (a real order after a clicked push is credited to it), UI model specs.
+
 ## Exit gate
 
 - [ ] All phase-6 acceptance criteria ticked

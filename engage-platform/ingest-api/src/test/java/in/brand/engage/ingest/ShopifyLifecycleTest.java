@@ -237,4 +237,24 @@ class ShopifyLifecycleTest {
              "image": {"src": "javascript:alert(1)"}, "variants": []}""");
         assertNull(q("SELECT image_url FROM products WHERE product_id = '8802'"), "only an https photo is kept");
     }
+
+    @Test
+    void an_order_after_a_clicked_push_is_credited_to_that_push() throws Exception {
+        String sendId;
+        try (Connection c = dataSource.getConnection(); var st = c.createStatement()) {
+            var id = UUID.randomUUID();
+            st.execute("INSERT INTO identities (id) VALUES ('" + id + "')");
+            st.execute("INSERT INTO identity_keys (identity_id, kind, value, verified) VALUES ('" + id + "', 'shopify_customer', '7788001122', true)");
+            var rs = st.executeQuery("""
+                INSERT INTO sends (identity_id, channel, category, template_key, intent_key, idempotency_key, status,
+                                   created_at, sent_at, delivered_at, clicked_at)
+                VALUES ('%s', 'push', 'marketing', 't', 'cart_recovery', 'attr-1', 'clicked',
+                        '2026-09-19T13:00:00+05:30', '2026-09-19T13:00:00+05:30', '2026-09-19T13:00:05+05:30',
+                        '2026-09-19T14:10:00+05:30') RETURNING id""".formatted(id));
+            rs.next();
+            sendId = rs.getString(1);
+        }
+        send("orders/create", fixture("shopify_order_create.json"));      // placed 15:24 IST, 74 minutes after the click
+        assertEquals(sendId + "|click", q("SELECT last_send_id || '|' || attribution FROM conversions WHERE order_id = '" + ORDER + "'"));
+    }
 }

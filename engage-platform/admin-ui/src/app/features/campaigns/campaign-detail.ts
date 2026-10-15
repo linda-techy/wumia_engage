@@ -6,6 +6,8 @@ import { Api } from '../../shared/api';
 import { InrPipe, IstPipe, problemDetail } from '../../shared/format';
 import { ErrorState, LoadingState } from '../../shared/states';
 import { CUSTOM_PUSH_TEMPLATE, PushPreview } from './push-preview';
+import { CampaignReport } from '../../core/api/models';
+import { rate } from '../analytics/analytics-model';
 import { Campaign, canApprove, canArm, canCancel, canEdit, canEstimate, canPause, canResume, Me, progress, Verdict } from './campaign-rules';
 
 const LIVE = ['SCHEDULED', 'RUNNING'];
@@ -112,6 +114,43 @@ const LIVE = ['SCHEDULED', 'RUNNING'];
         </section>
       }
 
+      @if (c.startedAt && report.hasValue()) {
+        @let r = report.value();
+        <section class="mb-6" aria-labelledby="results-h">
+          <h2 id="results-h" class="mb-2 font-semibold">Results</h2>
+          <div class="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            <div class="card"><p class="label">Sent</p><p class="stat">{{ r.total.sent }}</p></div>
+            <div class="card"><p class="label">Delivered</p><p class="stat">{{ rate(r.total.delivered, r.total.sent) }}</p></div>
+            <div class="card"><p class="label">Clicked</p><p class="stat">{{ rate(r.total.clicked, r.total.delivered) }}</p><p class="text-xs text-slate-500">{{ r.total.clicked }}</p></div>
+            <div class="card"><p class="label">Orders</p><p class="stat">{{ r.total.orders }}</p></div>
+            <div class="card"><p class="label">Revenue</p><p class="stat">{{ r.total.revenuePaise | inr }}</p></div>
+            <div class="card"><p class="label">Cost</p><p class="stat">{{ r.total.costPaise | inr }}</p></div>
+          </div>
+          @if (r.channels.length > 1) {
+            <table class="table mt-3">
+              <thead><tr><th>Channel</th><th class="num">Sent</th><th class="num">Delivered</th><th class="num">Read</th><th class="num">Clicked</th><th class="num">Orders</th><th class="num">Revenue</th></tr></thead>
+              <tbody>@for (f of r.channels; track f.key) {
+                <tr><td>{{ f.key }}</td><td class="num">{{ f.sent }}</td><td class="num">{{ rate(f.delivered, f.sent) }}</td>
+                  <td class="num">{{ f.read ? rate(f.read, f.delivered) : '—' }}</td><td class="num">{{ rate(f.clicked, f.delivered) }}</td>
+                  <td class="num">{{ f.orders }}</td><td class="num">{{ f.revenuePaise | inr }}</td></tr>
+              }</tbody>
+            </table>
+          }
+          @if (r.holdout.control > 0) {
+            <p class="mt-3 text-sm">
+              Held back: {{ r.holdout.control }} people. In the {{ r.windowDays }} days after the start, messaged customers spent
+              {{ r.holdout.revenuePerTreatedPaise | inr }} each against {{ r.holdout.revenuePerControlPaise | inr }} for those held back
+              @if (r.holdout.enoughData && r.holdout.liftPct !== null) {
+                ({{ r.holdout.liftPct > 0 ? '+' : '' }}{{ r.holdout.liftPct.toFixed(1) }}%).
+              } @else {
+                (too few people yet to tell; 30 in each group are needed).
+              }
+            </p>
+          }
+          <p class="mt-1 text-xs text-slate-500">Orders count when the customer clicked within {{ r.windowDays }} days, or got or read the message shortly before.</p>
+        </section>
+      }
+
       @if (prog().total > 0) {
         <section class="mb-6">
           <h2 class="mb-2 font-semibold">Progress{{ live() ? ' (live)' : '' }}</h2>
@@ -128,6 +167,10 @@ const LIVE = ['SCHEDULED', 'RUNNING'];
 })
 export default class CampaignDetailPage {
   readonly custom = CUSTOM_PUSH_TEMPLATE;
+  /** Results once it has started (GET /api/campaigns/{id}/report). */
+  readonly report = httpResource<CampaignReport>(() =>
+    this.campaign.value()?.startedAt ? `/api/campaigns/${encodeURIComponent(this.id())}/report` : undefined);
+  rate = rate;
   /** The review checklist; Approve stays off until it is ticked. */
   readonly reviewed = signal(false);
 
@@ -177,7 +220,10 @@ export default class CampaignDetailPage {
     // Live progress every 5 s while it runs; the clock ticks for the 30-minute dry-run rule.
     const timer = setInterval(() => {
       this.now.set(Date.now());
-      if (this.live()) this.campaign.reload();
+      if (this.live()) {
+        this.campaign.reload();
+        this.report.reload();
+      }
     }, 5000);
     inject(DestroyRef).onDestroy(() => clearInterval(timer));
   }

@@ -31,6 +31,7 @@ export const routes: Routes = [
       { path: 'support', loadComponent: () => import('./features/support/support-requests') },
       { path: 'privacy', loadComponent: () => import('./features/privacy/privacy-requests') },
       { path: 'reports', loadComponent: () => import('./features/reports/reports') },
+      { path: 'analytics', loadComponent: () => import('./features/analytics/analytics') },
       { path: 'consent-copy', loadComponent: () => import('./features/consent/consent-copy') },
     ],
   },
