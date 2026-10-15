@@ -5,6 +5,7 @@ import { TokenService } from '../../core/auth/token.service';
 import { Api } from '../../shared/api';
 import { InrPipe, IstPipe, problemDetail } from '../../shared/format';
 import { ErrorState, LoadingState } from '../../shared/states';
+import { CUSTOM_PUSH_TEMPLATE, PushPreview } from './push-preview';
 import { Campaign, canApprove, canArm, canCancel, canEdit, canEstimate, canPause, canResume, Me, progress, Verdict } from './campaign-rules';
 
 const LIVE = ['SCHEDULED', 'RUNNING'];
@@ -16,7 +17,7 @@ const LIVE = ['SCHEDULED', 'RUNNING'];
  */
 @Component({
   selector: 'app-campaign-detail',
-  imports: [RouterLink, IstPipe, InrPipe, LoadingState, ErrorState],
+  imports: [RouterLink, IstPipe, InrPipe, LoadingState, ErrorState, PushPreview],
   template: `
     <a routerLink="/campaigns" class="text-sm text-slate-600 underline">← Campaigns</a>
     @if (campaign.isLoading() && !campaign.hasValue()) {
@@ -45,7 +46,7 @@ const LIVE = ['SCHEDULED', 'RUNNING'];
           <a class="btn" [routerLink]="['/campaigns', c.id, 'edit']">Edit</a>
         }
         <button type="button" class="btn" [disabled]="busy() || !v().estimate.allowed" [title]="why(v().estimate)" (click)="act('estimate')">Run dry run</button>
-        <button type="button" class="btn" [disabled]="busy() || !v().approve.allowed" [title]="why(v().approve)" (click)="act('approve')">Approve</button>
+        <button type="button" class="btn" [disabled]="busy() || !v().approve.allowed || !reviewed()" [title]="reviewed() ? why(v().approve) : 'Tick the review checklist first'" (click)="act('approve')">Approve</button>
         <button type="button" class="btn-primary" [disabled]="busy() || !v().arm.allowed" [title]="why(v().arm)" (click)="act('start')">Arm and start</button>
         <button type="button" class="btn" [disabled]="busy() || !v().pause.allowed" [title]="why(v().pause)" (click)="act('pause')">Pause</button>
         <button type="button" class="btn" [disabled]="busy() || !v().resume.allowed" [title]="why(v().resume)" (click)="act('resume')">Resume</button>
@@ -53,6 +54,34 @@ const LIVE = ['SCHEDULED', 'RUNNING'];
       </section>
       @if (!v().arm.allowed && ['READY', 'PENDING_APPROVAL', 'DRAFT'].includes(c.status)) {
         <p class="-mt-4 mb-6 text-xs text-slate-500">Arm: {{ why(v().arm) }}.@if (!v().approve.allowed && c.status === 'PENDING_APPROVAL') { Approve: {{ why(v().approve) }}. }</p>
+      }
+
+      @if (['PENDING_APPROVAL', 'READY', 'DRAFT'].includes(c.status)) {
+        <section class="card mb-6" aria-labelledby="review-h">
+          <h2 id="review-h" class="mb-1 font-semibold">Review: what goes out</h2>
+          <p class="mb-4 text-xs text-slate-500">Check this before approving. Approving re-runs the dry run, so it is given on today's numbers.</p>
+          <div class="flex flex-wrap gap-6">
+            @if (c.channel === 'push') {
+              <app-push-preview [title]="c.templateKey === custom ? (c.vars['title'] ?? '') : 'Title from ' + c.templateKey"
+                                [body]="c.templateKey === custom ? (c.vars['body'] ?? '') : 'Text from the template, with the variables below'"
+                                [image]="c.vars['image'] ?? null" [url]="c.vars['url'] ?? null" />
+            }
+            <dl class="min-w-64 flex-1 space-y-2 text-sm">
+              <div><dt class="label">Opens</dt><dd class="break-all">
+                @if (c.vars['url']) { <a [href]="c.vars['url']" target="_blank" rel="noopener" class="underline">{{ c.vars['url'] }}</a> } @else { — }</dd></div>
+              <div><dt class="label">Template</dt><dd class="font-mono text-xs">{{ c.templateKey }}</dd></div>
+              @for (r of reviewVars(c); track r[0]) { <div><dt class="label">{{ r[0] }}</dt><dd>{{ r[1] }}</dd></div> }
+              <div><dt class="label">Audience</dt><dd>{{ c.estimate ? c.estimate.willReceive + ' of ' + c.estimate.audience + ' in ' + (c.segmentName ?? 'the segment') : 'run the dry run' }}</dd></div>
+              <div><dt class="label">Cost</dt><dd>{{ c.estimate ? (c.estimate.costPaise | inr) : '—' }}</dd></div>
+            </dl>
+          </div>
+          @if (c.status === 'PENDING_APPROVAL') {
+            <label class="mt-4 flex items-start gap-2 text-sm">
+              <input type="checkbox" class="mt-1" [checked]="reviewed()" (change)="reviewed.set(checkedOf($event))" />
+              <span>I have checked the text, the poster, the link and the audience, and they are right to send.</span>
+            </label>
+          }
+        </section>
       }
 
       <section class="mb-6 grid gap-4 md:grid-cols-4">
@@ -98,6 +127,20 @@ const LIVE = ['SCHEDULED', 'RUNNING'];
   `,
 })
 export default class CampaignDetailPage {
+  readonly custom = CUSTOM_PUSH_TEMPLATE;
+  /** The review checklist; Approve stays off until it is ticked. */
+  readonly reviewed = signal(false);
+
+  checkedOf(e: Event): boolean {
+    return (e.target as HTMLInputElement).checked;
+  }
+
+  /** Variables worth reading in the review; the preview already shows title, text, poster and link. */
+  reviewVars(c: Campaign): [string, string][] {
+    const shown = new Set(['url', 'image', ...(c.channel === 'push' && c.templateKey === CUSTOM_PUSH_TEMPLATE ? ['title', 'body'] : [])]);
+    return Object.entries(c.vars ?? {}).filter(([k]) => !shown.has(k));
+  }
+
   readonly #api = inject(Api);
   readonly #tokens = inject(TokenService);
 
@@ -157,6 +200,7 @@ export default class CampaignDetailPage {
       this.notice.set(
         { estimate: 'Dry run done.', approve: 'Approved.', start: 'Armed.', pause: 'Paused.', resume: 'Resumed.', cancel: 'Cancelled.' }[action],
       );
+      if (action === 'estimate') this.reviewed.set(false);   // new numbers: review them again
       this.now.set(Date.now());
       this.campaign.reload();
     } catch (e) {

@@ -53,6 +53,8 @@ export interface Campaign {
   finishedAt: string | null;
   recipients: Record<string, number>;
   approvalRequired: boolean;
+  /** False when approval.four_eyes is on: the author cannot approve their own. */
+  selfApprovalAllowed?: boolean;
   createdAt: string;
 }
 
@@ -84,7 +86,9 @@ export function canEstimate(c: Campaign, me: Me): Verdict {
 export function canApprove(c: Campaign, me: Me): Verdict {
   if (c.status !== 'PENDING_APPROVAL') return no('Nothing to approve');
   if (!me.canSend) return no('Needs campaign sending rights');
-  if (c.createdBy && c.createdBy === me.email) return no('Another operator must approve your campaign');
+  if (c.selfApprovalAllowed === false && c.createdBy && c.createdBy === me.email) {
+    return no('Another operator must approve your campaign (a second approver is required in Settings)');
+  }
   return yes;
 }
 

@@ -399,6 +399,25 @@ CREATE TABLE exports (
 - **No live countdown:** web push has none. An offer's end time goes in the text instead.
 - **Tests:** `MediaTest` (upload rules, roles, dedupe), `MediaServeTest`, `ShopifyLifecycleTest` (photo kept, non-https dropped), `PriceDropTest` (photo in the push), UI spec.
 
+### ☑ Changed 2026-10-15 — Every campaign is reviewed; one login is enough
+
+The owner's decision: review steps for every campaign, and one login can do them.
+
+- **Review is mandatory:**
+  - After its dry run, every campaign (push included, whatever it costs) waits in `PENDING_APPROVAL`.
+  - Arm and start refuses it until it is approved.
+  - `approval.required_above_paise` is deprecated (V39).
+- **The author may approve their own campaign:** `approval.four_eyes` (V39, default off) switches the second-approver rule back on when there are more operators. The audit row records `selfReviewed`.
+- **The campaign page has a Review panel:**
+  - the phone preview (title, text, poster);
+  - the link it opens;
+  - the other variables;
+  - the audience and cost from the dry run;
+  - a checklist ("I have checked the text, the poster, the link and the audience").
+
+  Approve stays disabled until the checklist is ticked, and a new dry run unticks it.
+- **Tests:** `CampaignTest.one_login_reviews_approves_and_starts_its_own_push_campaign`, the four-eyes test with the setting on, and UI rules.
+
 ## Exit gate
 
 - [ ] All phase-6 acceptance criteria ticked

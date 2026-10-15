@@ -49,10 +49,9 @@ import java.util.UUID;
  * <ul>
  * <li>Templates are checked on the server: push needs an active marketing
  *     template; WhatsApp an APPROVED marketing one whose quality is not RED.</li>
- * <li>Approval is required when the estimate exceeds
- *     {@code approval.required_above_paise} or WhatsApp is involved; the
- *     approver is never the author, and approval re-runs the dry run so it is
- *     given on current numbers.</li>
+ * <li>Every campaign is reviewed and approved before it can be armed (V39).
+ *     The author may approve their own unless {@code approval.four_eyes} is
+ *     on; approval re-runs the dry run so it is given on current numbers.</li>
  * <li>Start freezes the audience into {@code campaign_recipients} and records
  *     the config snapshot. Editing a READY campaign sends it back to DRAFT.</li>
  * </ul>
@@ -197,7 +196,11 @@ public class CampaignController {
         });
     }
 
-    /** Four eyes. Re-runs the dry run, so the approval is given on current numbers. */
+    /**
+     * The review. Re-runs the dry run, so the approval is given on current
+     * numbers. The author may approve their own campaign unless
+     * {@code approval.four_eyes} is on (V39).
+     */
     @RequiresRole(Role.CAMPAIGN_SEND)
     @Post("/{id}/approve")
     public Map<String, Object> approve(@PathVariable String id) {
@@ -205,8 +208,9 @@ public class CampaignController {
         var actor = current.id();
         var k = db.inTx(c -> lock(c, campaignId));
         requireStatus(k, Set.of("PENDING_APPROVAL"), "only a campaign waiting for approval can be approved");
-        if (actor.equals(k.get("createdById"))) {
-            throw Problems.conflict("four-eyes", "a campaign is approved by someone other than its author");
+        boolean self = actor.equals(k.get("createdById"));
+        if (self && fourEyes()) {
+            throw Problems.conflict("four-eyes", "a campaign is approved by someone other than its author (approval.four_eyes is on)");
         }
         var est = runDryRun(campaignId, k);
         return db.inTx(c -> {
@@ -216,7 +220,8 @@ public class CampaignController {
                                          approved_by = ?, approved_at = now(), status = 'READY', updated_at = now()
                      WHERE id = ?""", toJson(est.breakdown()), est.costPaise(), actor, campaignId);
             audit.record(c, actor, "campaign.approve", "campaign", campaignId.toString(), null,
-                    toJson(Map.of("costPaise", est.costPaise(), "willReceive", est.breakdown().get("willReceive"))));
+                    toJson(Map.of("costPaise", est.costPaise(), "willReceive", est.breakdown().get("willReceive"),
+                            "selfReviewed", self)));
             return detail(c, campaignId);
         });
     }
@@ -237,7 +242,7 @@ public class CampaignController {
             }
             var cost = (Long) k.get("estimatedCostPaise");
             if (approvalRequired(k, cost == null ? 0 : cost) && k.get("approvedById") == null) {
-                throw Problems.conflict("approval-required", "this campaign needs a second operator's approval");
+                throw Problems.conflict("approval-required", "review and approve this campaign before starting it");
             }
             if (halted(c, (String) k.get("channel"))) {
                 throw Problems.conflict("halted", "marketing or this channel is halted; release the halt first");
@@ -344,6 +349,7 @@ public class CampaignController {
         out.put("recipients", recipients);
         var cost = (Number) out.get("estimatedCostPaise");
         out.put("approvalRequired", approvalRequired(out, cost == null ? 0 : cost.longValue()));
+        out.put("selfApprovalAllowed", !fourEyes());
         return out;
     }
 
@@ -389,9 +395,13 @@ public class CampaignController {
     }
 
     /** WhatsApp in either step, or an estimate above the threshold. */
+    /** Every campaign is reviewed before it is armed (V39), whatever its channel or cost. */
     private boolean approvalRequired(Map<String, Object> k, long costPaise) {
-        if ("whatsapp".equals(k.get("channel")) || "whatsapp".equals(k.get("followUpChannel"))) return true;
-        return costPaise > config.snapshot().longOrZero("approval.required_above_paise");
+        return true;
+    }
+
+    private boolean fourEyes() {
+        return config.snapshot().boolValue("approval.four_eyes", "*");
     }
 
     private static boolean halted(Connection c, String channel) throws SQLException {

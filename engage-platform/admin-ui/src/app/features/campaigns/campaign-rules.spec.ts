@@ -20,7 +20,9 @@ const editor: Me = { email: 'editor@example.com', canEdit: true, canSend: false 
 describe('composer button rules', () => {
   it('disables Approve for the author, and for anyone without sending rights', () => {
     const c = campaign({ status: 'PENDING_APPROVAL' });
-    expect(canApprove(c, author)).toEqual({ allowed: false, why: 'Another operator must approve your campaign' });
+    expect(canApprove(c, author)).toEqual({ allowed: true });
+    expect(canApprove({ ...c, selfApprovalAllowed: false }, author)).toEqual({
+      allowed: false, why: 'Another operator must approve your campaign (a second approver is required in Settings)' });
     expect(canApprove(c, editor).allowed).toBe(false);
     expect(canApprove(c, second)).toEqual({ allowed: true });
     expect(canApprove(campaign({ status: 'READY' }), second).allowed).toBe(false);
