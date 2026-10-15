@@ -239,7 +239,17 @@ Trigger: `order_delivered` + 3 days. `delivered_fitcheck_v1` (utility) with thre
 
 ---
 
-### ☐ P5-T07 — `ndr_rescue`
+### ◐ P5-T07 — `ndr_rescue`
+
+> **Built 2026-10-15 as manual handling** (owner's decision: no automatic courier update; staff update Shiprocket by hand). `DeliveryRepliesTest` (3), `SupportTest` (3), and two `PostPurchaseTest` cases. Live check pending: a real NDR on the dev store.
+>
+> Where the build differs from the text below:
+> - **No Shiprocket write.** Our WhatsApp runs on the Cloud API, which has no inbox, so staff see customers' replies in the admin console's new **Support requests** page (V33 `support_requests`).
+> - **Delivery replies:** any WhatsApp message within 72 h of the customer's `ndr_raised_v1` (the one it quotes, else the latest), or the `ndr_reschedule` button, opens a `delivery` request for that parcel with the reply text. Later messages are appended, one open request per parcel. The first one emits `delivery_reply`, and the customer gets one free `delivery_ack` reply: "we have passed your message to our delivery team…".
+> - **"Need help"** taps from the review message (T06) open `after_delivery` requests.
+> - **Console:** `GET /api/support-requests` (VIEWER) shows order, AWB and courier, but no contact details or text. `POST /{id}/reply` (ANALYST) returns the text through `PiiAccess`, logged as field `support_reply` (V34) and counted in the 50-a-day limit. `POST /{id}/resolve` (ANALYST) records a note and is audited.
+> - **Retention:** reply text is kept only on support requests, and cleared 30 days after resolution (worker, 02:00 IST). Every other inbound message is still stored as ids only.
+> - **admin-api tests now migrate `engage_test` themselves,** like the other modules. They used to depend on another module's tests running first.
 
 Trigger: `delivery_failed` (P1-T02). `ndr_raised_v1` at t+0, quiet-hours exempt, quick replies [Retry tomorrow] [Change address] [Cancel]. SMS `sms_ndr` at t+3 h without a reply. Success is a **reply only**, not a read.
 

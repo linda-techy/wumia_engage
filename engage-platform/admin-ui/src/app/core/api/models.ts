@@ -118,3 +118,22 @@ export interface CopyVersion {
   grants: number;
   createdAt: string;
 }
+
+/** GET /api/support-requests (V33). No contact details; the reply text is fetched on its own. */
+export interface SupportRequest {
+  id: number;
+  kind: 'delivery' | 'after_delivery' | string;
+  status: 'open' | 'done';
+  identityId: string;
+  orderId: string | null;
+  orderNumber: string | null;
+  awb: string | null;
+  courier: string | null;
+  messages: number;
+  hasText: boolean;
+  note: string | null;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}

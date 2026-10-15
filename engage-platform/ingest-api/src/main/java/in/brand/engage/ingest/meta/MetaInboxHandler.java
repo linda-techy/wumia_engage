@@ -80,6 +80,7 @@ public class MetaInboxHandler implements InboxHandler {
     static final Set<String> QUICK_REPLIES = Set.of("wa_optin_yes", "ndr_reschedule", "fit_ok", "review_love", "review_help");
     static final String INTHREAD_COPY = "wa_inthread_v1";
 
+    private final DeliveryReplies deliveryReplies;
     private final IdentityResolver identities;
     private final ConsentWriter consents;
     private final CapabilityService capability;
@@ -87,7 +88,8 @@ public class MetaInboxHandler implements InboxHandler {
     private final IngestMetrics metrics;
 
     public MetaInboxHandler(IdentityResolver identities, ConsentWriter consents, CapabilityService capability,
-                            EventWriter events, IngestMetrics metrics) {
+                            EventWriter events, IngestMetrics metrics, DeliveryReplies deliveryReplies) {
+        this.deliveryReplies = deliveryReplies;
         this.identities = identities;
         this.consents = consents;
         this.capability = capability;
@@ -418,6 +420,11 @@ public class MetaInboxHandler implements InboxHandler {
                     props.put("type", kind);
                     if (m.context() != null) props.put("context_wamid", m.context());
                     events.write(c, identity, name, "meta", "wa_msg:" + m.id(), props);
+                    // A reply to a failed-delivery message goes to staff (support requests), text included.
+                    if (m.payload() == null || m.payload().equals("ndr_reschedule")) {
+                        deliveryReplies.record(c, identity, m.id(), m.text() != null ? m.text() : m.buttonText(),
+                                m.context(), m.at());
+                    }
                 }
             }
         }

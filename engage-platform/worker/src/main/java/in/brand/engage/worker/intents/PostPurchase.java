@@ -44,7 +44,8 @@ import org.slf4j.LoggerFactory;
  *     opened, {@code review_thanks}, asking for a photo or review on the
  *     product page.</li>
  * <li><b>Need help</b> ({@code review_help}): a free reply,
- *     {@code review_help}, and a {@code support_requested} event for the team.</li>
+ *     {@code review_help}, a {@code support_requested} event, and an
+ *     {@code after_delivery} support request staff see in the admin console.</li>
  * </ul>
  */
 @Singleton
@@ -166,6 +167,12 @@ public class PostPurchase implements EventConsumer {
             props.put("message_id", messageId);
             if (vars.containsKey("order_id")) props.put("order_id", vars.get("order_id"));
             events.write(c, identity, "support_requested", "worker", "support:" + messageId, props);
+            // Staff see it in the admin console's support requests.
+            Sql.update(c, """
+                    INSERT INTO support_requests (identity_id, kind, order_id, message_ids)
+                    SELECT ?, 'after_delivery', ?, ARRAY[?]::text[]
+                     WHERE NOT EXISTS (SELECT 1 FROM support_requests WHERE ? = ANY(message_ids))""",
+                    identity, vars.get("order_id"), messageId, messageId);
             LOG.warn("customer {} asked for help after delivery (order {})", identity, vars.getOrDefault("order_id", "?"));
             return List.of(new MessageIntent(identity, HELP, "reply:" + messageId, Map.copyOf(vars), null));
         }

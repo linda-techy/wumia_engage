@@ -88,6 +88,19 @@ public class WorkerJobs {
         }
     }
 
+    /** 02:00 IST: a support request's reply text (often an address) is cleared 30 days after it is resolved. */
+    @Scheduled(cron = "0 0 2 * * *", zoneId = "Asia/Kolkata")
+    void clearResolvedSupportText() {
+        try {
+            int n = db.inTx(c -> in.brand.engage.persistence.Sql.update(c, """
+                    UPDATE support_requests SET message_text = NULL, updated_at = now()
+                     WHERE status = 'done' AND resolved_at < now() - interval '30 days' AND message_text IS NOT NULL"""));
+            if (n > 0) LOG.info("support requests: cleared the reply text of {} resolved requests", n);
+        } catch (RuntimeException e) {
+            LOG.error("clearing resolved support request text failed", e);
+        }
+    }
+
     /** 03:30 IST: INCAPABLE past its 120-day recheck goes back to UNKNOWN (CLAUDE.md §4.2). */
     @Scheduled(cron = "0 30 3 * * *", zoneId = "Asia/Kolkata")
     void recheckCapability() {

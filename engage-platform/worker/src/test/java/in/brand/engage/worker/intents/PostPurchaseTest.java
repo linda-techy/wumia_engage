@@ -130,6 +130,24 @@ class PostPurchaseTest {
         assertTrue(wa.all.getLast().body().startsWith("Sorry to hear that, Priya."), wa.all.getLast().body());
         assertEquals(1L, count("SELECT count(*) FROM events WHERE identity_id = ? AND name = 'support_requested' "
                 + "AND props->>'order_id' = ?", who, orderId));
+        assertEquals(1L, count("SELECT count(*) FROM support_requests WHERE identity_id = ? AND kind = 'after_delivery' "
+                + "AND order_id = ? AND status = 'open'", who, orderId), "staff see it in the admin console");
+    }
+
+    @Test void a_reply_to_a_failed_delivery_is_acknowledged_once() {
+        var who = customer();
+        long request = count("""
+                INSERT INTO support_requests (identity_id, kind, message_text, message_ids)
+                VALUES (?, 'delivery', 'Tomorrow after 5pm', ARRAY['m1']) RETURNING id""", who);
+        db.inTx(c -> Sql.update(c, "UPDATE profiles SET wa_window_until = ? WHERE identity_id = ?",
+                clock.instant().plus(Duration.ofHours(24)).atOffset(ZoneOffset.UTC), who));
+        event(who, "delivery_reply", "{\"support_request_id\":" + request + ",\"message_id\":\"m1\"}");
+        event(who, "delivery_reply", "{\"support_request_id\":" + request + ",\"message_id\":\"m1-replayed\"}");
+        dispatcher.dispatchOnce();
+
+        assertEquals(1, wa.all.size());
+        assertEquals("Thanks, Priya. We have passed your message to our delivery team, and they will arrange the next "
+                + "delivery attempt.", wa.all.getLast().body());
     }
 
     @Test void the_send_time_is_11_on_the_third_day() {

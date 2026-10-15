@@ -17,6 +17,7 @@ const NAV: NavItem[] = [
   { path: '/segments', label: 'Segments', role: 'VIEWER' },
   { path: '/inspector', label: 'Journey inspector', role: 'ANALYST' },
   { path: '/customers', label: 'Customers', role: 'VIEWER' },
+  { path: '/support', label: 'Support requests', role: 'VIEWER' },
   { path: '/settings', label: 'Settings', role: 'VIEWER' },
   { path: '/templates', label: 'Templates', role: 'VIEWER' },
   { path: '/consent-copy', label: 'Consent copy', role: 'VIEWER' },

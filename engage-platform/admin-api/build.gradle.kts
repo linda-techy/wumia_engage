@@ -20,6 +20,10 @@ dependencies {
 
     testImplementation("io.micronaut:micronaut-http-client")
     testImplementation("com.tngtech.archunit:archunit-junit5:1.5.1")   // ControllerRolesTest
+    // Tests migrate engage_test themselves, like the other modules: without it they
+    // depended on another module's tests having run first (seen with V33, 2026-10-15).
+    testImplementation("io.micronaut.flyway:micronaut-flyway")
+    testRuntimeOnly("org.flywaydb:flyway-database-postgresql")
     implementation(project(":policy"))                                 // campaign dry runs (P6-T06)
 }
 
@@ -96,4 +100,9 @@ tasks.withType<Test>().configureEach {
         environment(env)
     }
     testLogging { events("failed"); exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
+}
+
+// Tests migrate engage_test themselves (see policy/build.gradle.kts).
+tasks.processTestResources {
+    from(rootProject.file("db/migration")) { into("db/migration") }
 }
