@@ -136,11 +136,12 @@ class CampaignTest {
         assertEquals(2, reached, "the two fresh, opted-in subscribers (deferred if run in quiet hours)");
         assertEquals(1, num((Map<String, Object>) breakdown.get("blocked")).values().stream().mapToInt(Integer::intValue).sum(),
                 "no opt-in is a policy block, shown plainly: " + breakdown.get("blocked"));
-        assertEquals("READY", est.get("status"), "push costs nothing: no approval needed");
+        assertEquals("PENDING_APPROVAL", est.get("status"), "every campaign is reviewed, push too (V39)");
         assertEquals(1L, data.countAudit("campaign.estimate"));
     }
 
-    @Test void a_whatsapp_campaign_needs_another_operators_approval_and_never_reaches_unknown_capability() {
+    @Test void with_four_eyes_on_a_whatsapp_campaign_needs_another_operators_approval_and_never_reaches_unknown_capability() {
+        fourEyes(true);
         var capable = person("KL");
         phone(capable);
         capability(capable, "CAPABLE");
@@ -159,7 +160,7 @@ class CampaignTest {
         assertEquals(Map.of("WA_CAPABILITY_UNKNOWN", 1, "WA_INCAPABLE", 1), excluded);
 
         assertEquals(409, status(() -> act(lead, id, "start")), "not approved yet");
-        assertEquals(409, status(() -> act(lead, id, "approve")), "the author cannot approve their own campaign");
+        assertEquals(409, status(() -> act(lead, id, "approve")), "with four eyes on, the author cannot approve their own campaign");
         assertEquals("READY", act(sender, id, "approve").get("status"));
 
         var started = act(lead, id, "start");
@@ -199,6 +200,7 @@ class CampaignTest {
     @Test void a_halt_blocks_the_start_and_a_running_campaign_pauses_resumes_and_cancels() {
         var id = create("push", PUSH_TPL).get("id");
         act(lead, id, "estimate");
+        act(sender, id, "approve");
         db.inTx(c -> Sql.update(c, """
                 INSERT INTO config_versions (key, selector, value, changed_by, reason)
                 SELECT 'halt.marketing', '*', 'true', id, 'test halt' FROM operators WHERE email = 'owner@example.com'"""));
@@ -285,5 +287,33 @@ class CampaignTest {
         assertEquals(400, status(() -> create("push", "push_campaign_custom_v1", "vars", Map.of(
                 "title", "Hi", "body", "Text", "url", "https://w.example/c", "image", "http://insecure.example/p.png"))),
                 "the poster must be https");
+    }
+
+    void fourEyes(boolean on) {
+        db.inTx(c -> Sql.update(c, """
+                INSERT INTO config_versions (key, selector, value, changed_by, reason)
+                SELECT 'approval.four_eyes', '*', ?::jsonb, id, 'test' FROM operators WHERE email = 'owner@example.com'""",
+                Boolean.toString(on)));
+        config.invalidate();
+    }
+
+    @Test void one_login_reviews_approves_and_starts_its_own_push_campaign() {
+        var id = create("push", PUSH_TPL).get("id");
+        assertEquals(409, status(() -> act(lead, id, "approve")), "nothing to review before the dry run");
+        assertEquals("PENDING_APPROVAL", act(lead, id, "estimate").get("status"));
+        assertEquals(409, status(() -> act(lead, id, "start")), "not reviewed yet");
+
+        var detail = client.toBlocking().retrieve(HttpRequest.GET("/api/campaigns/" + id).bearerAuth(lead), Map.class);
+        assertEquals(true, detail.get("selfApprovalAllowed"));
+        assertEquals("READY", act(lead, id, "approve").get("status"), "the author may approve their own (four eyes off)");
+        assertEquals("RUNNING", act(lead, id, "start").get("status"));
+        var after = data.countAudit("campaign.approve");
+        assertTrue(after >= 1);
+        assertEquals("true", db.inTx(c -> {
+            try (var ps = Sql.prepare(c, "SELECT after->>'selfReviewed' FROM audit_log WHERE action = 'campaign.approve' AND entity_id = ?",
+                    id.toString()); var rs = ps.executeQuery()) {
+                return rs.next() ? rs.getString(1) : null;
+            }
+        }), "the audit says the author reviewed it themselves");
     }
 }
