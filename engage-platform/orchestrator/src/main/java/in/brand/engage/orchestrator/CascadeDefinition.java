@@ -89,6 +89,11 @@ public record CascadeDefinition(String intentKey, Priority priority, List<Step> 
             return new Step(Channel.WHATSAPP, templateKey, Duration.ofHours(24), false, false, Duration.ZERO, List.of());
         }
 
+        /** Marketing email (P7-T01); skipped while no email adapter is configured. */
+        public static Step email(String templateKey) {
+            return new Step(Channel.EMAIL, templateKey, Duration.ofHours(72), false, false, Duration.ZERO, List.of());
+        }
+
         public static Step sms(String templateKey) {
             return new Step(Channel.SMS, templateKey, Duration.ofHours(24), false, false, Duration.ZERO, List.of());
         }

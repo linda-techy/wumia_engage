@@ -117,7 +117,8 @@ class WinbackTest {
         assertEquals("New at WUMIKA", push.all.getLast().title());
         at("2026-10-12T11:03:00");
         assertEquals(1, wa.all.size());
-        assertEquals("exhausted|skipped:HAS_DISCOUNT", run(who));
+        assertTrue(attempts(who).contains("guard:HAS_DISCOUNT"), attempts(who));
+        assertEquals("exhausted|skipped:HAS_EMAIL_MARKETING", run(who), "then the email step, without email consent");
     }
 
     @Test void with_unique_codes_the_offer_carries_a_single_use_code() {
@@ -137,7 +138,7 @@ class WinbackTest {
         assertEquals(20, spec.percent());
         assertTrue(spec.title().startsWith("winback "), spec.title());
         assertEquals(List.of("Priya", "20% off", spec.code()), wa.all.getLast().whatsapp().bodyParams());
-        assertEquals("exhausted|sent", run(who));
+        assertEquals("waiting|", run(who), "the email step follows in 3 days");
     }
 
     @Test void customers_who_return_half_of_what_they_buy_get_no_discount() {

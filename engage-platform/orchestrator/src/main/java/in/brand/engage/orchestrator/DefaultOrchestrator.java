@@ -216,6 +216,15 @@ public class DefaultOrchestrator implements MessageOrchestrator {
                 }
             }
 
+            // A channel with no adapter (email before SES is set up, WhatsApp on a server without
+            // its credentials) is skipped like a failed guard: no failure, no wait (channelLive, P5).
+            if (!router.channels().contains(step.channel())) {
+                attempt(current, step, null, "skipped", "channel_off:" + step.channel().dbName());
+                if (last) return finish(current, "exhausted", "skipped:channel_off");
+                current = skip(current);
+                continue;
+            }
+
             var vars = vars(current.id());
             if (step.varsFrom() != null) {
                 // Values only the send moment can give (a single-use code); skipped like a guard when unavailable.

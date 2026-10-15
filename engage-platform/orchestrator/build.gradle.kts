@@ -76,7 +76,7 @@ tasks.withType<Test>().configureEach {
         env["DB_NAME"] = env["TEST_DB_NAME"] ?: "engage_test"
         // Tests never reach a real provider, whatever local.env holds: no WhatsApp,
         // template sync or SMS adapter is created (fakes stand in where needed).
-        listOf("WA_PHONE_NUMBER_ID", "WA_ACCESS_TOKEN", "WA_BUSINESS_ACCOUNT_ID", "MSG91_AUTH_KEY").forEach { env[it] = "" }
+        listOf("WA_PHONE_NUMBER_ID", "WA_ACCESS_TOKEN", "WA_BUSINESS_ACCOUNT_ID", "MSG91_AUTH_KEY", "EMAIL_FROM", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN").forEach { env[it] = "" }
         environment(env)
     }
     testLogging { events("failed"); exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }

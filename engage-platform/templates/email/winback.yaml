@@ -1,0 +1,12 @@
+# winback, last step (P7-T01): three days after the offer step.
+key: email_winback_v1
+channel: email
+category: marketing
+locales:
+  en:
+    title: "It has been a while, {{name}}"
+    body: "Hi {{name}},\n\nWe have added new pieces since your last WUMIKA order, and we would love to show you what is new."
+buttons:
+  - { text: "See what's new", url: "{{url}}" }
+vars: [name, url]
+samples: { name: "Priya", url: "https://wumika.com/collections/all" }

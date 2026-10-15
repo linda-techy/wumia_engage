@@ -46,11 +46,13 @@ public class MessageRouter {
     private final Renderer renderer;
     private final BeaconSignature beacons;
     private final WaTemplateGate waGate;
+    private final EmailLinks emailLinks;
     private final Map<Channel, ChannelAdapter> adapters = new EnumMap<>(Channel.class);
 
     public MessageRouter(PolicyEngine policy, SendRepository sends, TemplateRegistry templates, Renderer renderer,
-                         BeaconSignature beacons, WaTemplateGate waGate, List<ChannelAdapter> adapters) {
+                         BeaconSignature beacons, WaTemplateGate waGate, EmailLinks emailLinks, List<ChannelAdapter> adapters) {
         this.waGate = waGate;
+        this.emailLinks = emailLinks;
         this.policy = policy;
         this.sends = sends;
         this.templates = templates;
@@ -119,6 +121,22 @@ public class MessageRouter {
                 message = new RenderedMessage(cmd.channel(), template.key(), sendId, cmd.intentKey(), "", wa.body(),
                         cmd.vars().getOrDefault("url", ""), null, null, cmd.ttl(), false, null, wa.call());
             } catch (IllegalArgumentException e) {
+                LOG.error("send {}: cannot render {}: {}", sendId, template.key(), e.getMessage());
+                return fail(cmd, sendId, "render_failed", false, false, List.of());
+            }
+            return deliver(cmd, allow, sendId, adapter, message);
+        }
+        if (cmd.channel() == Channel.EMAIL) {
+            try {
+                var vars = new java.util.HashMap<>(cmd.vars());
+                if (vars.get("url") != null) vars.put("url", Utm.apply(vars.get("url"), "email", cmd.intentKey(), sendId));
+                var unsubscribe = emailLinks.unsubscribeUrl(cmd.identityId());
+                var e = renderer.email(template, allow.locale(), vars, unsubscribe);
+                message = new RenderedMessage(cmd.channel(), template.key(), sendId, cmd.intentKey(), e.subject(), e.text(),
+                        vars.getOrDefault("url", ""), null, null, cmd.ttl(), false, null, null, null,
+                        new in.brand.engage.channels.EmailContent(e.subject(), e.html(), e.text(), unsubscribe,
+                                allow.effectiveCategory() == Category.MARKETING));
+            } catch (IllegalArgumentException | IllegalStateException e) {
                 LOG.error("send {}: cannot render {}: {}", sendId, template.key(), e.getMessage());
                 return fail(cmd, sendId, "render_failed", false, false, List.of());
             }

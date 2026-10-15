@@ -34,6 +34,7 @@ import java.util.UUID;
  * +20 h     WhatsApp checkout_offer_v1      as step 1, and a discount applies: the operator's shared
  *                                          code, or (discount_mode = unique) a single-use code made
  *                                          at send time by JourneyDiscount
+ * +12 h     Email    email_checkout_v1      email marketing consent (skipped until SES is set up)
  * </pre>
  *
  * <ul>
@@ -78,7 +79,8 @@ public class CheckoutAbandon implements EventConsumer {
                     Step.whatsapp("checkout_reminder_v1").require(wa).waitAfter(Duration.ofHours(4)),
                     Step.push("push_checkout_v1", TTL).require(Guard.HAS_LIVE_DEVICE).waitAfter(Duration.ofHours(20)),
                     Step.whatsapp("checkout_offer_v1").require(wa).require(Guard.hasVar("discount"))
-                            .withVarsFrom(JourneyDiscount.NAME)));
+                            .withVarsFrom(JourneyDiscount.NAME).waitAfter(Duration.ofHours(12)),
+                    Step.email("email_checkout_v1").require(Guard.HAS_EMAIL_MARKETING)));
         }
     }
 

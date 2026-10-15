@@ -104,6 +104,7 @@ public final class TemplateLinter {
         t.buttons().stream().filter(b -> !b.isQuickReply()).forEach(b -> used.addAll(Renderer.placeholders(b.url())));
         if (t.channel() == Channel.WHATSAPP) problems.addAll(whatsapp(t, where));
         if (t.channel() == Channel.SMS) problems.addAll(sms(t, where));
+        if (t.channel() == Channel.EMAIL) problems.addAll(email(t, where));
         var payload = t.channel() == Channel.PUSH ? Renderer.PUSH_PAYLOAD_VARS : Set.<String>of();
         for (var v : used) {
             if (!declared.contains(v)) problems.add(where + "variable '" + v + "' is used but not declared in vars");
@@ -163,6 +164,38 @@ public final class TemplateLinter {
                 }
             }
             problems.addAll(lint(t));
+        }
+        return problems;
+    }
+
+    static final int EMAIL_SUBJECT_MAX = 70;
+
+    /**
+     * Email (P7-T01/T02): marketing only (Shopify sends transactional email);
+     * a subject of at most 70 characters with the samples; exactly one URL
+     * button; the rendered HTML under {@link EmailLayout#MAX_HTML_BYTES}.
+     */
+    private static List<String> email(MessageTemplate t, String where) {
+        var problems = new ArrayList<String>();
+        if (t.category() != in.brand.engage.core.messaging.Category.MARKETING) {
+            problems.add(where + "Engage sends marketing email only; Shopify sends transactional email");
+        }
+        var urlButtons = t.buttons().stream().filter(b -> !b.isQuickReply()).count();
+        if (urlButtons != 1 || t.buttons().size() != 1) problems.add(where + "an email needs exactly one URL button (its call to action)");
+        for (var e : t.locales().entrySet()) {
+            var placeholdersKnown = Renderer.placeholders(e.getValue().title()).stream().allMatch(t.samples()::containsKey)
+                    && Renderer.placeholders(e.getValue().body()).stream().allMatch(t.samples()::containsKey);
+            if (!placeholdersKnown) continue;
+            var subject = Renderer.fill(e.getValue().title(), t.samples(), t.key());
+            if (Renderer.length(subject) > EMAIL_SUBJECT_MAX) {
+                problems.add(where + "subject in " + e.getKey() + " is " + Renderer.length(subject) + " characters with the samples (max "
+                        + EMAIL_SUBJECT_MAX + "): \"" + subject + "\"");
+            }
+            var html = EmailLayout.render(subject, Renderer.fill(e.getValue().body(), t.samples(), t.key()), "x",
+                    "https://example.com/" + "x".repeat(200), "https://example.com/u/" + "x".repeat(44)).html();
+            if (html.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > EmailLayout.MAX_HTML_BYTES) {
+                problems.add(where + "the email is over 100 KB; Gmail would clip it");
+            }
         }
         return problems;
     }

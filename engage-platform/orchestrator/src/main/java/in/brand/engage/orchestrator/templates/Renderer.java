@@ -33,6 +33,27 @@ public class Renderer {
     /** A WhatsApp template rendered for Meta: positional parameters, or a free-form body (SERVICE). */
     public record WhatsAppRendered(String locale, String body, WaTemplateCall call) {}
 
+    /** An email rendered into the brand layout. */
+    public record EmailRendered(String subject, String html, String text) {}
+
+    /**
+     * Email (P7-T02): the copy's title is the subject, its body the paragraphs,
+     * the first button the call to action; {@link EmailLayout} adds the header,
+     * the footer and the unsubscribe link.
+     *
+     * @throws IllegalArgumentException if a variable the copy or the button uses is missing
+     */
+    public EmailRendered email(MessageTemplate template, String locale, Map<String, String> vars, String unsubscribeUrl) {
+        var chosen = locale != null && template.locales().containsKey(locale) ? locale : MessageTemplate.FALLBACK_LOCALE;
+        var copy = template.locales().get(chosen);
+        var subject = fill(copy.title(), vars, template.key());
+        var body = fill(copy.body(), vars, template.key());
+        var button = template.buttons().stream().filter(b -> !b.isQuickReply()).findFirst().orElse(null);
+        var layout = EmailLayout.render(subject, body, button == null ? null : button.text(),
+                button == null ? null : fill(button.url(), vars, template.key()), unsubscribeUrl);
+        return new EmailRendered(subject, layout.html(), layout.text());
+    }
+
     /** An SMS rendered for its DLT registration: the text as it will arrive, and the call. */
     public record SmsRendered(String body, SmsCall call) {}
 

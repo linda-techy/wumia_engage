@@ -38,6 +38,17 @@ engage:
     # templates. Empty = none of that runs.
     business-account-id: ${WA_BUSINESS_ACCOUNT_ID:}
     access-token: ${WA_ACCESS_TOKEN:}
+  email:
+    # Marketing email through Amazon SES (P7-T01). Empty EMAIL_FROM = no email
+    # adapter: the email steps of journeys are skipped. A verified sending
+    # domain, e.g. "WUMIKA <hello@mail.wumika.com>".
+    from: ${EMAIL_FROM:}
+    region: ${SES_REGION:ap-south-1}
+    configuration-set: ${SES_CONFIGURATION_SET:engage}
+    unsubscribe-mailto: ${EMAIL_UNSUBSCRIBE_MAILTO:}
+    access-key-id: ${AWS_ACCESS_KEY_ID:}
+    secret-access-key: ${AWS_SECRET_ACCESS_KEY:}
+    session-token: ${AWS_SESSION_TOKEN:}
   sms:
     msg91:
       # DLT SMS through MSG91 (P4-T06). Empty = no SMS adapter: SMS sends are

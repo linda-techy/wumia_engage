@@ -92,7 +92,8 @@ class CheckoutAbandonTest {
         clock.setIst("2026-09-29T12:40:00");
         orchestrator.tick(200);
         assertEquals(1, wa.all.size(), "no discount message without a code");
-        assertEquals("exhausted|skipped:HAS_DISCOUNT", run(checkout));
+        assertTrue(attempts(checkout).contains("guard:HAS_DISCOUNT"), attempts(checkout));
+        assertEquals("exhausted|skipped:HAS_EMAIL_MARKETING", run(checkout), "then the email step, without email consent");
     }
 
     @Test void with_a_code_the_last_whatsapp_carries_it() {
@@ -113,7 +114,7 @@ class CheckoutAbandonTest {
         var offer = wa.all.getLast().whatsapp();
         assertEquals("checkout_offer_v1", offer.name());
         assertEquals(List.of("Priya", "Kundan Jhumka Earrings", "WUMIKA10", "10% off"), offer.bodyParams());
-        assertEquals("exhausted|sent", run(checkout));
+        assertEquals("waiting|", run(checkout), "the email step follows in 12 h");
     }
 
     @Test void unique_mode_makes_a_single_use_code_when_the_discount_message_goes() {
@@ -148,7 +149,8 @@ class CheckoutAbandonTest {
         orchestrator.tick(200);
 
         assertEquals(1, wa.all.size(), "the reminder went; no message with a code that does not exist");
-        assertEquals("exhausted|skipped:vars:journey_discount", run(checkout));
+        assertTrue(attempts(checkout).contains("vars:journey_discount"), attempts(checkout));
+        assertEquals("exhausted|skipped:HAS_EMAIL_MARKETING", run(checkout));
         assertTrue(attempts(checkout).contains("write_discounts"), attempts(checkout));
     }
 

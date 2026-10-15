@@ -21,7 +21,16 @@ Marketing email takes the free second and third touches in cascades. Every journ
 
 ---
 
-### ☐ P7-T01 — Email channel
+### ◐ P7-T01 — Email channel
+
+> **Built 2026-10-15 on fakes** (no SES account yet; P0-T07). Tests: `SesAdapterTest` 5, `SigV4Test` 2 (AWS's published vectors), `SnsSignatureVerifierTest` 4, `UnsubscribeTokenTest` 2, `EmailFeedbackTest` 6, `EmailTemplateTest` 3, `EmailStepTest` 1. Live check pending: the SES domain (SPF, DKIM, DMARC), production access, and the SNS topic.
+>
+> Where the build differs from the text below:
+> - **No AWS SDK.** `SesAdapter` calls SES v2 with the JDK HTTP client and its own Signature V4 (`SigV4`), like the WhatsApp and MSG91 adapters. The adapter is on only with `EMAIL_FROM` set; credentials are `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` (+ optional `AWS_SESSION_TOKEN`). EC2 instance roles are not read yet.
+> - **Unsubscribe:** `List-Unsubscribe` carries `<PUBLIC_BASE_URL/u/{token}>` (+ the mailto when `EMAIL_UNSUBSCRIBE_MAILTO` is set) and `List-Unsubscribe-Post`. `UnsubscribeToken` (core-domain) is HMAC-signed and keyed from the Shopify app secret, so it never expires. `GET /u/{token}` shows a page and changes nothing (mail scanners open links); `POST` withdraws email marketing once (an `email_unsubscribed` event) and is a no-op after that.
+> - **Bounces:** `POST /webhooks/ses` checks signature version 2, a certificate from `sns.<region>.amazonaws.com` (fetched and cached by `SnsCertificates`) and `SES_SNS_TOPIC_ARN`; it auto-confirms the subscription. `SesInboxHandler` turns a hard bounce into a permanent suppression and three soft bounces in 7 days into a 30-day suppression. A complaint suppresses and withdraws email marketing.
+> - **`channelLive` is generic:** a step whose channel has no adapter is skipped (`channel_off:<channel>`) without waiting, for email and any other channel.
+> - **Email steps** go last in `cart_recovery` (+20 h after the push), `checkout_abandon` (+12 h after the offer step) and `winback` (+3 d after the offer step), guarded by `HAS_EMAIL_MARKETING`. Placed last, they don't shift the other steps' timing while email is off.
 
 **Files**
 ```
@@ -45,7 +54,15 @@ core-domain/src/main/java/in/brand/engage/aws/SnsSignatureVerifier.java
 
 ---
 
-### ☐ P7-T02 — Templates + warm-up
+### ◐ P7-T02 — Templates + warm-up
+
+> **Templates built 2026-10-15; warm-up not yet.**
+>
+> Where the build differs from the text below:
+> - **No MJML.** Email templates are YAML like the others (`templates/email/*.yaml`: title = subject, body = paragraphs, one URL button), rendered into one branded table layout in code (`EmailLayout`). That gives inline styles, a preheader, a footer with the unsubscribe link, and an HTML-escaped plain-text alternative, with no Node toolchain in the Java build.
+> - **Lint:** marketing only, subject ≤ 70 characters with the samples, exactly one URL button, rendered HTML < 100 KB.
+> - **Templates:** `email_cart_v1`, `email_checkout_v1`, `email_winback_v1`.
+> - **Not built yet:** the `email.daily_cap` warm-up and the `email_engaged_days` guard. Build them before the first real send.
 
 - `templates/email/*.mjml` compiled with `mjml` at build time into `templates/email/dist/*.html`, plus a `.txt` alternative for each. The lint (P3-T03) fails a build whose HTML exceeds 100 KB or lacks the unsubscribe placeholder.
 - Warm-up: config key `email.daily_cap` (added in the P7 migration) with **effective-dated versions**, entered by an operator through the P6 config API (so each has an actor and a reason), for weeks 1–4 (500, 2,000, 8,000, then removed). The policy engine counts today's email marketing sends against it and defers the rest to tomorrow 09:00 IST.

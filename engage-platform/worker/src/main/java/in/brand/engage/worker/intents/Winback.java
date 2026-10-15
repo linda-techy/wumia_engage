@@ -34,6 +34,7 @@ import java.util.Map;
  * +7 d       Push     push_winback_v1   a live browser subscription
  * +7 d       WhatsApp winback_offer_v1  as step 1, and a discount applies (shared code, or a
  *                                       single-use code made at send time by JourneyDiscount)
+ * +3 d       Email    email_winback_v1   email marketing consent (skipped until SES is set up)
  * </pre>
  *
  * <ul>
@@ -73,7 +74,8 @@ public class Winback implements EventConsumer {
                     Step.whatsapp("winback_v1").require(wa).waitAfter(Duration.ofDays(7)),
                     Step.push("push_winback_v1", TTL).require(Guard.HAS_LIVE_DEVICE).waitAfter(Duration.ofDays(7)),
                     Step.whatsapp("winback_offer_v1").require(wa).require(Guard.hasVar("discount"))
-                            .withVarsFrom(JourneyDiscount.NAME)));
+                            .withVarsFrom(JourneyDiscount.NAME).waitAfter(Duration.ofDays(3)),
+                    Step.email("email_winback_v1").require(Guard.HAS_EMAIL_MARKETING)));
         }
     }
 

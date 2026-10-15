@@ -140,6 +140,20 @@ public class WorkerTestBeans {
         }
     }
 
+    /** Email that never leaves the JVM. */
+    @Singleton
+    @Replaces(in.brand.engage.channels.email.SesAdapter.class)
+    public static class FakeEmail implements ChannelAdapter {
+        public final List<RenderedMessage> all = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+        @Override public Channel channel() { return Channel.EMAIL; }
+
+        @Override public DispatchResult send(RenderedMessage m, Addresses a) {
+            all.add(m);
+            return new DispatchResult("ses-" + m.sendId(), 1, List.of());
+        }
+    }
+
     /** SMS that never leaves the JVM. */
     @Singleton
     @Replaces(Msg91Adapter.class)
