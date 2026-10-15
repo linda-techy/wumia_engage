@@ -1,0 +1,2 @@
+# Shell scripts run on Linux servers and in Git Bash: keep LF everywhere.
+*.sh text eol=lf
