@@ -39,7 +39,7 @@ export function site(url: string | null): string {
           @if (icon()) {
             <img [src]="icon()" alt="" class="h-7 w-7 rounded-full object-cover" />
           } @else {
-            <span class="flex h-7 w-7 items-center justify-center rounded-full bg-[#b5462f] text-sm font-bold text-white">W</span>
+            <span class="flex h-7 w-7 items-center justify-center rounded-full bg-[#cc0101] text-sm font-bold text-white">W</span>
           }
           <span>Chrome · {{ host() }} · now</span>
         </div>

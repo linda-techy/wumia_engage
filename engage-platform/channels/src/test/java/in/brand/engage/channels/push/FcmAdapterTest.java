@@ -171,4 +171,14 @@ class FcmAdapterTest {
         assertEquals("https://engage.example/media/ab.png", data.get("image"));
         assertEquals("Dressed for the festivities ✨", data.get("title"));
     }
+
+    @Test void without_settings_the_icons_shipped_at_brand_are_used() throws Exception {
+        var fcm = new FakeFcm(t -> FcmClient.TokenResult.ok());
+        var msg = new RenderedMessage(Channel.PUSH, "push_campaign_custom_v1", 8, "campaign", "Hi", "Text",
+                "https://w.example/c", null, null, Duration.ofHours(12), false, null);
+        new FcmAdapter(fcm, "", null, "https://engage-dev.example.com/").send(msg, targets(1));
+        var data = fcm.calls.getFirst().data();
+        assertEquals("https://engage-dev.example.com/brand/push-icon-192.png", data.get("icon"));
+        assertEquals("https://engage-dev.example.com/brand/push-badge-96.png", data.get("badge"));
+    }
 }

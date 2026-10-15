@@ -48,4 +48,15 @@ class MediaServeTest {
         assertEquals(404, status("/media/..%2F..%2Fetc%2Fpasswd"), "not a poster name");
         assertEquals(404, status("/media/" + ID + ".svg"), "no other types");
     }
+
+    @Test void the_brand_push_icons_are_served() {
+        for (var f : new String[] {"push-icon-192.png", "push-badge-96.png"}) {
+            var res = client.toBlocking().exchange(HttpRequest.GET("/brand/" + f), byte[].class);
+            assertEquals(200, res.code());
+            assertEquals("image/png", res.getContentType().orElseThrow().toString());
+            assertEquals((byte) 0x89, res.body()[0]);
+        }
+        assertEquals(404, status("/brand/../application.yml"));
+        assertEquals(404, status("/brand/other.png"));
+    }
 }
