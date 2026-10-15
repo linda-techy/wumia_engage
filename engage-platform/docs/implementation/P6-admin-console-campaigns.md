@@ -388,6 +388,13 @@ CREATE TABLE exports (
   - products/update keeps the main photo in `products.image_url` (https only).
   - Cart lines now record `product_id`.
   - Abandoned cart, abandoned checkout, price drop, browse and back in stock put the photo in `image`, asking Shopify's CDN for 1024 px wide.
+- **Poster campaigns with their own words** (the Indian fashion pattern, like Nykaa's festive drops):
+  - Template `push_campaign_custom_v1`: the composer shows Title and Text boxes with counters (40 and 90, emoji count as one), and the API refuses the campaign without both.
+  - Below them is a phone-style preview, as Chrome on Android shows it expanded.
+  - This is the one push template whose copy is written per campaign rather than reviewed in code. The review is the campaign approval step.
+- **Brand logo:**
+  - `PUSH_ICON_URL` (square, 192 px) and `PUSH_BADGE_URL` (Android status bar, white on transparent, 96 px) go with every push; https only.
+  - Without them Chrome shows its own icon.
 - **Where it shows:** Chrome and Edge on Android and Windows. iPhone, Mac Safari and Firefox show the text and the icon only.
 - **No live countdown:** web push has none. An offer's end time goes in the text instead.
 - **Tests:** `MediaTest` (upload rules, roles, dedupe), `MediaServeTest`, `ShopifyLifecycleTest` (photo kept, non-https dropped), `PriceDropTest` (photo in the push), UI spec.

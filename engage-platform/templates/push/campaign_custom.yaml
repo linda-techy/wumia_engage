@@ -1,0 +1,16 @@
+# Campaign with the operator's own words (2026-10-15): the title and text are
+# written in the composer for this one campaign, with a poster under them, the
+# way Indian fashion brands send a festive drop ("Dressed for the festivities ✨").
+# Campaigns need approval by a CAMPAIGN_SEND operator before they go out, which
+# is the review the copy gets. English only, like every template.
+key: push_campaign_custom_v1
+channel: push
+category: marketing
+cooldown: P1D
+locales:
+  en:      { title: "{{title}}", body: "{{body}}" }
+vars: [title, body, url, image]
+# The longest copy that still fits: the lint renders with these and checks the
+# 40/90 limits. Longer words are cut with an ellipsis at send time, and the
+# composer counts characters as the operator types.
+samples: { title: "Dressed for the Onam festivities ✨", body: "Kasavu sarees, set mundu and festive kurtas: the Onam 2026 edit is here. Shop now." }

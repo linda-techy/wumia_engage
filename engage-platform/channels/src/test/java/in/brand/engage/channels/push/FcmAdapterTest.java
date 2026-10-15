@@ -156,4 +156,19 @@ class FcmAdapterTest {
         return new Addresses(LongStream.rangeClosed(1, n).mapToObj(i -> new Addresses.PushTarget(i, "t" + i)).toList(),
                 null, null);
     }
+
+    @Test void the_brand_logo_and_status_bar_badge_go_with_every_push_and_only_over_https() throws Exception {
+        var fcm = new FakeFcm(t -> FcmClient.TokenResult.ok());
+        var msg = new RenderedMessage(Channel.PUSH, "push_campaign_custom_v1", 7, "campaign",
+                "Dressed for the festivities ✨", "The Onam 2026 edit is here.", "https://w.example/c",
+                "https://engage.example/media/ab.png", null, Duration.ofHours(12), false, null);
+
+        new FcmAdapter(fcm, "https://cdn.example/logo-192.png", "http://cdn.example/badge.png").send(msg, targets(1));
+
+        var data = fcm.calls.getFirst().data();
+        assertEquals("https://cdn.example/logo-192.png", data.get("icon"));
+        assertFalse(data.containsKey("badge"), "a non-https badge is dropped, not sent");
+        assertEquals("https://engage.example/media/ab.png", data.get("image"));
+        assertEquals("Dressed for the festivities ✨", data.get("title"));
+    }
 }

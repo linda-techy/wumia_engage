@@ -61,6 +61,13 @@ import java.util.UUID;
 @ExecuteOn(TaskExecutors.BLOCKING)
 public class CampaignController {
 
+    /** The push template whose title and text are written per campaign. */
+    static final String CUSTOM_PUSH_TEMPLATE = "push_campaign_custom_v1";
+
+    private static boolean blank(String v) {
+        return v == null || v.isBlank();
+    }
+
     static final Duration ESTIMATE_FRESH_FOR = Duration.ofHours(24);
     static final Map<String, Integer> DEFAULT_RATE = Map.of("push", 5000, "whatsapp", 600);
     static final Map<String, Integer> MAX_RATE = Map.of("push", 10000, "whatsapp", 1000);
@@ -464,6 +471,10 @@ public class CampaignController {
         if (vars.containsKey("url") && !vars.get("url").startsWith("https://")) throw Problems.badRequest("url must be https://");
         if (vars.containsKey("image") && !vars.get("image").startsWith("https://")) {
             throw Problems.badRequest("image must be https:// (upload a poster, or paste an https link)");
+        }
+        if (CUSTOM_PUSH_TEMPLATE.equals(b.templateKey())
+                && (blank(vars.get("title")) || blank(vars.get("body")))) {
+            throw Problems.badRequest("write the notification title and text");
         }
 
         var scheduledAt = b.scheduledAt();
