@@ -30,8 +30,3 @@ api_version = "2026-07"
 topics = ["checkouts/create", "checkouts/update", "orders/create",
           "carts/create", "carts/update", "customers/create", "customers/update"]
 uri = "https://adjustment-personality-self-meaning.trycloudflare.com/webhooks/shopify"
-
-# Mandatory for every app (Shopify privacy compliance); same endpoint, same HMAC.
-[[webhooks.subscriptions]]
-compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
-uri = "https://adjustment-personality-self-meaning.trycloudflare.com/webhooks/shopify"
