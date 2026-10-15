@@ -269,4 +269,21 @@ class CampaignTest {
                 INSERT INTO channel_capability (identity_id, channel, state, recheck_after)
                 VALUES (?, 'whatsapp', ?, CASE WHEN ? = 'INCAPABLE' THEN now() + interval '30 days' END)""", id, state, state));
     }
+
+    @Test void a_poster_campaign_with_its_own_title_and_text() {
+        db.inTx(c -> Sql.update(c, """
+                INSERT INTO templates (key, channel, category, status) VALUES ('push_campaign_custom_v1', 'push', 'marketing', 'active')
+                ON CONFLICT (key) DO UPDATE SET status = 'active'"""));
+        var poster = "https://engage.example.com/media/" + "ab".repeat(32) + ".png";
+        var ok = create("push", "push_campaign_custom_v1", "vars", Map.of(
+                "title", "Dressed for the festivities ✨", "body", "The Onam 2026 edit is here.",
+                "url", "https://w.example/c/onam", "image", poster));
+        assertEquals(poster, ((Map<?, ?>) ok.get("vars")).get("image"));
+
+        assertEquals(400, status(() -> create("push", "push_campaign_custom_v1", "vars", Map.of(
+                "title", "", "body", "Text only", "url", "https://w.example/c"))), "a title is required");
+        assertEquals(400, status(() -> create("push", "push_campaign_custom_v1", "vars", Map.of(
+                "title", "Hi", "body", "Text", "url", "https://w.example/c", "image", "http://insecure.example/p.png"))),
+                "the poster must be https");
+    }
 }

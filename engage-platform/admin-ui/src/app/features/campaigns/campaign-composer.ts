@@ -7,6 +7,7 @@ import { ErrorState, LoadingState } from '../../shared/states';
 import { SegmentRow } from '../segments/segments';
 import { Campaign } from './campaign-rules';
 import { PosterPicker } from './poster-picker';
+import { BODY_MAX, CUSTOM_PUSH_TEMPLATE, PushPreview, TITLE_MAX, length } from './push-preview';
 
 interface Var {
   key: string;
@@ -28,7 +29,7 @@ function isoToIstInput(iso: string | null): string {
  */
 @Component({
   selector: 'app-campaign-composer',
-  imports: [RouterLink, LoadingState, ErrorState, PosterPicker],
+  imports: [RouterLink, LoadingState, ErrorState, PosterPicker, PushPreview],
   template: `
     <a [routerLink]="id() ? ['/campaigns', id()] : ['/campaigns']" class="text-sm text-slate-600 underline">← Back</a>
     <header class="mb-6 mt-3">
@@ -66,18 +67,39 @@ function isoToIstInput(iso: string | null): string {
         </section>
 
         @if (channel() === 'push') {
+          @if (custom()) {
+            <section class="card space-y-3" aria-labelledby="copy-h">
+              <h2 id="copy-h" class="text-sm font-semibold">Notification text</h2>
+              <label class="block text-sm"><span class="mb-1 flex justify-between font-medium">Title
+                <span class="font-normal" [class.text-red-700]="titleLength() > titleMax">{{ titleLength() }}/{{ titleMax }}</span></span>
+                <input class="input" [value]="named('title')" (input)="setNamed('title', val($event))"
+                       placeholder="Dressed for the festivities ✨" /></label>
+              <label class="block text-sm"><span class="mb-1 flex justify-between font-medium">Text
+                <span class="font-normal" [class.text-red-700]="bodyLength() > bodyMax">{{ bodyLength() }}/{{ bodyMax }}</span></span>
+                <textarea class="input h-20" [value]="named('body')" (input)="setNamed('body', val($event))"
+                          placeholder="The Onam 2026 edit is here: kasavu sarees and festive kurtas."></textarea></label>
+              <p class="text-xs text-slate-500">English only. Past the limit the text is cut with "…". An emoji counts as one character.</p>
+            </section>
+          }
           <app-poster-picker [value]="image()" (changed)="setImage($event)" />
+          <section class="card">
+            <app-push-preview [title]="custom() ? named('title') : 'Title from ' + (templateKey() || 'the template')"
+                              [body]="custom() ? named('body') : 'Text from the template, with your variables'"
+                              [image]="image()" [url]="named('url') || null" />
+          </section>
         }
 
         <section class="card space-y-2">
           <h2 class="text-sm font-semibold">Template variables</h2>
           <p class="text-xs text-slate-500">For example collection, festival, url (https://).</p>
           @for (v of vars(); track $index; let i = $index) {
+            @if (!managed(v.key)) {
             <div class="flex gap-2">
               <input class="input w-40 font-mono" placeholder="name" [value]="v.key" (input)="setVar(i, { key: val($event) })" aria-label="Variable name" />
               <input class="input flex-1" placeholder="value" [value]="v.value" (input)="setVar(i, { value: val($event) })" aria-label="Variable value" />
               <button type="button" class="text-sm underline" (click)="removeVar(i)">remove</button>
             </div>
+            }
           }
           <button type="button" class="btn py-1" (click)="addVar()">Add variable</button>
         </section>
@@ -136,6 +158,28 @@ export default class CampaignComposerPage {
   /** The poster, kept as the template variable {@code image}. */
   readonly image = computed(() => this.vars().find((v) => v.key === 'image')?.value || null);
 
+  readonly titleMax = TITLE_MAX;
+  readonly bodyMax = BODY_MAX;
+  /** The template whose title and text are written here. */
+  readonly custom = computed(() => this.channel() === 'push' && this.templateKey() === CUSTOM_PUSH_TEMPLATE);
+  readonly titleLength = computed(() => length(this.named('title')));
+  readonly bodyLength = computed(() => length(this.named('body')));
+
+  named(key: string): string {
+    return this.vars().find((v) => v.key === key)?.value ?? '';
+  }
+
+  setNamed(key: string, value: string): void {
+    this.vars.update((vs) => (vs.some((v) => v.key === key)
+      ? vs.map((v) => (v.key === key ? { ...v, value } : v))
+      : [...vs, { key, value }]));
+  }
+
+  /** Variables edited by their own fields above, hidden from the generic list. */
+  managed(key: string): boolean {
+    return key === 'image' || (this.custom() && (key === 'title' || key === 'body'));
+  }
+
   setImage(url: string | null): void {
     this.vars.update((vs) => {
       const rest = vs.filter((v) => v.key !== 'image');
@@ -169,7 +213,8 @@ export default class CampaignComposerPage {
       !!this.templateKey() &&
       !!this.segmentId() &&
       (!this.needsCap() || Number(this.budget()) > 0) &&
-      (!this.followUp() || !!this.followUpTemplate()),
+      (!this.followUp() || !!this.followUpTemplate()) &&
+      (!this.custom() || (this.named('title').trim().length > 0 && this.named('body').trim().length > 0)),
   );
 
   #loaded = false;

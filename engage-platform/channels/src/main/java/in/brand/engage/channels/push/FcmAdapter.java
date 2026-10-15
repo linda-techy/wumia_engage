@@ -45,9 +45,28 @@ public class FcmAdapter implements ChannelAdapter {
     private static final Pattern TOPIC_SAFE = Pattern.compile("[A-Za-z0-9_-]{1,32}");
 
     private final FcmClient fcm;
+    private final String icon;
+    private final String badge;
 
     public FcmAdapter(FcmClient fcm) {
+        this(fcm, null, null);
+    }
+
+    /**
+     * @param icon  the brand logo beside every notification (PUSH_ICON_URL: https, square, 192 px)
+     * @param badge Android's status-bar icon (PUSH_BADGE_URL: https, white on transparent, 96 px)
+     */
+    @jakarta.inject.Inject
+    public FcmAdapter(FcmClient fcm, @io.micronaut.context.annotation.Value("${PUSH_ICON_URL:}") String icon,
+                      @io.micronaut.context.annotation.Value("${PUSH_BADGE_URL:}") String badge) {
         this.fcm = fcm;
+        this.icon = https(icon);
+        this.badge = https(badge);
+        if (this.icon == null) LOG.warn("PUSH_ICON_URL is not set: notifications show the browser's icon, not the brand logo");
+    }
+
+    private static String https(String v) {
+        return v != null && v.strip().startsWith("https://") ? v.strip() : null;
     }
 
     @Override
@@ -62,7 +81,9 @@ public class FcmAdapter implements ChannelAdapter {
             // Policy returns UNREACHABLE before this; reaching here is a caller bug.
             throw new ChannelException.Permanent("no_live_tokens", null, false, List.of());
         }
-        var data = message.pushData();
+        var data = new java.util.LinkedHashMap<>(message.pushData());
+        if (icon != null) data.put("icon", icon);
+        if (badge != null) data.put("badge", badge);
         int size = dataBytes(data);
         if (size > MAX_DATA_BYTES) {
             throw new ChannelException.Permanent("payload_too_large",
