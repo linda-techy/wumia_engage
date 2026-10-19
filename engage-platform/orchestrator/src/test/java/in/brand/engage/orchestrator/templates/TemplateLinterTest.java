@@ -148,4 +148,27 @@ class TemplateLinterTest {
             return new String(in.readAllBytes(), StandardCharsets.UTF_8);
         }
     }
+
+    @Test void a_whatsapp_body_ending_in_a_variable_and_a_full_stop_fails_as_meta_does() {
+        var t = TemplateRegistry.parse("""
+                key: wa_trailing_v1
+                channel: whatsapp
+                category: utility
+                locales:
+                  en: { body: "Pickup is scheduled for {{date}}." }
+                vars: [date]
+                samples: { date: "14 Oct" }
+                """, "inline");
+        assertTrue(lint.lint(t).stream().anyMatch(p -> p.contains("ends with a variable")), lint.lint(t).toString());
+        var ok = TemplateRegistry.parse("""
+                key: wa_trailing_v1
+                channel: whatsapp
+                category: utility
+                locales:
+                  en: { body: "Pickup is scheduled for {{date}} at your address." }
+                vars: [date]
+                samples: { date: "14 Oct" }
+                """, "inline");
+        assertEquals(List.of(), lint.lint(ok));
+    }
 }

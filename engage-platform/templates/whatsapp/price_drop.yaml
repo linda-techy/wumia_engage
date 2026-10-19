@@ -7,7 +7,7 @@ channel: whatsapp
 category: marketing
 cooldown: P1D
 locales:
-  en: { body: "Good news: the price of {{product}} has dropped to {{new_price}} at WUMIKA (it was {{old_price}})." }
+  en: { body: "Good news: the price of {{product}} has dropped to {{new_price}} at WUMIKA (it was {{old_price}}). Tap below to see it." }
 buttons:
   - { text: "View the piece", url: "https://wumika.com/{{product_path}}" }
 vars: [product, new_price, old_price, product_path]

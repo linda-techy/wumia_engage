@@ -4,7 +4,7 @@ key: winback_offer_v1
 channel: whatsapp
 category: marketing
 locales:
-  en: { body: "Hi {{name}}, here is something to welcome you back: {{discount}} on your next WUMIKA order with code {{code}}." }
+  en: { body: "Hi {{name}}, here is something to welcome you back: {{discount}} with code {{code}} on your next WUMIKA order." }
 buttons:
   - { text: "Shop the collection", url: "https://wumika.com/{{link_path}}" }
 vars: [name, discount, code, link_path]

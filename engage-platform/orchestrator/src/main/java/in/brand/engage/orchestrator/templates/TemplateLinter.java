@@ -261,6 +261,10 @@ public final class TemplateLinter {
     static final java.util.regex.Pattern META_LANGUAGE = java.util.regex.Pattern.compile("[a-z]{2,3}(_[A-Z]{2})?");
     static final java.util.regex.Pattern QUICK_REPLY = java.util.regex.Pattern.compile("[a-z][a-z0-9_]{0,63}");
     static final java.util.regex.Pattern ADJACENT = java.util.regex.Pattern.compile("}}\\s*\\{\\{");
+    /** A variable with nothing but punctuation and spaces before it. */
+    static final java.util.regex.Pattern LEADING_VAR = java.util.regex.Pattern.compile("^[^\\p{L}\\p{N}]*\\{\\{");
+    /** A variable with nothing but punctuation and spaces after it. */
+    static final java.util.regex.Pattern TRAILING_VAR = java.util.regex.Pattern.compile("}}[^\\p{L}\\p{N}]*$");
     static final int WA_BODY_MAX = 1024;
     static final int WA_BUTTON_TEXT_MAX = 25;
 
@@ -270,8 +274,11 @@ public final class TemplateLinter {
             var body = e.getValue().body().strip();
             var at = where + "locale " + e.getKey() + ": ";
             if (Renderer.length(body) > WA_BODY_MAX) problems.add(at + "body is over " + WA_BODY_MAX + " characters");
-            if (body.startsWith("{{")) problems.add(at + "the body starts with a variable, which Meta rejects");
-            if (body.endsWith("}}")) problems.add(at + "the body ends with a variable, which Meta rejects; end with text or punctuation");
+            // Meta (subcode 2388299) counts punctuation as nothing: "…for {{2}}." and "({{3}})." end with a variable.
+            if (LEADING_VAR.matcher(body).find()) problems.add(at + "the body starts with a variable, which Meta rejects");
+            if (TRAILING_VAR.matcher(body).find()) {
+                problems.add(at + "the body ends with a variable (only punctuation after it), which Meta rejects; end with words");
+            }
             if (ADJACENT.matcher(body).find()) problems.add(at + "two variables side by side, which Meta rejects");
             if (!t.freeForm()) {
                 if (e.getValue().providerName() == null || !META_NAME.matcher(e.getValue().providerName()).matches()) {

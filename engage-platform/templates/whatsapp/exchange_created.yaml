@@ -2,6 +2,6 @@ key: exchange_created_v1
 channel: whatsapp
 category: utility
 locales:
-  en:      { body: "Your exchange for WUMIKA order {{order_no}} is booked. Pickup is scheduled for {{pickup_date}}." }
+  en:      { body: "Your exchange for WUMIKA order {{order_no}} is booked. Pickup is scheduled for {{pickup_date}}; our courier partner will collect it from your address." }
 vars: [order_no, pickup_date]
 samples: { order_no: "#1042", pickup_date: "14 Oct" }

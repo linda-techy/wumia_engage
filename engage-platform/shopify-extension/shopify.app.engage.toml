@@ -1,32 +1,46 @@
-# Engage: Partner-owned custom app (custom distribution to e4bac4-ef.myshopify.com).
-# Replaces the use of wumikaApi for webhooks, because protected customer fields
-# (name, email, phone, address) are always available to Partner custom apps.
+# Engage: Partner-owned custom app (custom distribution to e4bac4-ef.myshopify.com), the
+# LIVE store's app. Points at PRODUCTION (engage.wumika.com on the Wumika VPS, 2026-10-19).
+# Protected customer fields (name, email, phone, address) are available to Partner custom apps.
 #
 # Deploy (only after confirming): npx shopify app deploy --config engage --allow-updates
+# New scopes take effect only after the store owner approves them in the store admin.
 
 client_id = "a177be0be506d6c11ba02b574e588d41"
 name = "wumikaEngage"
-# No app UI yet. Shopify redirects here after install; it does not need to serve anything.
+# No app UI. Shopify redirects here after install; it does not need to serve anything.
 application_url = "https://www.wumika.com/"
 embedded = false
 
 [access_scopes]
-# read_orders covers orders/*, checkouts/* and carts/* webhooks; read_customers
-# covers customers/*. write_discounts (owner's decision, 2026-10-11): the worker
-# creates single-use abandoned-checkout and win-back codes; tested on wumika-dev.
-# Takes effect only after a deploy and the owner approving it in the store admin.
-scopes = "read_orders,read_customers,write_discounts"
+# read_orders covers orders/*, checkouts/* and carts/* webhooks; read_customers the
+# customer topics; read_inventory/read_products restocks and price drops;
+# read_fulfillments shipments; write_pixels + read_customer_events the web pixel;
+# write_discounts the single-use journey codes.
+scopes = "read_orders,read_customers,read_inventory,read_products,write_pixels,read_customer_events,read_fulfillments,write_discounts"
 use_legacy_install_flow = false
 
 [auth]
 redirect_urls = [ ]
 
+# Storefront calls (push sign-up, notify-me, links): wumika.com/apps/push/* -> ingest-api.
+[app_proxy]
+url = "https://engage.wumika.com/shopify/proxy"
+subpath = "push"
+prefix = "apps"
+
 [webhooks]
 api_version = "2026-07"
 
-# Signed with THIS app's Client secret = SHOPIFY_API_SECRET in config/local.env.
-# Quick tunnels change URL on restart: update uri, then redeploy.
+# Signed with THIS app's Client secret = SHOPIFY_API_SECRET in production's /opt/wumika/.env.
 [[webhooks.subscriptions]]
 topics = ["checkouts/create", "checkouts/update", "orders/create",
-          "carts/create", "carts/update", "customers/create", "customers/update"]
-uri = "https://adjustment-personality-self-meaning.trycloudflare.com/webhooks/shopify"
+          "orders/cancelled", "orders/paid", "refunds/create",
+          "carts/create", "carts/update", "customers/create", "customers/update",
+          "inventory_levels/update", "products/update", "app/uninstalled",
+          "fulfillments/create", "fulfillments/update"]
+uri = "https://engage.wumika.com/webhooks/shopify"
+
+# Mandatory for every app (Shopify privacy compliance); same endpoint, same HMAC.
+[[webhooks.subscriptions]]
+compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
+uri = "https://engage.wumika.com/webhooks/shopify"

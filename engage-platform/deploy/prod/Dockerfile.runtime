@@ -1,0 +1,11 @@
+# Production runtime image for one service, from the app Gradle already built
+# (installDist), so the 1-vCPU server never runs a full build.
+#   docker build -f Dockerfile.runtime --build-arg MODULE=ingest-api -t wumika/ingest-api:prod .
+FROM eclipse-temurin:25-jre
+ARG MODULE
+RUN useradd --system --uid 10001 --home-dir /app engage
+COPY ${MODULE} /app
+RUN ln -s /app/bin/${MODULE} /app/bin/start
+USER engage
+WORKDIR /app
+ENTRYPOINT ["/app/bin/start"]
