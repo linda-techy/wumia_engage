@@ -37,7 +37,11 @@ $SSH "$HOST" "set -e
   echo $REV > /opt/wumika/REVISION
   cd /opt/wumika
   test -f .env || { echo '/opt/wumika/.env missing'; exit 1; }
-  docker compose up -d --remove-orphans
+  # Database first, then migrations as an explicit step (an exited one-shot job is
+  # not re-run by 'up'), then every app container recreated on the new images.
+  docker compose up -d --remove-orphans db
+  docker compose run --rm -T migrate
+  docker compose up -d --force-recreate --no-deps ingest admin worker console
   docker image prune -f >/dev/null
   rm -rf /opt/wumika/release/b /opt/wumika/release/bundle.tgz"
 rm -rf "$STAGE" "$STAGE.tgz"
