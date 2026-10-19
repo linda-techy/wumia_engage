@@ -1,0 +1,13 @@
+# back_in_stock with the product's photo as its header and a bold first
+# line. Falls back to back_in_stock_v1 without a photo or approval.
+key: back_in_stock_v2
+channel: whatsapp
+category: marketing
+header_image: "https://engage.wumika.com/media/product/{{photo}}"
+fallback: back_in_stock_v1
+locales:
+  en: { body: "*Back in stock*\n\nGood news: {{product}} is back in stock at WUMIKA. You asked us to let you know when it returned." }
+buttons:
+  - { text: "View the piece", url: "https://wumika.com/{{product_path}}" }
+vars: [product, product_path, photo]
+samples: { product: "Kundan Jhumka Earrings", product_path: "products/kundan-jhumka-earrings?variant=44012345678901", photo: "8741079023804-9f1c2a7e" }

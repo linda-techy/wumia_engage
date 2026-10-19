@@ -61,6 +61,7 @@ class OrderTrackingTest {
                         VALUES (?, 'en', ?, 'utility', 'utility', 'APPROVED', 'GREEN')
                         ON CONFLICT (provider_name, language) DO UPDATE SET status = 'APPROVED', quality = 'GREEN'""", t, t);
             }
+            Sql.update(c, "DELETE FROM wa_templates WHERE provider_name = 'order_confirmed_v2'");
             return null;
         });
         config.invalidate();
@@ -83,6 +84,60 @@ class OrderTrackingTest {
         assertEquals("order_confirmed_v1", call.name());
         assertEquals(List.of("Priya", "#1042", "₹12,499"), call.bodyParams());
         assertEquals("exhausted|sent", run(OrderTracking.CONFIRMED, "order:" + orderId));
+    }
+
+    @Test void the_confirmation_shows_the_piece_once_meta_approves_the_photo_version() {
+        var productId = Long.toString(ThreadLocalRandom.current().nextLong(1_000_000_000_000L, 9_000_000_000_000L));
+        var image = "https://cdn.shopify.com/s/files/1/0664/9679/0716/files/test-" + productId + ".png?v=1";
+        db.inTx(c -> {
+            Sql.update(c, """
+                    INSERT INTO products (product_id, handle, title, image_url, updated_at) VALUES (?, ?, 'Kundan Jhumka', ?, now())""",
+                    productId, "kundan-" + productId, image);
+            Sql.update(c, """
+                    INSERT INTO order_lines (order_id, line_no, product_id, quantity, price_paise) VALUES (?, 0, ?, 1, 1249900)""",
+                    orderId, productId);
+            Sql.update(c, """
+                    INSERT INTO wa_templates (key, language, provider_name, requested_category, approved_category, status, quality)
+                    VALUES ('order_confirmed_v2', 'en', 'order_confirmed_v2', 'utility', NULL, 'PENDING', 'UNKNOWN')""");
+            return null;
+        });
+
+        event("order_placed", "{\"order_id\":\"" + orderId + "\",\"total_paise\":1249900}");
+        dispatcher.dispatchOnce();
+        var pending = wa.all.getLast().whatsapp();
+        assertEquals("order_confirmed_v1", pending.name(), "Meta has not approved the photo version yet");
+        assertNull(pending.headerImage());
+
+        db.inTx(c -> Sql.update(c, """
+                UPDATE wa_templates SET status = 'APPROVED', approved_category = 'utility', quality = 'GREEN'
+                 WHERE provider_name = 'order_confirmed_v2'"""));
+        var second = "test-order-" + UUID.randomUUID();
+        db.inTx(c -> {
+            Sql.update(c, "INSERT INTO orders (id, order_number, identity_id, total_paise, created_at) VALUES (?, '#1043', ?, 1249900, now())",
+                    second, identity);
+            Sql.update(c, "INSERT INTO order_lines (order_id, line_no, product_id, quantity, price_paise) VALUES (?, 0, ?, 1, 1249900)",
+                    second, productId);
+            return null;
+        });
+        event("order_placed", "{\"order_id\":\"" + second + "\",\"total_paise\":1249900}");
+        dispatcher.dispatchOnce();
+        var approved = wa.all.getLast().whatsapp();
+        assertEquals("order_confirmed_v2", approved.name());
+        assertEquals(List.of("Priya", "#1043", "₹12,499"), approved.bodyParams());
+        assertEquals("https://engage.wumika.com/media/product/"
+                + ProductImages.photoRef(new ProductImages.Photo(productId, image)), approved.headerImage());
+        assertEquals("order_confirmed_v2", text("SELECT template_key FROM sends WHERE id = " + wa.all.getLast().sendId()),
+                "the send row names what went out");
+    }
+
+    @Test void without_a_photo_the_approved_photo_version_falls_back_to_text() {
+        db.inTx(c -> Sql.update(c, """
+                INSERT INTO wa_templates (key, language, provider_name, requested_category, approved_category, status, quality)
+                VALUES ('order_confirmed_v2', 'en', 'order_confirmed_v2', 'utility', 'utility', 'APPROVED', 'GREEN')"""));
+        event("order_placed", "{\"order_id\":\"" + orderId + "\",\"total_paise\":1249900}");
+        dispatcher.dispatchOnce();
+        assertEquals("order_confirmed_v1", wa.all.getLast().whatsapp().name());
+        assertEquals("order_confirmed_v1", text("SELECT template_key FROM sends WHERE id = " + wa.all.getLast().sendId()));
     }
 
     @Test void shipped_then_out_for_delivery_then_delivered() {

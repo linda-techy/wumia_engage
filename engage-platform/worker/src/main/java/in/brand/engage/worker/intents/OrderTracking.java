@@ -83,7 +83,7 @@ public class OrderTracking implements EventConsumer {
         }
 
         @Bean @Singleton CascadeDefinition orderConfirmed() {
-            return new CascadeDefinition(CONFIRMED, Priority.TRANSACTIONAL, List.of(wa("order_confirmed_v1")))
+            return new CascadeDefinition(CONFIRMED, Priority.TRANSACTIONAL, List.of(wa("order_confirmed_v2")))
                     .succeedsOn("read");
         }
 
@@ -160,7 +160,11 @@ public class OrderTracking implements EventConsumer {
         vars.put("name", order.firstName() == null ? "there" : order.firstName());
         vars.put("amount", rupees(order.totalPaise()));
         return switch (e.name()) {
-            case "order_placed" -> List.of(intent(e.identityId(), CONFIRMED, "order:" + orderId, vars));
+            case "order_placed" -> {
+                // The confirmation's header photo: the most expensive piece in the order.
+                ProductImages.put(vars, ProductImages.byProductId(c, topProduct(c, orderId)));
+                yield List.of(intent(e.identityId(), CONFIRMED, "order:" + orderId, vars));
+            }
             case "refund_initiated" -> {
                 var refundId = e.props().get("refund_id");
                 if (refundId == null) yield List.of();
@@ -187,7 +191,16 @@ public class OrderTracking implements EventConsumer {
         };
     }
 
-    private static MessageIntent intent(UUID identity, String key, String subject, Map<String, String> vars) {
+    private static String topProduct(Connection c, String orderId) throws SQLException {
+        try (var ps = Sql.prepare(c, """
+                SELECT product_id FROM order_lines WHERE order_id = ? AND product_id IS NOT NULL
+                 ORDER BY price_paise DESC NULLS LAST, line_no LIMIT 1""", orderId);
+             var rs = ps.executeQuery()) {
+            return rs.next() ? rs.getString(1) : null;
+        }
+    }
+
+        private static MessageIntent intent(UUID identity, String key, String subject, Map<String, String> vars) {
         return new MessageIntent(identity, key, subject, Map.copyOf(vars), null);
     }
 

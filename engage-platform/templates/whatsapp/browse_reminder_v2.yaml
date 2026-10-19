@@ -1,0 +1,14 @@
+# browse_reminder with the product's photo as its header and a bold first
+# line. One a day per person, shared with browse_reminder_v1, its fallback.
+key: browse_reminder_v2
+channel: whatsapp
+category: marketing
+cooldown: P1D
+header_image: "https://engage.wumika.com/media/product/{{photo}}"
+fallback: browse_reminder_v1
+locales:
+  en: { body: "*Still thinking it over?*\n\n{{product}} is still available at WUMIKA, whenever you are ready." }
+buttons:
+  - { text: "View the piece", url: "https://wumika.com/{{product_path}}" }
+vars: [product, product_path, photo]
+samples: { product: "Kundan Jhumka Earrings", product_path: "products/kundan-jhumka-earrings?variant=44012345678901", photo: "8741079023804-9f1c2a7e" }

@@ -1,0 +1,15 @@
+# price_drop with the product's photo as its header and a bold first line.
+# Real numbers, no "sale" framing. One a day per person, shared with
+# price_drop_v1, its fallback.
+key: price_drop_v2
+channel: whatsapp
+category: marketing
+cooldown: P1D
+header_image: "https://engage.wumika.com/media/product/{{photo}}"
+fallback: price_drop_v1
+locales:
+  en: { body: "*Now at a lower price*\n\nGood news: the price of {{product}} has dropped to {{new_price}} at WUMIKA (it was {{old_price}}). Tap below to see it." }
+buttons:
+  - { text: "View the piece", url: "https://wumika.com/{{product_path}}" }
+vars: [product, new_price, old_price, product_path, photo]
+samples: { product: "Kundan Jhumka Earrings", new_price: "₹12,499", old_price: "₹14,999", product_path: "products/kundan-jhumka-earrings?variant=44012345678901", photo: "8741079023804-9f1c2a7e" }

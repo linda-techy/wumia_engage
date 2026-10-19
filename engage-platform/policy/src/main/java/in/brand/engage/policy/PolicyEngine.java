@@ -148,7 +148,8 @@ public class PolicyEngine {
 
         // 8. Per-template cooldown, authored with the copy (templates/*.yaml).
         var cooldown = cooldowns.cooldown(template.key()).orElse(null);
-        if (cooldown != null && usage.templateSentSince(c, req.identityId(), template, now.minus(cooldown)))
+        if (cooldown != null && usage.templateSentSince(c, req.identityId(), template,
+                cooldowns.cooldownKeys(template.key()), now.minus(cooldown)))
             return out.block(BlockReason.TEMPLATE_COOLDOWN, Map.of("cooldown", cooldown.toString()));
 
         // 9. Budget guard. Exhaustion is temporary, so it defers to the next IST day.

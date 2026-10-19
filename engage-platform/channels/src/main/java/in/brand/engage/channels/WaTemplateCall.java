@@ -12,9 +12,11 @@ import java.util.Objects;
  *                          (an empty list when the template has none)
  * @param quickReplyPayloads the payload of each quick-reply button, by button index: what a
  *                          tap sends back (a template has either URL buttons or quick replies)
+ * @param headerImage       the https link of the header photo, for a template approved with an
+ *                          IMAGE header; null for a template without a header
  */
 public record WaTemplateCall(String name, String language, List<String> bodyParams, List<String> urlButtonSuffixes,
-                             List<String> quickReplyPayloads) {
+                             List<String> quickReplyPayloads, String headerImage) {
 
     public WaTemplateCall {
         Objects.requireNonNull(name, "name");
@@ -24,7 +26,12 @@ public record WaTemplateCall(String name, String language, List<String> bodyPara
         quickReplyPayloads = List.copyOf(quickReplyPayloads);
     }
 
+    public WaTemplateCall(String name, String language, List<String> bodyParams, List<String> urlButtonSuffixes,
+                          List<String> quickReplyPayloads) {
+        this(name, language, bodyParams, urlButtonSuffixes, quickReplyPayloads, null);
+    }
+
     public WaTemplateCall(String name, String language, List<String> bodyParams, List<String> urlButtonSuffixes) {
-        this(name, language, bodyParams, urlButtonSuffixes, List.of());
+        this(name, language, bodyParams, urlButtonSuffixes, List.of(), null);
     }
 }

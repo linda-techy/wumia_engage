@@ -31,6 +31,10 @@ final class WaPayloads {
 
     static Map<String, Object> template(WaTemplateCall wa) {
         var components = new ArrayList<Map<String, Object>>();
+        if (wa.headerImage() != null) {
+            components.add(Map.of("type", "header", "parameters",
+                    List.of(Map.of("type", "image", "image", Map.of("link", wa.headerImage())))));
+        }
         if (!wa.bodyParams().isEmpty()) {
             components.add(Map.of("type", "body", "parameters", text(wa.bodyParams())));
         }

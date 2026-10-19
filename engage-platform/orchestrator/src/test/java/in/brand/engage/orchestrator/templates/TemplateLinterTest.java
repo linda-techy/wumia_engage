@@ -15,7 +15,7 @@ class TemplateLinterTest {
 
     @Test void every_template_in_the_repository_lints_clean() {
         var templates = TemplateRegistry.loadClasspath();
-        assertEquals(41, templates.size(), "templates/push, whatsapp, sms and email");
+        assertEquals(48, templates.size(), "templates/push, whatsapp, sms and email");
         assertEquals(List.of(), lint.lintAll(templates));
     }
 

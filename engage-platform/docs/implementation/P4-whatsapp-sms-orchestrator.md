@@ -360,3 +360,34 @@ Same shape for `out_for_delivery` (wait 30 min before SMS), `ndr_raised` (wait 1
 - [ ] Capability distribution visible (`CAPABLE`/`UNKNOWN`/`INCAPABLE`); `UNKNOWN` share falling week on week
 - [ ] SMS delivery rate ≥ 95% on DLRs (a lower rate usually means a DLT template mismatch)
 - [ ] Spend in `spend_ledger` within 2% of Meta's billing for the period
+
+---
+
+## Addendum (2026-10-19): photo templates
+
+The owner liked the photo headers in the old Interakt templates. So seven WhatsApp templates now have a `_v2`, each with the product's photo as an IMAGE header and a bold first line:
+
+| `_v2` | photo | journey |
+|---|---|---|
+| `order_confirmed_v2` | the most expensive piece in the order | order_tracking |
+| `cart_reminder_v2` | the most expensive item in the cart | cart_recovery |
+| `checkout_reminder_v2`, `checkout_offer_v2` | the most expensive item in the checkout | checkout_abandon |
+| `browse_reminder_v2` | the piece viewed | browse_abandon |
+| `price_drop_v2` | the piece | price_drop |
+| `back_in_stock_v2` | the piece | back_in_stock |
+
+The `_v1` texts stay. Win-back has no photo: it speaks of new pieces, not one the customer bought.
+
+- **Template files:**
+  - `header_image:` is the photo's link, `https://engage.wumika.com/media/product/{{photo}}`.
+  - `fallback:` names the `_v1`.
+  - The lint requires a fallback with the same category and cooldown that needs no variable the `_v2` lacks.
+- **The fallback is chosen before policy.** The router sends the `_v1` instead when the person's product has no photo, or when Meta has not approved every locale of the `_v2`. So the `sends` row, the cooldown and the spend are those of the message that actually went. The journeys name the `_v2` and keep working before Meta approves it.
+- **One cooldown:** a `_v2` and its `_v1` count as one message (`TemplateCooldowns.cooldownKeys`).
+- **The photo:**
+  - The worker adds the photo variable (`<product id>-<8 hex of SHA-256(image_url)>`); a new photo gets a new link, so Meta's cache is bypassed.
+  - ingest-api's `/media/product/` fetches `products.image_url`, only from cdn.shopify.com at 1024 px, asking for JPEG or PNG only. Shopify's CDN serves WebP to any client that accepts it, and Meta refuses WebP. Anything else gets a 404.
+- **Catalogue:** `products` was filled only by products/update webhooks. `worker products-import` reads the storefront's public `/products.json` once; it is read-only towards Shopify and holds no customer data. On 2026-10-19: 219 products, 147 PNG, 47 WebP, 25 JPG.
+- **Submitting:**
+  - `wa-submit --yes` downloads each `_v2`'s sample photo (its header link with the sample values) and uploads it with the Resumable Upload API, to the token's own app (`GET /app`, or `WA_APP_ID`).
+  - It then submits the template with `example.header_handle`.

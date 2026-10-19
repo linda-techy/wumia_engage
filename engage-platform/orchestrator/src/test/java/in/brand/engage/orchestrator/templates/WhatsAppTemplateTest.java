@@ -81,6 +81,77 @@ class WhatsAppTemplateTest {
         assertTrue(promo.stream().anyMatch(p -> p.contains("promotional language")), promo.toString());
     }
 
+    static final String PHOTO = """
+            key: cart_v2
+            channel: whatsapp
+            category: marketing
+            header_image: "https://engage.wumika.com/media/product/{{photo}}"
+            fallback: cart_v1
+            locales:
+              en: { body: "*Still in your bag*\\n\\nHi {{name}}, {{product}} is still in your bag. Tap below to see it." }
+            vars: [name, product, photo]
+            samples: { name: "Priya", product: "Jhumkas", photo: "8741079023804-9f1c2a7e" }
+            """;
+
+    static final String TEXT = """
+            key: cart_v1
+            channel: whatsapp
+            category: marketing
+            locales:
+              en: { body: "Hi {{name}}, {{product}} is still in your bag. Tap below to see it." }
+            vars: [name, product]
+            samples: { name: "Priya", product: "Jhumkas" }
+            """;
+
+    @Test void a_photo_template_renders_its_header_link_and_keeps_the_bold_first_line() {
+        var t = parse(PHOTO);
+        var call = new Renderer().whatsapp(t, "en", Map.of("name", "Priya", "product", "Jhumkas", "photo", "42-ab12cd34")).call();
+        assertEquals("https://engage.wumika.com/media/product/42-ab12cd34", call.headerImage());
+        assertEquals(List.of("Priya", "Jhumkas"), call.bodyParams(), "the photo is a header parameter, not a body one");
+        assertTrue(t.locales().get("en").body().startsWith("*Still in your bag*\n\nHi "), t.locales().get("en").body());
+        assertNull(new Renderer().whatsapp(parse(TEXT), "en", Map.of("name", "P", "product", "J")).call().headerImage());
+        assertEquals(List.of(), TemplateLinter.standard().lintAll(List.of(t, parse(TEXT))));
+    }
+
+    @Test void the_lint_holds_a_photo_template_to_its_fallback() {
+        var lint = TemplateLinter.standard();
+        var noFallback = lint.lint(parse(PHOTO.replace("fallback: cart_v1\n", "")));
+        assertTrue(noFallback.stream().anyMatch(p -> p.contains("needs a fallback")), noFallback.toString());
+
+        var missing = lint.lintAll(List.of(parse(PHOTO)));
+        assertTrue(missing.stream().anyMatch(p -> p.contains("is not a template")), missing.toString());
+
+        var utility = lint.lintAll(List.of(parse(PHOTO), parse(TEXT.replace("category: marketing", "category: utility"))));
+        assertTrue(utility.stream().anyMatch(p -> p.contains("same channel and category")), utility.toString());
+
+        var needsMore = lint.lintAll(List.of(parse(PHOTO), parse(TEXT.replace("vars: [name, product]", "vars: [name, product, code]")
+                .replace("in your bag.", "in your bag with {{code}}.").replace("product: \"Jhumkas\" }", "product: \"Jhumkas\", code: \"X\" }"))));
+        assertTrue(needsMore.stream().anyMatch(p -> p.contains("needs 'code'")), needsMore.toString());
+
+        var cooldown = lint.lintAll(List.of(parse(PHOTO), parse(TEXT.replace("category: marketing", "category: marketing\ncooldown: P1D"))));
+        assertTrue(cooldown.stream().anyMatch(p -> p.contains("same cooldown")), cooldown.toString());
+
+        var http = lint.lint(parse(PHOTO.replace("\"https://engage", "\"http://engage")));
+        assertTrue(http.stream().anyMatch(p -> p.contains("https link")), http.toString());
+
+        assertThrows(IllegalStateException.class, () -> parse("""
+                key: push_x_v1
+                channel: push
+                category: marketing
+                header_image: "https://x/{{url}}"
+                locales:
+                  en: { title: "T", body: "B" }
+                vars: [url]
+                samples: { url: "https://x" }
+                """), "header_image is WhatsApp only");
+    }
+
+    @Test void a_photo_template_and_its_fallback_share_one_cooldown() {
+        var registry = new TemplateRegistry(null, List.of(parse(PHOTO), parse(TEXT)), TemplateLinter.standard());
+        assertEquals(java.util.Set.of("cart_v1", "cart_v2"), registry.cooldownKeys("cart_v2"));
+        assertEquals(java.util.Set.of("cart_v1", "cart_v2"), registry.cooldownKeys("cart_v1"));
+    }
+
     @Test void quick_replies_lint_and_render_to_payloads() {
         var ok = """
                 key: ask_v1

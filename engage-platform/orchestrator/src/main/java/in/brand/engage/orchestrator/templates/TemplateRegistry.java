@@ -44,8 +44,9 @@ public class TemplateRegistry implements TemplateCooldowns, ApplicationEventList
     private static final Logger LOG = LoggerFactory.getLogger(TemplateRegistry.class);
     static final String INDEX = "templates/index.txt";
     private static final Set<String> FIELDS = Set.of("key", "channel", "category", "cooldown", "locales", "vars", "samples",
-            "buttons", "dlt_template_id", "msg91_template_id", "truncate");
+            "buttons", "dlt_template_id", "msg91_template_id", "truncate", "header_image", "fallback");
     private static final Set<String> SMS_ONLY = Set.of("dlt_template_id", "msg91_template_id", "truncate");
+    private static final Set<String> WHATSAPP_ONLY = Set.of("header_image", "fallback");
     private static final Set<String> COPY_FIELDS = Set.of("title", "body", "language", "provider_name");
 
     private final Map<String, MessageTemplate> byKey;
@@ -78,6 +79,16 @@ public class TemplateRegistry implements TemplateCooldowns, ApplicationEventList
     @Override
     public Optional<Duration> cooldown(String templateKey) {
         return find(templateKey).map(MessageTemplate::cooldown);
+    }
+
+    /** The template, its fallback, and every template that falls back to it. */
+    @Override
+    public Set<String> cooldownKeys(String templateKey) {
+        var keys = new java.util.HashSet<String>();
+        keys.add(templateKey);
+        find(templateKey).map(MessageTemplate::fallback).ifPresent(keys::add);
+        for (var t : byKey.values()) if (templateKey.equals(t.fallback())) keys.add(t.key());
+        return Set.copyOf(keys);
     }
 
     @Override
@@ -128,6 +139,9 @@ public class TemplateRegistry implements TemplateCooldowns, ApplicationEventList
         boolean sms = channel == Channel.SMS;
         for (var f : SMS_ONLY) {
             if (!sms && m.containsKey(f)) throw invalid(source, "'" + f + "' is for SMS templates only");
+        }
+        for (var f : WHATSAPP_ONLY) {
+            if (channel != Channel.WHATSAPP && m.containsKey(f)) throw invalid(source, "'" + f + "' is for WhatsApp templates only");
         }
         Duration cooldown = null;
         if (m.get("cooldown") != null) {
@@ -191,8 +205,10 @@ public class TemplateRegistry implements TemplateCooldowns, ApplicationEventList
                     text(m, "msg91_template_id", source).strip(), Set.copyOf(truncate));
         }
 
+        var headerImage = m.get("header_image") == null ? null : text(m, "header_image", source).strip();
+        var fallback = m.get("fallback") == null ? null : text(m, "fallback", source).strip();
         return new MessageTemplate(key, channel, category, cooldown, Map.copyOf(locales), List.copyOf(vars),
-                Map.copyOf(samples), List.copyOf(buttons), source, dlt);
+                Map.copyOf(samples), List.copyOf(buttons), source, dlt, headerImage, fallback);
     }
 
     private static String optional(Map<?, ?> m, String field, String fallback) {

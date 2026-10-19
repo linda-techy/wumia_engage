@@ -36,6 +36,12 @@ public record SendCommand(UUID identityId, String intentKey, Long cascadeRunId, 
         vars = Map.copyOf(vars);
     }
 
+    /** The same attempt with other copy (a photo template's fallback). */
+    SendCommand withTemplateKey(String key) {
+        return new SendCommand(identityId, intentKey, cascadeRunId, stepIndex, channel, key, vars, idempotencyKey, ttl,
+                highUrgency, allowStaleDevices, reply);
+    }
+
     DecisionRequest toDecisionRequest() {
         var req = DecisionRequest.of(identityId, channel, templateKey).forJourney(intentKey).inRun(cascadeRunId);
         if (reply) req = req.asReply();

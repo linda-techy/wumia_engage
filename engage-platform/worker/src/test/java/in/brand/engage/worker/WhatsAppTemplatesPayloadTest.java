@@ -40,6 +40,24 @@ class WhatsAppTemplatesPayloadTest {
                 buttons);
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void a_photo_template_is_submitted_with_an_image_header_and_its_sample_photo() {
+        var cart = loadAll().stream().filter(x -> x.key().equals("cart_reminder_v2")).findFirst().orElseThrow();
+        var payload = WhatsAppTemplates.payload(cart, cart.locales().get("en"), "4::aGFuZGxl");
+        var components = (List<Map<String, Object>>) payload.get("components");
+        assertEquals(Map.of("type", "HEADER", "format", "IMAGE", "example", Map.of("header_handle", List.of("4::aGFuZGxl"))),
+                components.getFirst());
+        assertEquals("*Still in your bag*\n\nHi {{1}}, {{2}} is still in your WUMIKA bag. Tap below to pick up where you left off.",
+                components.get(1).get("text"), "the photo is not a body variable");
+        assertEquals("BUTTONS", components.get(2).get("type"));
+        assertEquals("https://engage.wumika.com/media/product/8741079023804-9f1c2a7e",
+                new WhatsAppTemplates.Submission(cart, cart.locales().get("en")).samplePhoto());
+
+        var text = loadAll().stream().filter(x -> x.key().equals("cart_reminder_v1")).findFirst().orElseThrow();
+        assertNull(new WhatsAppTemplates.Submission(text, text.locales().get("en")).samplePhoto());
+    }
+
     static List<in.brand.engage.orchestrator.templates.MessageTemplate> loadAll() {
         try {
             var m = in.brand.engage.orchestrator.templates.TemplateRegistry.class.getDeclaredMethod("loadClasspath");

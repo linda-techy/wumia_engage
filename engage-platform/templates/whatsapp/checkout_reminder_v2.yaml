@@ -1,0 +1,13 @@
+# checkout_reminder with the product's photo as its header and a bold first
+# line. Falls back to checkout_reminder_v1 without a photo or approval.
+key: checkout_reminder_v2
+channel: whatsapp
+category: marketing
+header_image: "https://engage.wumika.com/media/product/{{photo}}"
+fallback: checkout_reminder_v1
+locales:
+  en: { body: "*Your order is almost done*\n\nHi {{name}}, you left {{product}} in your WUMIKA checkout. Your details are saved, so finishing your order takes a few seconds." }
+buttons:
+  - { text: "Complete order", url: "https://wumika.com/{{checkout_path}}" }
+vars: [name, product, checkout_path, photo]
+samples: { name: "Priya", product: "Kundan Jhumka Earrings", checkout_path: "checkouts/cn/hWN4abc123/recover", photo: "8741079023804-9f1c2a7e" }

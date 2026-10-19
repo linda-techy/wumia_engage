@@ -33,7 +33,10 @@ import java.util.regex.Pattern;
  *       Meta name or language Meta would refuse; a URL button that is not
  *       https, whose variable is not at the very end, or whose label is over
  *       25 characters; buttons on a free-form (SERVICE) reply; the same Meta
- *       name and language twice.</li>
+ *       name and language twice; a header photo that is not an https link,
+ *       or with no fallback; a fallback that is missing, not the same
+ *       category and cooldown, has a header itself, or needs a variable the
+ *       photo template does not declare.</li>
  *   <li>SMS (DLT, CLAUDE.md §5): a marketing or service category; a DLT id
  *       that is neither 19 digits nor PENDING; a locale other than {@code en};
  *       a variable used twice; a sample value over 30 characters that is not
@@ -102,6 +105,7 @@ public final class TemplateLinter {
             used.addAll(Renderer.placeholders(c.body()));
         });
         t.buttons().stream().filter(b -> !b.isQuickReply()).forEach(b -> used.addAll(Renderer.placeholders(b.url())));
+        if (t.headerImage() != null) used.addAll(Renderer.placeholders(t.headerImage()));
         if (t.channel() == Channel.WHATSAPP) problems.addAll(whatsapp(t, where));
         if (t.channel() == Channel.SMS) problems.addAll(sms(t, where));
         if (t.channel() == Channel.EMAIL) problems.addAll(email(t, where));
@@ -164,6 +168,35 @@ public final class TemplateLinter {
                 }
             }
             problems.addAll(lint(t));
+        }
+        var byKey = new java.util.HashMap<String, MessageTemplate>();
+        templates.forEach(t -> byKey.put(t.key(), t));
+        for (var t : templates) {
+            if (t.fallback() != null) problems.addAll(fallback(t, byKey.get(t.fallback())));
+        }
+        return problems;
+    }
+
+    /**
+     * A fallback goes out in the photo template's place, from the same
+     * variables, so it must be a plain WhatsApp template of the same category
+     * and cooldown that needs nothing the photo template does not have.
+     */
+    private static List<String> fallback(MessageTemplate t, MessageTemplate f) {
+        var where = t.source() + " (" + t.key() + "): ";
+        if (f == null) return List.of(where + "fallback " + t.fallback() + " is not a template");
+        var problems = new ArrayList<String>();
+        if (f.channel() != t.channel() || f.category() != t.category()) {
+            problems.add(where + "fallback " + f.key() + " must be the same channel and category (" + t.category().dbName() + ")");
+        }
+        if (f.headerImage() != null || f.fallback() != null) {
+            problems.add(where + "fallback " + f.key() + " must be a plain template, with no header and no fallback of its own");
+        }
+        if (!java.util.Objects.equals(f.cooldown(), t.cooldown())) {
+            problems.add(where + "fallback " + f.key() + " must have the same cooldown; they count as one message");
+        }
+        for (var v : f.vars()) {
+            if (!t.vars().contains(v)) problems.add(where + "fallback " + f.key() + " needs '" + v + "', which this template does not declare");
         }
         return problems;
     }
@@ -290,6 +323,14 @@ public final class TemplateLinter {
             }
         }
         if (t.freeForm() && !t.buttons().isEmpty()) problems.add(where + "a free-form (SERVICE) reply cannot have buttons");
+        if (t.headerImage() != null) {
+            if (t.freeForm()) problems.add(where + "a free-form (SERVICE) reply cannot have a header photo");
+            if (!t.headerImage().startsWith("https://")) problems.add(where + "header_image must be an https link");
+            if (t.fallback() == null) {
+                problems.add(where + "a template with header_image needs a fallback without one, for people whose product has no photo");
+            }
+        }
+        if (t.fallback() != null && t.fallback().equals(t.key())) problems.add(where + "a template cannot be its own fallback");
         long replies = t.buttons().stream().filter(MessageTemplate.Button::isQuickReply).count();
         if (replies > 0 && replies < t.buttons().size()) {
             problems.add(where + "mix of quick-reply and URL buttons; use one kind per template");

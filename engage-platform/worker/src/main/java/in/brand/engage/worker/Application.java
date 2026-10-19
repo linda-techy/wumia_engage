@@ -15,6 +15,10 @@ public final class Application {
             WaCommands.run(args);
             return;
         }
+        if (ProductImport.handles(args)) {         // one-off: products and photos from the storefront catalogue
+            ProductImport.run(args);
+            return;
+        }
         Micronaut.run(Application.class, args);
     }
 }

@@ -59,7 +59,8 @@ final class WaCommands {
                     System.out.println(submissions.size() + " template locale(s) not on Meta yet"
                             + (yes ? "; submitting" : "; dry run, add --yes to submit"));
                     for (var s : submissions) {
-                        System.out.println(new String(json.writeValueAsBytes(s), java.nio.charset.StandardCharsets.UTF_8));
+                        System.out.println(new String(json.writeValueAsBytes(templates.preview(s)), java.nio.charset.StandardCharsets.UTF_8));
+                        if (s.samplePhoto() != null) System.out.println("  sample photo: " + s.samplePhoto());
                         if (yes) System.out.println("  -> " + templates.submit(s));
                     }
                 }

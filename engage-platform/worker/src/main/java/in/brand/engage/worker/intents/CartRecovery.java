@@ -26,7 +26,7 @@ import java.util.Map;
  * 2026-10-10), push as the free fallback and second nudge. No SMS.
  *
  * <pre>
- * t+45 min  WhatsApp cart_reminder_v1        marketing opt-in, not INCAPABLE, cart ≥ wa_min_cart_paise
+ * t+45 min  WhatsApp cart_reminder_v2        marketing opt-in, not INCAPABLE, cart ≥ wa_min_cart_paise
  *           (skipped → the push goes at once instead)
  * +4 h      Push     push_cart_recovery_v1   a live browser subscription
  * +20 h     Email    email_cart_v1           email marketing consent (skipped until SES is set up)
@@ -62,7 +62,7 @@ public class CartRecovery implements EventConsumer {
         @Singleton
         CascadeDefinition cartRecovery() {
             return new CascadeDefinition(INTENT, Priority.MID_INTENT, List.of(
-                    Step.whatsapp("cart_reminder_v1")
+                    Step.whatsapp("cart_reminder_v2")
                             .require(Guard.WA_MARKETING, Guard.WA_CAPABLE_OR_UNKNOWN, Guard.hasVar(CheckoutAbandon.WA_OK))
                             .waitAfter(Duration.ofHours(4)),
                     Step.push("push_cart_recovery_v1", TTL).waitAfter(Duration.ofHours(20)),

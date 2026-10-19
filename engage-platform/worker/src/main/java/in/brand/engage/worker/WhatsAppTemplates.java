@@ -35,7 +35,9 @@ import org.slf4j.LoggerFactory;
  *     numbers' quality and tier go to {@code wa_phone_numbers} with history.</li>
  * <li>{@link #submissions}: what would be submitted for review, built from
  *     the template files with {@link Renderer#metaBody} so the approved text
- *     is exactly what is sent. Submitting is a deliberate command, never a job.</li>
+ *     is exactly what is sent. Submitting is a deliberate command, never a job.
+ *     A photo template's sample photo (its header link with the sample
+ *     values) is uploaded to Meta first; the template refers to it by handle.</li>
  * </ul>
  */
 @Singleton
@@ -135,24 +137,55 @@ public class WhatsAppTemplates {
         }
     }
 
-    /** One submission per WhatsApp template locale not yet on Meta, as the Graph API wants it. */
-    public List<Map<String, Object>> submissions() {
+    /** A template locale Meta does not have yet. */
+    public record Submission(MessageTemplate template, MessageTemplate.Copy copy) {
+
+        /** The sample header photo's link (the header with the sample values), or null without a header. */
+        public String samplePhoto() {
+            if (template.headerImage() == null) return null;
+            var m = PLACEHOLDER.matcher(template.headerImage());
+            var out = new StringBuilder();
+            while (m.find()) {
+                m.appendReplacement(out, java.util.regex.Matcher.quoteReplacement(template.samples().getOrDefault(m.group(1), "")));
+            }
+            m.appendTail(out);
+            return out.toString();
+        }
+    }
+
+    /** Shown in a dry run, where nothing is uploaded. */
+    static final String HANDLE_ON_SUBMIT = "<the sample photo, uploaded on --yes>";
+    private static final java.util.regex.Pattern PLACEHOLDER = java.util.regex.Pattern.compile("\\{\\{\\s*([a-z_][a-z0-9_]*)\\s*}}");
+
+    /** Every WhatsApp template locale not yet on Meta. */
+    public List<Submission> submissions() {
         var existing = new java.util.HashSet<String>();
         for (var m : meta.templates()) existing.add(m.name() + "|" + m.language());
-        var out = new ArrayList<Map<String, Object>>();
+        var out = new ArrayList<Submission>();
         for (var t : registry.all()) {
             if (t.channel() != Channel.WHATSAPP || t.freeForm()) continue;
             for (var e : t.locales().entrySet()) {
                 var copy = e.getValue();
                 if (existing.contains(copy.providerName() + "|" + copy.language())) continue;
-                out.add(payload(t, copy));
+                out.add(new Submission(t, copy));
             }
         }
         return out;
     }
 
     static Map<String, Object> payload(MessageTemplate t, MessageTemplate.Copy copy) {
+        return payload(t, copy, HANDLE_ON_SUBMIT);
+    }
+
+    /**
+     * As the Graph API wants it. A photo template gets an IMAGE header whose
+     * example is {@code headerHandle}, Meta's handle for the uploaded sample photo.
+     */
+    static Map<String, Object> payload(MessageTemplate t, MessageTemplate.Copy copy, String headerHandle) {
         var components = new ArrayList<Map<String, Object>>();
+        if (t.headerImage() != null) {
+            components.add(Map.of("type", "HEADER", "format", "IMAGE", "example", Map.of("header_handle", List.of(headerHandle))));
+        }
         var body = new LinkedHashMap<String, Object>();
         body.put("type", "BODY");
         body.put("text", Renderer.metaBody(copy.body()));
@@ -189,7 +222,16 @@ public class WhatsAppTemplates {
         return out;
     }
 
-    public Map<String, Object> submit(Map<String, Object> payload) {
-        return meta.create(payload);
+    /** What a submission would send; a photo template's sample is not uploaded. */
+    public Map<String, Object> preview(Submission s) {
+        return payload(s.template(), s.copy());
+    }
+
+    /** Uploads a photo template's sample photo, then submits the template for review. */
+    public Map<String, Object> submit(Submission s) {
+        var handle = HANDLE_ON_SUBMIT;
+        var sample = s.samplePhoto();
+        if (sample != null) handle = meta.uploadSample(sample);
+        return meta.create(payload(s.template(), s.copy(), handle));
     }
 }

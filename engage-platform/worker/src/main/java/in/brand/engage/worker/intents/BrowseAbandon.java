@@ -65,7 +65,7 @@ public class BrowseAbandon implements EventConsumer {
         CascadeDefinition browseAbandon() {
             return new CascadeDefinition(INTENT, Priority.LOW_INTENT, List.of(
                     CascadeDefinition.Step.push("push_browse_abandon_v1", TTL).waitAfter(Duration.ofHours(20)),
-                    CascadeDefinition.Step.whatsapp("browse_reminder_v1")
+                    CascadeDefinition.Step.whatsapp("browse_reminder_v2")
                             .require(in.brand.engage.orchestrator.Guard.WA_MARKETING,
                                      in.brand.engage.orchestrator.Guard.WA_CAPABLE_OR_UNKNOWN,
                                      in.brand.engage.orchestrator.Guard.hasVar(STRONG))));

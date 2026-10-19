@@ -1,0 +1,13 @@
+# checkout_offer with the product's photo as its header and a bold first
+# line. Falls back to checkout_offer_v1 without a photo or approval.
+key: checkout_offer_v2
+channel: whatsapp
+category: marketing
+header_image: "https://engage.wumika.com/media/product/{{photo}}"
+fallback: checkout_offer_v1
+locales:
+  en: { body: "*Still waiting for you*\n\nHi {{name}}, {{product}} is still in your WUMIKA checkout. Use code {{code}} for {{discount}} on your order." }
+buttons:
+  - { text: "Complete order", url: "https://wumika.com/{{checkout_path}}" }
+vars: [name, product, code, discount, checkout_path, photo]
+samples: { name: "Priya", product: "Kundan Jhumka Earrings", code: "WUMIKA10", discount: "10% off", checkout_path: "checkouts/cn/hWN4abc123/recover", photo: "8741079023804-9f1c2a7e" }

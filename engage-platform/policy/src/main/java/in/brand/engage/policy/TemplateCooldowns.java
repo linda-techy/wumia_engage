@@ -14,6 +14,15 @@ public interface TemplateCooldowns {
 
     Optional<Duration> cooldown(String templateKey);
 
+    /**
+     * The keys whose sends count against this template's cooldown: itself, and
+     * the versions it stands in for or that stand in for it (a photo template
+     * and its text fallback are one message to the customer).
+     */
+    default java.util.Set<String> cooldownKeys(String templateKey) {
+        return java.util.Set.of(templateKey);
+    }
+
     /** Used only when no registry is on the classpath: no template has a cooldown. */
     @Singleton
     @Secondary

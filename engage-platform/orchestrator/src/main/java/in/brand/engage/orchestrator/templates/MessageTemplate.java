@@ -17,12 +17,23 @@ import java.util.Map;
  * @param buttons  WhatsApp URL buttons (empty for other channels)
  * @param source   where it was loaded from, for lint messages
  * @param sms      SMS: the DLT registration (null for other channels)
+ * @param headerImage WhatsApp: the link of the header photo, e.g.
+ *                 {@code https://engage.wumika.com/media/product/{{photo}}}; the template is
+ *                 submitted with an IMAGE header and every send needs the photo (null = no header)
+ * @param fallback WhatsApp: the template sent instead when this one cannot be: no photo for
+ *                 this person, or Meta has not approved it (yet). Same category, no header.
  */
 public record MessageTemplate(String key, Channel channel, Category category, Duration cooldown,
                               Map<String, Copy> locales, List<String> vars, Map<String, String> samples,
-                              List<Button> buttons, String source, Sms sms) {
+                              List<Button> buttons, String source, Sms sms, String headerImage, String fallback) {
 
     public static final String FALLBACK_LOCALE = "en";
+
+    public MessageTemplate(String key, Channel channel, Category category, Duration cooldown,
+                           Map<String, Copy> locales, List<String> vars, Map<String, String> samples,
+                           List<Button> buttons, String source, Sms sms) {
+        this(key, channel, category, cooldown, locales, vars, samples, buttons, source, sms, null, null);
+    }
 
     /**
      * One locale's copy. Push uses title and body. WhatsApp uses body only,

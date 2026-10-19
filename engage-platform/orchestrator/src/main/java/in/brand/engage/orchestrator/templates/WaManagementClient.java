@@ -48,12 +48,14 @@ public class WaManagementClient {
     private final String base;
     private final String waba;
     private final String token;
+    private final String appId;
 
     public WaManagementClient(JsonMapper json,
                               @Value("${engage.whatsapp.graph-base:`https://graph.facebook.com`}") String graphBase,
                               @Value("${engage.whatsapp.graph-version:v23.0}") String version,
                               @Value("${engage.whatsapp.business-account-id}") String waba,
-                              @Value("${engage.whatsapp.access-token:}") String token) {
+                              @Value("${engage.whatsapp.access-token:}") String token,
+                              @Value("${engage.whatsapp.app-id:}") String appId) {
         if (token == null || token.isBlank()) {
             throw new IllegalStateException("WA_BUSINESS_ACCOUNT_ID is set but WA_ACCESS_TOKEN is not.");
         }
@@ -62,6 +64,7 @@ public class WaManagementClient {
         this.base = graphBase.replaceAll("/+$", "") + "/" + v + "/";
         this.waba = waba.strip();
         this.token = token;
+        this.appId = appId;
     }
 
     public String businessAccountId() {
@@ -117,6 +120,45 @@ public class WaManagementClient {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    /**
+     * Uploads a sample header photo with the Resumable Upload API and returns
+     * its handle, which a template submission names as its header example.
+     * The photo is downloaded from {@code link} first; Meta takes JPEG or PNG.
+     */
+    public String uploadSample(String link) {
+        try {
+            var photo = http.send(HttpRequest.newBuilder(URI.create(link)).timeout(Duration.ofSeconds(20))
+                    .header("Accept", "image/jpeg, image/png").GET().build(), HttpResponse.BodyHandlers.ofByteArray());
+            var type = photo.headers().firstValue("Content-Type").orElse("").split(";")[0].strip();
+            if (photo.statusCode() != 200 || !List.of("image/jpeg", "image/png").contains(type)) {
+                throw new GraphException("sample photo " + link + ": HTTP " + photo.statusCode() + " " + type + ", need a JPEG or PNG");
+            }
+            var bytes = photo.body();
+            var session = call(HttpRequest.newBuilder(URI.create(base + appId() + "/uploads?file_name=sample."
+                            + (type.equals("image/png") ? "png" : "jpg") + "&file_length=" + bytes.length + "&file_type=" + enc(type)))
+                    .timeout(Duration.ofSeconds(20)).header("Authorization", "Bearer " + token)
+                    .POST(HttpRequest.BodyPublishers.noBody()).build());
+            if (!(session.get("id") instanceof String id)) throw new GraphException("upload session without an id");
+            var done = call(HttpRequest.newBuilder(URI.create(base + id)).timeout(Duration.ofSeconds(60))
+                    .header("Authorization", "OAuth " + token).header("file_offset", "0")
+                    .POST(HttpRequest.BodyPublishers.ofByteArray(bytes)).build());
+            if (!(done.get("h") instanceof String handle)) throw new GraphException("upload finished without a handle");
+            return handle;
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new GraphException("interrupted");
+        }
+    }
+
+    /** The Meta app the token belongs to: uploads are made to an app, not to the WhatsApp account. */
+    private String appId() {
+        if (appId != null && !appId.isBlank()) return appId.strip();
+        if (get(base + "app").get("id") instanceof String id) return id;
+        throw new GraphException("cannot tell which Meta app the token belongs to: set WA_APP_ID");
     }
 
     private Map<String, Object> get(String url) {

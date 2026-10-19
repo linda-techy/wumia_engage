@@ -1,0 +1,13 @@
+# order_confirmed with the photo of the most expensive piece in the order as
+# its header (2026-10-19: owner liked Interakt's photo templates). Utility, so
+# still no promotional words. Falls back to order_confirmed_v1 when the
+# product has no photo or Meta has not approved this one yet.
+key: order_confirmed_v2
+channel: whatsapp
+category: utility
+header_image: "https://engage.wumika.com/media/product/{{photo}}"
+fallback: order_confirmed_v1
+locales:
+  en: { body: "*Your order is confirmed*\n\nHi {{name}}, your WUMIKA order {{order_no}} is confirmed. Total {{amount}}. We will message you here when it ships." }
+vars: [name, order_no, amount, photo]
+samples: { name: "Priya", order_no: "#1042", amount: "₹12,499", photo: "8741079023804-9f1c2a7e" }

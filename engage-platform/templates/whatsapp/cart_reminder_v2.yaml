@@ -1,0 +1,14 @@
+# cart_reminder with the product's photo as its header and a bold first line.
+# Falls back to cart_reminder_v1 when the product has no photo or Meta has
+# not approved this one yet.
+key: cart_reminder_v2
+channel: whatsapp
+category: marketing
+header_image: "https://engage.wumika.com/media/product/{{photo}}"
+fallback: cart_reminder_v1
+locales:
+  en: { body: "*Still in your bag*\n\nHi {{name}}, {{product}} is still in your WUMIKA bag. Tap below to pick up where you left off." }
+buttons:
+  - { text: "View bag", url: "https://wumika.com/cart" }
+vars: [name, product, photo]
+samples: { name: "Priya", product: "Kundan Jhumka Earrings", photo: "8741079023804-9f1c2a7e" }

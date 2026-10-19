@@ -28,10 +28,10 @@ import java.util.UUID;
  * one. No SMS: promotional SMS is not built (CLAUDE.md §3.2).
  *
  * <pre>
- * t+30 min  WhatsApp checkout_reminder_v1  marketing opt-in, not INCAPABLE, cart ≥ wa_min_cart_paise
+ * t+30 min  WhatsApp checkout_reminder_v2  marketing opt-in, not INCAPABLE, cart ≥ wa_min_cart_paise
  *           (skipped → the push goes at once instead)
  * +4 h      Push     push_checkout_v1       a live browser subscription
- * +20 h     WhatsApp checkout_offer_v1      as step 1, and a discount applies: the operator's shared
+ * +20 h     WhatsApp checkout_offer_v2      as step 1, and a discount applies: the operator's shared
  *                                          code, or (discount_mode = unique) a single-use code made
  *                                          at send time by JourneyDiscount
  * +12 h     Email    email_checkout_v1      email marketing consent (skipped until SES is set up)
@@ -76,9 +76,9 @@ public class CheckoutAbandon implements EventConsumer {
         CascadeDefinition checkoutAbandon() {
             var wa = new Guard[] {Guard.WA_MARKETING, Guard.WA_CAPABLE_OR_UNKNOWN, Guard.hasVar(WA_OK)};
             return new CascadeDefinition(INTENT, Priority.HIGH_INTENT, List.of(
-                    Step.whatsapp("checkout_reminder_v1").require(wa).waitAfter(Duration.ofHours(4)),
+                    Step.whatsapp("checkout_reminder_v2").require(wa).waitAfter(Duration.ofHours(4)),
                     Step.push("push_checkout_v1", TTL).require(Guard.HAS_LIVE_DEVICE).waitAfter(Duration.ofHours(20)),
-                    Step.whatsapp("checkout_offer_v1").require(wa).require(Guard.hasVar("discount"))
+                    Step.whatsapp("checkout_offer_v2").require(wa).require(Guard.hasVar("discount"))
                             .withVarsFrom(JourneyDiscount.NAME).waitAfter(Duration.ofHours(12)),
                     Step.email("email_checkout_v1").require(Guard.HAS_EMAIL_MARKETING)));
         }
@@ -169,7 +169,7 @@ public class CheckoutAbandon implements EventConsumer {
         boolean newOnly = snapshot.boolValue("journey.abandon.discount_new_customers_only", "*");
         try (var ps = Sql.prepare(c, """
                 SELECT EXISTS (SELECT 1 FROM sends s
-                                WHERE s.identity_id = ? AND s.template_key = 'checkout_offer_v1'
+                                WHERE s.identity_id = ? AND s.template_key IN ('checkout_offer_v1', 'checkout_offer_v2')
                                   AND s.status IN ('queued','sent','delivered','read','clicked') AND s.created_at > ?)
                     OR EXISTS (SELECT 1 FROM cascade_runs r
                                 WHERE r.identity_id = ? AND r.intent_key = ? AND r.subject_key <> ?

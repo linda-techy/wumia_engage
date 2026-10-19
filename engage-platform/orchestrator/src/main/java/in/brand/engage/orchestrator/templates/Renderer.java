@@ -75,7 +75,8 @@ public class Renderer {
 
     /**
      * WhatsApp: the body's variables become Meta's {{1}}, {{2}}… in order of
-     * first appearance, and each URL button's trailing variable its suffix.
+     * first appearance, and each URL button's trailing variable its suffix;
+     * a photo template's header link is filled from the same variables.
      * A free-form (SERVICE) template returns the filled body and no call.
      *
      * @throws IllegalArgumentException if a variable the copy or a button uses is missing
@@ -97,8 +98,9 @@ public class Renderer {
             var name = buttonVariable(b.url());
             if (name != null) suffixes.add(require(vars, name, template.key()));
         }
+        var header = template.headerImage() == null ? null : fill(template.headerImage(), vars, template.key());
         return new WhatsAppRendered(chosen, body,
-                new WaTemplateCall(copy.providerName(), copy.language(), params, suffixes, replies));
+                new WaTemplateCall(copy.providerName(), copy.language(), params, suffixes, replies, header));
     }
 
     /**
@@ -200,7 +202,7 @@ public class Renderer {
         return out.toString();
     }
 
-    static Set<String> placeholders(String text) {
+    public static Set<String> placeholders(String text) {
         var names = new LinkedHashSet<String>();
         var m = PLACEHOLDER.matcher(text);
         while (m.find()) names.add(m.group(1));

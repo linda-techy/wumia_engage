@@ -34,7 +34,7 @@ import java.util.UUID;
  * this). The subject is {@code <variant>:<identity>}: one live run per
  * person, not one per variant across everyone.
  *
- * <p>P5-T05: a WhatsApp ({@code back_in_stock_v1}) 15 minutes after the push
+ * <p>P5-T05: a WhatsApp ({@code back_in_stock_v2}, or v1 without a photo) 15 minutes after the push
  * for shoppers who did not click it (a click ends the run), or at once for
  * those the push cannot reach. Marketing opt-in, not INCAPABLE. If the
  * variant sells out again before then ({@code variant_sold_out}), the
@@ -64,7 +64,7 @@ public class BackInStock implements EventConsumer {
                     CascadeDefinition.Step.push("push_back_in_stock_v1", Duration.ofHours(1))
                             .urgent().staleDevicesAllowed().orTemplate(NO_SIZE_TEMPLATE)
                             .waitAfter(Duration.ofMinutes(15)),
-                    CascadeDefinition.Step.whatsapp("back_in_stock_v1")
+                    CascadeDefinition.Step.whatsapp("back_in_stock_v2")
                             .require(Guard.WA_MARKETING, Guard.WA_CAPABLE_OR_UNKNOWN)));
         }
     }
@@ -100,13 +100,13 @@ public class BackInStock implements EventConsumer {
                  WHERE w.identity_id = due.identity_id AND w.variant_id = due.variant_id
                 RETURNING w.identity_id, w.size_label, w.product_handle""", variantId, limit);
              var rs = ps.executeQuery()) {
-            var images = new HashMap<String, java.util.Optional<String>>();
+            var images = new HashMap<String, java.util.Optional<ProductImages.Photo>>();
             while (rs.next()) {
                 var identityId = rs.getObject("identity_id", UUID.class);
                 var rowHandle = handle != null ? handle : rs.getString("product_handle");
                 var vars = new HashMap<String, String>();
                 if (!images.containsKey(rowHandle)) images.put(rowHandle, java.util.Optional.ofNullable(ProductImages.byHandle(c, rowHandle)));
-                images.get(rowHandle).ifPresent(u -> vars.put("image", u));
+                ProductImages.put(vars, images.get(rowHandle).orElse(null));
                 vars.put("product", productTitle != null ? productTitle : fromHandle(rowHandle));
                 vars.put("url", storefront.product(rowHandle, variantId));
                 vars.put("product_path", Storefront.productPath(rowHandle, variantId));

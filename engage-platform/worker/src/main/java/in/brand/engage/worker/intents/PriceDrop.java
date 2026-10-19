@@ -32,7 +32,7 @@ import java.util.UUID;
  * cooldown keeps a store-wide markdown from sending one push per item.
  *
  * <p>WhatsApp too (owner's decision 2026-10-15, as Indian D2C brands do):
- * {@code price_drop_v1} 2 h after the push for people who did not click it,
+ * {@code price_drop_v2} (v1 without a photo) 2 h after the push for people who did not click it,
  * or at once for those the push cannot reach. Marketing opt-in, not
  * INCAPABLE; the template's one-day cooldown and the WhatsApp marketing cap
  * keep a markdown across many items to one message a day.
@@ -56,7 +56,7 @@ public class PriceDrop implements EventConsumer {
         CascadeDefinition priceDrop() {
             return new CascadeDefinition(INTENT, Priority.MID_INTENT, List.of(
                     CascadeDefinition.Step.push("push_price_drop_v1", TTL).waitAfter(Duration.ofHours(2)),
-                    CascadeDefinition.Step.whatsapp("price_drop_v1")
+                    CascadeDefinition.Step.whatsapp("price_drop_v2")
                             .require(in.brand.engage.orchestrator.Guard.WA_MARKETING,
                                      in.brand.engage.orchestrator.Guard.WA_CAPABLE_OR_UNKNOWN)));
         }

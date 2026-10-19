@@ -38,6 +38,7 @@ engage:
     # templates. Empty = none of that runs.
     business-account-id: ${WA_BUSINESS_ACCOUNT_ID:}
     access-token: ${WA_ACCESS_TOKEN:}
+    app-id: ${WA_APP_ID:}
   email:
     # Marketing email through Amazon SES (P7-T01). Empty EMAIL_FROM = no email
     # adapter: the email steps of journeys are skipped. A verified sending

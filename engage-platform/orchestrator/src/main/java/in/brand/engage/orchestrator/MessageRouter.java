@@ -79,12 +79,26 @@ public class MessageRouter {
         return java.util.Set.copyOf(adapters.keySet());
     }
 
-    public SendResult send(SendCommand cmd) {
-        var existing = sends.findByKey(cmd.idempotencyKey());
+    public SendResult send(SendCommand requested) {
+        var existing = sends.findByKey(requested.idempotencyKey());
         if (existing.isPresent()) return new SendResult.Duplicate(existing.get().id(), existing.get().status());
 
-        var decision = policy.decide(cmd.toDecisionRequest());
+        var cmd = requested;
+        var wanted = templates.find(requested.templateKey()).orElse(null);
+        if (wanted != null && wanted.fallback() != null) {
+            // Decided before policy, so the send row, cooldown and spend are those of what goes out.
+            var why = unusable(wanted, requested.vars());
+            if (why != null) {
+                LOG.debug("{}: {} instead of {} ({})", requested.idempotencyKey(), wanted.fallback(), wanted.key(), why);
+                cmd = requested.withTemplateKey(wanted.fallback());
+            }
+        }
+        return decideAndSend(cmd);
+    }
+
+    private SendResult decideAndSend(SendCommand cmd) {
         var template = templates.find(cmd.templateKey()).orElse(null);
+        var decision = policy.decide(cmd.toDecisionRequest());
         // A block can come before policy knows the category (unknown template);
         // the registry knows it, else record the conservative one.
         var category = template != null ? template.category() : Category.MARKETING;
@@ -99,6 +113,24 @@ public class MessageRouter {
                     .map(id -> dispatch(cmd, a, template, id))
                     .orElseGet(() -> duplicate(cmd));
         };
+    }
+
+    /**
+     * Why a template with a fallback cannot go to this person now: a variable of
+     * its header photo is missing (the product has no photo), or Meta has not
+     * approved one of its locales yet. Null when it can.
+     */
+    private String unusable(MessageTemplate template, Map<String, String> vars) {
+        if (template.headerImage() != null) {
+            for (var name : Renderer.placeholders(template.headerImage())) if (vars.get(name) == null) return "no_photo";
+        }
+        if (template.channel() == Channel.WHATSAPP && !template.freeForm()) {
+            for (var copy : template.locales().values()) {
+                var refusal = waGate.refusal(copy.providerName(), copy.language());
+                if (refusal != null) return refusal;
+            }
+        }
+        return null;
     }
 
     private SendResult dispatch(SendCommand cmd, Decision.Allow allow, MessageTemplate template, long sendId) {
