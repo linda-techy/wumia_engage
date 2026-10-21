@@ -19,9 +19,13 @@ public final class EngageProperties {
      * Blank = the notice is not live, so no order gets that basis. Recording a
      * notice that was never shown would be false evidence. The version is the
      * label text in use (checkout_notice_v2 names offers; v1 order updates only).
+     *
+     * <p>{@code shopifyPhoneMarketingSince}: when Shopify's own phone marketing
+     * checkbox was relabelled to name WhatsApp and SMS ({@code shopify_phone_marketing_v1}).
+     * Blank = it still says SMS only, and its state is not reused.
      */
     @ConfigurationProperties("engage.consent")
-    public record Consent(String checkoutNoticeSince, String checkoutNoticeVersion) {}
+    public record Consent(String checkoutNoticeSince, String checkoutNoticeVersion, String shopifyPhoneMarketingSince) {}
 
     /** Shipping aggregator webhooks (P1-T02, ADR-005). Blank token = every courier webhook is refused. */
     @ConfigurationProperties("engage.courier")

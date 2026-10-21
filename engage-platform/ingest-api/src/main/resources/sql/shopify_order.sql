@@ -42,6 +42,10 @@ SELECT p->>'id'                                                         AS order
        -- override a newer choice (e.g. re-subscribe someone who unsubscribed).
        COALESCE((p->'customer'->'email_marketing_consent'->>'consent_updated_at')::timestamptz,
                 (p->>'created_at')::timestamptz)                         AS email_consent_at,
+       -- Shopify's phone marketing checkbox (relabelled to WhatsApp and SMS, V42).
+       NULLIF(p->'customer'->'sms_marketing_consent'->>'state', '')     AS sms_consent_state,
+       COALESCE((p->'customer'->'sms_marketing_consent'->>'consent_updated_at')::timestamptz,
+                (p->>'created_at')::timestamptz)                         AS sms_consent_at,
        (NULLIF(p->>'cancelled_at', ''))::timestamptz                    AS cancelled_at,
        NULLIF(p->>'cancel_reason', '')                                  AS cancel_reason
   FROM webhook_inbox i

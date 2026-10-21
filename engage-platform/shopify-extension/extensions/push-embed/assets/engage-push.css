@@ -67,8 +67,44 @@
   font-size: 22px; line-height: 1; cursor: pointer;
 }
 
+/* The soft ask: a bottom sheet on phones, a card in the top corner on desktop
+   (where the browser's own prompt appears). It never darkens the page. */
+.engage-ask {
+  position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: var(--engage-z);
+  max-width: 400px; margin: 0 auto; padding: 16px 16px 14px;
+  background: var(--engage-bg); color: var(--engage-fg);
+  border-radius: var(--engage-radius); box-shadow: var(--engage-shadow);
+  opacity: 0; transform: translateY(24px); transition: opacity .2s, transform .2s;
+}
+@media (min-width: 640px) {
+  .engage-ask { left: auto; right: 24px; bottom: auto; top: 24px; margin: 0; transform: translateY(-16px); }
+}
+.engage-ask--in { opacity: 1; transform: none; }
+.engage-ask__head { display: flex; gap: 10px; align-items: center; margin-bottom: 6px; }
+.engage-ask__logo { width: 36px; height: 36px; object-fit: contain; border-radius: 8px; flex: none; }
+.engage-ask__title { font-size: 16px; line-height: 1.3; }
+.engage-ask__text { margin: 0 0 8px; color: var(--engage-muted); font-size: 14px; line-height: 1.45; }
+.engage-ask__offer {
+  margin: 0 0 12px; padding: 8px 10px; border-radius: calc(var(--engage-radius) - 4px);
+  background: var(--engage-offer-bg, #fdf3e3); color: var(--engage-offer-fg, #7a4a00);
+  font-size: 14px; font-weight: 600;
+}
+.engage-ask__actions { display: flex; gap: 8px; justify-content: flex-end; }
+.engage-btn--quiet { border-color: transparent; color: var(--engage-muted); }
+
+/* After "Later": one tap to subscribe, no prompt. */
+.engage-bell {
+  position: fixed; left: 16px; bottom: 16px; z-index: calc(var(--engage-z) - 1);
+  width: 48px; height: 48px; border: 0; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--engage-accent); color: var(--engage-accent-fg);
+  box-shadow: var(--engage-shadow); cursor: pointer;
+}
+.engage-bell:focus-visible { outline: 2px solid var(--engage-accent); outline-offset: 3px; }
+.engage-welcome { flex-wrap: wrap; }
+
 @keyframes engage-fade { from { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
   .engage-overlay { animation: none; }
-  .engage-toast { transition: none; }
+  .engage-toast, .engage-ask { transition: none; }
 }

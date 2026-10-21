@@ -21,6 +21,12 @@ SELECT p->>'token'                                                      AS token
        NULLIF(p->>'abandoned_checkout_url', '')                         AS recovery_url,
        (p->>'completed_at')::timestamptz                                AS completed_at,
        COALESCE((p->>'updated_at')::timestamptz, now())                 AS updated_at,
+       -- Shopify's phone marketing checkbox (relabelled to WhatsApp and SMS, V42):
+       -- the customer's recorded state, else the box ticked on this checkout.
+       COALESCE(NULLIF(p->'customer'->'sms_marketing_consent'->>'state', ''),
+                CASE WHEN p->>'buyer_accepts_sms_marketing' = 'true' THEN 'subscribed' END) AS sms_consent_state,
+       COALESCE((p->'customer'->'sms_marketing_consent'->>'consent_updated_at')::timestamptz,
+                (p->>'updated_at')::timestamptz, now())                 AS sms_consent_at,
        COALESCE((SELECT jsonb_object_agg(a->>'name', a->>'value')
                    FROM jsonb_array_elements(
                           CASE WHEN jsonb_typeof(p->'note_attributes') = 'array'

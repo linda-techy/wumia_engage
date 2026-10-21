@@ -37,6 +37,8 @@ public class ShopifyInboxHandler implements InboxHandler {
     private final IdentityResolver identities;
     private final ConsentWriter consents;
     private final OffsetDateTime noticeSince;   // null = checkout notice not live
+    private final OffsetDateTime phoneMarketingSince;   // null = Shopify's phone checkbox still says SMS only
+    static final String PHONE_MARKETING_COPY = "shopify_phone_marketing_v1";
     private final String noticeVersion;
     private final FulfillmentHandler fulfillments;
     private final EventWriter events;
@@ -53,6 +55,7 @@ public class ShopifyInboxHandler implements InboxHandler {
         this.fulfillments = fulfillments;
         this.identities = identities;
         this.noticeSince = noticeSince(consent.checkoutNoticeSince());
+        this.phoneMarketingSince = noticeSince(consent.shopifyPhoneMarketingSince());
         this.noticeVersion = consent.checkoutNoticeVersion() == null || consent.checkoutNoticeVersion().isBlank()
                 ? "checkout_notice_v2" : consent.checkoutNoticeVersion().strip();
         this.consents = consents;
@@ -182,6 +185,16 @@ public class ShopifyInboxHandler implements InboxHandler {
                          WHERE cart_token = ?""", identityId, token, cartToken);
             }
 
+            // The checkout notice is on the phone field: consent starts when the phone is typed, not at payment.
+            if (phone.value() != null && identityId != null && noticeSince != null && updatedAt != null
+                    && !updatedAt.isBefore(noticeSince)) {
+                consents.grantWhatsAppFromCheckoutPhone(c, identityId, token, phone.source(), updatedAt, noticeVersion);
+            }
+            if (phone.value() != null) {
+                consents.syncShopifyPhoneMarketingConsent(c, identityId, rs.getString("sms_consent_state"),
+                        "checkout:" + token, Sql.timestamp(rs, "sms_consent_at"), phoneMarketingSince, PHONE_MARKETING_COPY);
+            }
+
             // Razorpay can deliver payment.failed before Shopify delivers the
             // checkout. Link any such unmatched attempts now, with the same rule
             // razorpay_match_checkout.sql applies in the other direction.
@@ -287,6 +300,10 @@ public class ShopifyInboxHandler implements InboxHandler {
                 }
                 consents.syncShopifyEmailConsent(c, identityId, rs.getString("email_consent_state"),
                         "order:" + orderId, Sql.timestamp(rs, "email_consent_at"));
+                if (phone.value() != null) {
+                    consents.syncShopifyPhoneMarketingConsent(c, identityId, rs.getString("sms_consent_state"),
+                            "order:" + orderId, Sql.timestamp(rs, "sms_consent_at"), phoneMarketingSince, PHONE_MARKETING_COPY);
+                }
             }
             if (placed) {
                 events.write(c, identityId, "order_placed", "shopify", "shopify:" + item.deliveryId(),
@@ -420,6 +437,10 @@ public class ShopifyInboxHandler implements InboxHandler {
                      WHERE identity_id = ?""", rs.getString("first_name"), tags(rs.getString("tags")), identityId);
             consents.syncShopifyEmailConsent(c, identityId, rs.getString("email_consent_state"),
                     "customer:" + customerId, Sql.timestamp(rs, "email_consent_at"));
+            if (phone != null) {
+                consents.syncShopifyPhoneMarketingConsent(c, identityId, rs.getString("sms_consent_state"),
+                        "customer:" + customerId, Sql.timestamp(rs, "sms_consent_at"), phoneMarketingSince, PHONE_MARKETING_COPY);
+            }
             events.write(c, identityId, "customer_updated", "shopify", "shopify:" + item.deliveryId(),
                     Map.of("customer_id", customerId));
         }

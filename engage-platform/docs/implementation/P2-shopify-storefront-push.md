@@ -285,3 +285,43 @@ SELECT id, identity_id, platform, browser, active,
 - [ ] Live on production for 7 days with registration errors under 1%
 - [ ] Funnel measured per surface from `push_prompt_funnel`
 - [ ] No push sent to a real customer yet
+
+
+---
+
+## Addendum (2026-10-22): consent at first phone capture, and a push prompt that earns the Allow
+
+The owner asked for every flow to be judged by conversion, the way Indian D2C brands run them.
+
+### Consent
+
+| Moment | Before | Now |
+|---|---|---|
+| Phone typed at checkout, no order | nothing (abandoned-checkout WhatsApp could not reach a first-time shopper) | `checkout_notice` grant (order updates and offers) when the checkout's `updated_at` ≥ `CHECKOUT_NOTICE_SINCE`; evidence names the `checkout_token` |
+| Shopify's phone marketing checkbox ("Text me with news and offers") | read, ignored | relabelled to **"Send me offers on WhatsApp and SMS"** (V42, `shopify_phone_marketing_v1`). From `SHOPIFY_PHONE_MARKETING_SINCE`, `subscribed` grants WhatsApp and SMS marketing and `unsubscribed` withdraws both. Applies to customers, orders and checkouts. Choices from before that date are ignored; an older webhook never overrides a newer choice. |
+
+STOP still wins: the notice grant is written only where nothing exists for that channel and purpose.
+
+**Owner steps:**
+- Relabel the checkbox in Shopify (Settings → Checkout → Edit default content → "Text me with news and offers").
+- Then set `SHOPIFY_PHONE_MARKETING_SINCE` to that date.
+
+### Push prompt (engage-push.js, V43 `push_v3`)
+
+- **When:** at intent moments.
+  - 2nd page view or about 20 s on the site, as before.
+  - Add-to-cart and notify-me, as before.
+  - A 2nd look at the same product (4 s) or a long look (`product_seconds`, 25 s).
+  - Desktop exit intent.
+- **What:**
+  - A headline about the moment, e.g. at add-to-cart "Want an alert if the price in your bag drops?". The headline is presentation.
+  - Then the registered consent sentence (`push_v3`): "Get new drops first, price-drop and back-in-stock alerts, offers, and live order updates."
+  - Then an optional first-order offer line. It shows only when an offer code is set, and the code is revealed with one-tap copy only after the browser's Allow (reciprocity).
+- **How:**
+  - A branded card that slides in (a bottom sheet on phones, the top corner on desktop) without darkening the page.
+  - "Allow" or "Later".
+  - The browser's prompt still comes only after "Allow".
+- **No nagging:** after "Later", wait `reask_days` (default 7) and ask at most `max_asks` times (default 3).
+- **The bell:** after "Later", a small bell stays in the corner, and one tap subscribes.
+- iOS Safari and in-app browsers still get the WhatsApp link instead.
+- New prompt surfaces: `product`, `exit_intent`, `bell`.

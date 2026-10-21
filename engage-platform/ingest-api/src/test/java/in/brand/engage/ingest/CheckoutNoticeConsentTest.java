@@ -75,6 +75,28 @@ class CheckoutNoticeConsentTest {
     }
 
     @Test
+    void a_phone_typed_at_checkout_is_consent_before_any_order_so_abandoned_checkout_can_reach_them() throws Exception {
+        webhook("checkouts/update", fixture("shopify_checkout_update.json"));
+
+        assertEquals("whatsapp|marketing|granted|checkout_notice_v2|notice_opt_out,"
+                + "whatsapp|transactional|granted|checkout_notice_v2|dpdp_s7a_order_updates", q("""
+                SELECT string_agg(concat_ws('|', channel, purpose, state, copy_version, evidence->>'basis'), ','
+                                  ORDER BY purpose DESC)
+                  FROM consents WHERE source = 'checkout_notice' AND evidence ? 'checkout_token'"""));
+        assertEquals("0", q("SELECT count(*) FROM orders"), "no order was needed");
+
+        orderCreated();
+        assertEquals("2", q("SELECT count(*) FROM consents WHERE source = 'checkout_notice'"), "the order adds nothing more");
+    }
+
+    @Test
+    void a_checkout_from_before_the_notice_records_nothing() throws Exception {
+        webhook("checkouts/update", fixture("shopify_checkout_update.json")
+                .replace("\"updated_at\": \"2026-09-19T15:19:40+05:30\"", "\"updated_at\": \"2026-08-19T15:19:40+05:30\""));
+        assertEquals("0", q("SELECT count(*) FROM consents WHERE source = 'checkout_notice'"));
+    }
+
+    @Test
     void the_v1_notice_covers_order_updates_only() throws Exception {
         orderCreated();
         exec("DELETE FROM consents");
@@ -143,6 +165,21 @@ class CheckoutNoticeConsentTest {
     /** The fixture order without its cart WhatsApp tick: only the checkout notice applies. */
     void orderCreated() throws Exception {
         order(false);
+    }
+
+    static String fixture(String name) throws java.io.IOException {
+        return Files.readString(Path.of("src/test/resources/fixtures/" + name));
+    }
+
+    void webhook(String topic, String json) throws Exception {
+        var body = json.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        client.toBlocking().exchange(HttpRequest.POST("/webhooks/shopify", body)
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("X-Shopify-Topic", topic)
+                .header("X-Shopify-Webhook-Id", UUID.randomUUID().toString())
+                .header("X-Shopify-Shop-Domain", System.getenv("SHOPIFY_SHOP_DOMAIN"))
+                .header("X-Shopify-Hmac-Sha256", Hmacs.sha256Base64(System.getenv("SHOPIFY_API_SECRET"), body)));
+        processor.drain();
     }
 
     void order(boolean withCartTick) throws Exception {

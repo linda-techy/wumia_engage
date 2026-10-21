@@ -56,6 +56,10 @@ engage:
     # Which label text is live: checkout_notice_v2 (order updates and offers,
     # opt-out) or checkout_notice_v1 (order updates only).
     checkout-notice-version: ${CHECKOUT_NOTICE_VERSION:checkout_notice_v2}
+    # Date Shopify's phone marketing checkbox ("Text me with news and offers")
+    # was relabelled to "Send me offers on WhatsApp and SMS". From then, ticking
+    # it grants WhatsApp and SMS marketing; unticking withdraws both. Empty = off.
+    shopify-phone-marketing-since: ${SHOPIFY_PHONE_MARKETING_SINCE:}
   pixel:
     # Shared with the web pixel's settings (webPixelCreate). Public by nature:
     # it keeps out casual traffic only. Empty = /pixel/events answers 503.

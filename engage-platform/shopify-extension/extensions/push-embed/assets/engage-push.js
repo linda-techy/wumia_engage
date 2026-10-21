@@ -4,6 +4,21 @@
 const FIREBASE_VERSION = '12.19.0';
 const CFG = window.EngageConfig || {};
 const WEEK = 7 * 24 * 3600 * 1000;
+const DAY = 24 * 3600 * 1000;
+const PROMPT = CFG.prompt || {};
+
+// What Indian D2C sites do to earn the Allow: ask at a moment of intent, with a
+// headline about that moment and a reason to say yes (a first-order offer,
+// price-drop and back-in-stock alerts). The consent sentence under it is the
+// registered copy (CFG.copy.push); the headline and offer are presentation.
+const HEADLINES = {
+  browse: PROMPT.headline || 'Be the first to know',
+  add_to_cart: 'Want an alert if the price in your bag drops?',
+  notify_me: "We'll tell you the moment it's back",
+  product: 'Want a price-drop alert for this piece?',
+  exit_intent: 'Before you go, stay in the loop',
+  bell: PROMPT.headline || 'Be the first to know'
+};
 
 /* ------------------------------ environment ------------------------------ */
 
@@ -114,27 +129,43 @@ async function mintToken() {
  * prompts for sites with poor accept rates, so the native prompt is spent only
  * on people who already agreed.
  */
-export async function ask(surface) {
+export async function ask(surface, { userInitiated = false } = {}) {
   if (!pushCapable) {
     if (isIOS || isInApp) { track(surface, 'ios_redirected_to_whatsapp'); showWhatsAppOptIn(surface); }
     return null;
   }
   if (Notification.permission === 'denied') return null;
   if (Notification.permission === 'granted') return subscribe(surface);
-  if (document.querySelector('.engage-overlay')) return null;   // one prompt at a time
+  if (document.querySelector('.engage-ask:not(.engage-ask--out)')) return null;   // one prompt at a time
 
-  const dismissedAt = Number(store.get('dismissed') || 0);
-  if (Date.now() - dismissedAt < 2 * WEEK) return null;       // do not nag
+  // Do not nag: after "Later", wait reaskDays; at most maxAsks prompts ever.
+  // A tap on the bell is the shopper asking, so neither limit applies.
+  if (!userInitiated) {
+    const dismissedAt = Number(store.get('dismissed') || 0);
+    if (Date.now() - dismissedAt < Number(PROMPT.reaskDays ?? 7) * DAY) return null;
+    if (Number(store.get('asks') || 0) >= Number(PROMPT.maxAsks ?? 3)) return null;
+  }
+  store.set('asks', String(Number(store.get('asks') || 0) + 1));
+  session.set('asked', '1');
+  hideBell();
 
   track(surface, 'soft_shown');
-  const accepted = await softAskDialog(CFG.copy.push);
-  if (!accepted) { store.set('dismissed', String(Date.now())); track(surface, 'soft_dismissed'); return null; }
+  const accepted = await softAskDialog(surface);
+  if (!accepted) {
+    store.set('dismissed', String(Date.now()));
+    track(surface, 'soft_dismissed');
+    showBell();
+    return null;
+  }
   track(surface, 'soft_accepted');
 
   const result = await Notification.requestPermission();      // still within the click gesture
   track(surface, result === 'granted' ? 'native_granted'
                : result === 'denied' ? 'native_denied' : 'native_dismissed');
-  return result === 'granted' ? subscribe(surface) : null;
+  if (result !== 'granted') { if (result === 'default') showBell(); return null; }
+  const token = await subscribe(surface);
+  if (token) showWelcome();
+  return token;
 }
 
 async function subscribe(surface) {
@@ -243,6 +274,11 @@ document.addEventListener('click', async (e) => {
   btn.disabled = true;
 });
 
+const session = {
+  get: (k) => { try { return sessionStorage.getItem('engage:' + k); } catch { return null; } },
+  set: (k, v) => { try { sessionStorage.setItem('engage:' + k, v); } catch {} }
+};
+
 /* ---------------------- surface: early (browsing) ----------------------- */
 // Most Indian stores ask as soon as someone lands. We ask a little later and
 // softly: on the Nth page view of a visit, or after N seconds on the site,
@@ -253,11 +289,7 @@ function earlyAsk() {
   const cfg = CFG.earlyAsk || {};
   const views = Number(cfg.pageViews ?? 2);
   const seconds = Number(cfg.seconds ?? 20);
-  const session = {
-    get: (k) => { try { return sessionStorage.getItem('engage:' + k); } catch { return null; } },
-    set: (k, v) => { try { sessionStorage.setItem('engage:' + k, v); } catch {} }
-  };
-  if (session.get('early')) return;                    // already asked this visit
+  if (session.get('early') || session.get('asked')) return;   // already asked this visit
   const count = Number(session.get('pv') || 0) + 1;
   session.set('pv', String(count));
 
@@ -270,6 +302,56 @@ function earlyAsk() {
   };
   if (views > 0 && count >= views) { timer = setTimeout(fire, 1500); return; }   // let the page settle
   if (seconds > 0) timer = setTimeout(fire, seconds * 1000);
+}
+
+/* ----------------------- surface: product interest ----------------------- */
+// A second look at the same piece, or a long look, is price-drop intent:
+// ask with a headline about that piece rather than a generic one.
+function productAsk() {
+  const m = location.pathname.match(/\/products\/([^/?#]+)/);
+  if (!m || session.get('asked')) return;
+  let seen = [];
+  try { seen = JSON.parse(store.get('seen') || '[]'); } catch {}
+  const again = seen.includes(m[1]);
+  store.set('seen', JSON.stringify([m[1], ...seen.filter((h) => h !== m[1])].slice(0, 30)));
+  const seconds = Number(PROMPT.productSeconds ?? 25);
+  const fire = () => { if (!session.get('asked')) ask('product'); };
+  if (again) setTimeout(fire, 4000);
+  else if (seconds > 0) setTimeout(fire, seconds * 1000);
+}
+
+/* ------------------------- surface: exit intent -------------------------- */
+// Desktop only (a pointer leaving through the top of the window): the last
+// chance in this visit, once per visit, and never if we already asked.
+function exitIntent() {
+  if (PROMPT.exitIntent === false || matchMedia('(pointer: coarse)').matches) return;
+  const onOut = (e) => {
+    if (e.relatedTarget || e.clientY > 0) return;
+    document.removeEventListener('mouseout', onOut);
+    if (!session.get('asked')) ask('exit_intent');
+  };
+  document.addEventListener('mouseout', onOut);
+}
+
+/* ------------------------------ the bell --------------------------------- */
+// After "Later", a small bell stays in the corner, so someone who changes
+// their mind can subscribe with one tap, without being asked again.
+function showBell() {
+  if (PROMPT.bell === false || !pushCapable || Notification.permission !== 'default') return;
+  if (document.querySelector('.engage-bell')) return;
+  document.body.append(el('button', { class: 'engage-bell', type: 'button', 'aria-label': 'Get alerts from ' + (PROMPT.brand || 'us'),
+    onclick: () => ask('bell', { userInitiated: true }) }, bellIcon()));
+}
+function hideBell() { document.querySelector('.engage-bell')?.remove(); }
+function bellIcon() {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('width', '22'); svg.setAttribute('height', '22');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('fill', 'currentColor');
+  path.setAttribute('d', 'M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm7-6V11a7 7 0 0 0-5.5-6.84V3.5a1.5 1.5 0 0 0-3 0v.66A7 7 0 0 0 5 11v5l-2 2v1h18v-1l-2-2Z');
+  svg.append(path);
+  return svg;
 }
 
 /* ------------------------------ foreground ------------------------------- */
@@ -294,21 +376,52 @@ function el(tag, attrs = {}, ...kids) {
   return n;
 }
 
-// Dismissible with Esc, focus-trapped, never blocks the page permanently.
-function softAskDialog(text) {
+// The soft ask: a branded card that slides in (bottom sheet on phones, top
+// corner on desktop) without darkening or blocking the page, like the native
+// prompt it stands in for. Esc or "Later" dismisses it.
+function softAskDialog(surface) {
   return new Promise((resolve) => {
-    const done = (v) => { document.removeEventListener('keydown', onKey); overlay.remove(); resolve(v); };
+    const done = (v) => {
+      document.removeEventListener('keydown', onKey);
+      card.classList.remove('engage-ask--in');
+      card.classList.add('engage-ask--out');         // gone for ask(), still fading out
+      setTimeout(() => card.remove(), 200);
+      resolve(v);
+    };
     const onKey = (e) => { if (e.key === 'Escape') done(false); };
-    const yes = el('button', { class: 'engage-btn engage-btn--primary', onclick: () => done(true) }, 'Yes, notify me');
-    const no = el('button', { class: 'engage-btn', onclick: () => done(false) }, 'Not now');
-    const card = el('div', { class: 'engage-card', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Notifications' },
-      el('p', { class: 'engage-card__text' }, text || 'Get an alert when your size is back or your bag price drops.'),
-      el('div', { class: 'engage-card__actions' }, no, yes));
-    const overlay = el('div', { class: 'engage-overlay', onclick: (e) => { if (e.target === overlay) done(false); } }, card);
+    const yes = el('button', { class: 'engage-btn engage-btn--primary', type: 'button', onclick: () => done(true) }, 'Allow');
+    const no = el('button', { class: 'engage-btn engage-btn--quiet', type: 'button', onclick: () => done(false) }, 'Later');
+    const headline = HEADLINES[surface] || HEADLINES.browse;
+    const card = el('div', { class: 'engage-ask', role: 'dialog', 'aria-label': headline },
+      el('div', { class: 'engage-ask__head' },
+        PROMPT.logo ? el('img', { class: 'engage-ask__logo', src: PROMPT.logo, alt: '' }) : '',
+        el('strong', { class: 'engage-ask__title' }, headline)),
+      el('p', { class: 'engage-ask__text' }, CFG.copy.push || 'Get order updates, and an alert when your size is back or your bag price drops.'),
+      // An offer line only with a code to give: never promise what the welcome cannot deliver.
+      PROMPT.offerText && (PROMPT.offerCode || '').trim() ? el('p', { class: 'engage-ask__offer' }, PROMPT.offerText) : '',
+      el('div', { class: 'engage-ask__actions' }, no, yes));
     document.addEventListener('keydown', onKey);
-    document.body.append(overlay);
-    yes.focus();
+    document.body.append(card);
+    setTimeout(() => card.classList.add('engage-ask--in'), 30);
+    yes.focus({ preventScroll: true });
   });
+}
+
+// The reward for saying yes (reciprocity): the welcome code, revealed only
+// once the browser's Allow went through, with a one-tap copy.
+function showWelcome() {
+  const code = (PROMPT.offerCode || '').trim();
+  const copy = code ? el('button', { class: 'engage-btn engage-btn--primary', type: 'button', onclick: async () => {
+    try { await navigator.clipboard.writeText(code); copy.textContent = 'Copied ' + code; } catch {}
+  } }, 'Copy ' + code) : '';
+  const box = el('div', { class: 'engage-toast engage-welcome', role: 'status' },
+    el('div', { class: 'engage-toast__body' },
+      el('strong', {}, "You're in!"),
+      el('span', {}, code ? 'Use this code on your first order.' : "We'll send you new drops, alerts and order updates.")),
+    copy);
+  document.body.append(box);
+  setTimeout(() => box.classList.add('engage-toast--in'), 30);
+  setTimeout(() => box.remove(), code ? 20000 : 6000);
 }
 
 function showToast(data = {}) {
@@ -343,6 +456,10 @@ function showWhatsAppOptIn(surface) {
 /* ---------------------------------- boot --------------------------------- */
 if (pushCapable) { refreshIfDue(); foreground(); }
 earlyAsk();
+productAsk();
+exitIntent();
+// Someone who said "Later" before gets the bell from the first page, not the card.
+if (store.get('dismissed')) showBell();
 
 // Public surface for theme code: onclick="EngagePush.ask('add_to_cart')",
 // and a WhatsApp cart checkbox can call EngagePush.setWhatsAppOptIn(checked).

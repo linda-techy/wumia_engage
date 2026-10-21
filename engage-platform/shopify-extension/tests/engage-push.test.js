@@ -23,9 +23,10 @@ function define(obj, key, value) {
 }
 
 async function load({ ua, touch = 0, standalone = false, push = true, permission = 'default', storage = {},
-                      session = {}, earlyAsk = { pageViews: 0, seconds: 0 } }) {
+                      session = {}, earlyAsk = { pageViews: 0, seconds: 0 }, prompt = {}, path = '/' }) {
   vi.resetModules();
   document.body.innerHTML = '';
+  window.history.replaceState({}, '', path);
   localStorage.clear();
   sessionStorage.clear();
   for (const [k, v] of Object.entries(storage)) localStorage.setItem('engage:' + k, v);
@@ -58,6 +59,7 @@ async function load({ ua, touch = 0, standalone = false, push = true, permission
   window.EngageConfig = {
     proxy: '/apps/push',
     earlyAsk,
+    prompt: { productSeconds: 0, exitIntent: false, ...prompt },
     waNumber: '+91 98765 43210',
     copy: { push: 'Get size-back alerts', pushVersion: 'push_v1', whatsapp: 'Updates on WhatsApp', whatsappVersion: 'wa_v1' }
   };
@@ -85,7 +87,7 @@ describe('platform routing: soft ask or WhatsApp, decided before anything render
     push.ask('add_to_cart');
     await tick();
 
-    expect(document.querySelector('.engage-overlay [role="dialog"]')).not.toBeNull();
+    expect(document.querySelector('.engage-ask[role="dialog"]')).not.toBeNull();
     expect(document.querySelector('.engage-bar')).toBeNull();
     const shown = calls.find((c) => c.body?.step === 'soft_shown').body;
     expect(shown).toMatchObject({ surface: 'add_to_cart', browser, platform });
@@ -102,7 +104,7 @@ describe('platform routing: soft ask or WhatsApp, decided before anything render
     const push = await load(env);
     expect(await push.ask('add_to_cart')).toBeNull();
 
-    expect(document.querySelector('.engage-overlay')).toBeNull();
+    expect(document.querySelector('.engage-ask')).toBeNull();
     const link = document.querySelector('.engage-bar a');
     expect(link.getAttribute('href')).toMatch(/^https:\/\/wa\.me\/919876543210\?text=/);
     expect(events()).toEqual(['ios_redirected_to_whatsapp']);
@@ -120,7 +122,7 @@ describe('platform routing: soft ask or WhatsApp, decided before anything render
 /* -------------------------------- soft ask -------------------------------- */
 
 describe('soft ask', () => {
-  it('the browser prompt comes only after "Yes", in the same click', async () => {
+  it('the browser prompt comes only after "Allow", in the same click', async () => {
     const push = await load({ ua: UA.androidChrome });
     const result = push.ask('add_to_cart');
     await tick();
@@ -132,11 +134,11 @@ describe('soft ask', () => {
     expect(events()).toEqual(['soft_shown', 'soft_accepted', 'native_denied']);
   });
 
-  it('"Not now" is remembered for 14 days, so the next add-to-cart does not nag', async () => {
+  it('"Later" is remembered for 7 days, so the next add-to-cart does not nag', async () => {
     const push = await load({ ua: UA.androidChrome });
     const first = push.ask('add_to_cart');
     await tick();
-    [...document.querySelectorAll('.engage-btn')].find((b) => b.textContent === 'Not now').click();
+    [...document.querySelectorAll('.engage-btn')].find((b) => b.textContent === 'Later').click();
     expect(await first).toBeNull();
 
     expect(await push.ask('add_to_cart')).toBeNull();
@@ -144,8 +146,8 @@ describe('soft ask', () => {
     expect(requestPermission).not.toHaveBeenCalled();
   });
 
-  it('asks again once the 14 days are over', async () => {
-    const push = await load({ ua: UA.androidChrome, storage: { dismissed: String(Date.now() - 15 * 86400e3) } });
+  it('asks again once the 7 days are over', async () => {
+    const push = await load({ ua: UA.androidChrome, storage: { dismissed: String(Date.now() - 8 * 86400e3) } });
     push.ask('add_to_cart');
     await tick();
     expect(events()).toEqual(['soft_shown']);
@@ -167,6 +169,86 @@ describe('soft ask', () => {
   });
 });
 
+/* ------------------------- conversion levers ------------------------- */
+
+describe('what earns the Allow: intent moments, an offer, and no nagging', () => {
+  const shownSurfaces = () => calls.filter((c) => c.body?.step === 'soft_shown').map((c) => c.body.surface);
+
+  it('the headline speaks to the moment: the bag at add-to-cart', async () => {
+    const push = await load({ ua: UA.androidChrome });
+    push.ask('add_to_cart');
+    await tick();
+    expect(document.querySelector('.engage-ask__title').textContent).toBe('Want an alert if the price in your bag drops?');
+    expect(document.querySelector('.engage-ask__text').textContent).toBe('Get size-back alerts');   // the registered consent copy
+  });
+
+  it('an offer line shows only when there is a code to give', async () => {
+    let push = await load({ ua: UA.androidChrome, prompt: { offerText: 'Allow and get 5% off', offerCode: '' } });
+    push.ask('browse');
+    await tick();
+    expect(document.querySelector('.engage-ask__offer')).toBeNull();
+
+    push = await load({ ua: UA.androidChrome, prompt: { offerText: 'Allow and get 5% off', offerCode: 'HELLO5' } });
+    push.ask('browse');
+    await tick();
+    expect(document.querySelector('.engage-ask__offer').textContent).toBe('Allow and get 5% off');
+    expect(document.body.textContent).not.toContain('HELLO5');       // the code comes only after Allow
+  });
+
+  it('after "Later" a bell stays; tapping it asks at once, despite the 7-day wait', async () => {
+    const push = await load({ ua: UA.androidChrome });
+    const first = push.ask('browse');
+    await tick();
+    [...document.querySelectorAll('.engage-btn')].find((b) => b.textContent === 'Later').click();
+    await first;
+    const bell = document.querySelector('.engage-bell');
+    expect(bell).not.toBeNull();
+
+    bell.click();
+    await tick();
+    expect(shownSurfaces()).toEqual(['browse', 'bell']);
+    expect(document.querySelector('.engage-bell')).toBeNull();
+  });
+
+  it('a returning shopper who said "Later" sees the bell, not the card', async () => {
+    await load({ ua: UA.androidChrome, storage: { dismissed: String(Date.now() - 86400e3) } });
+    expect(document.querySelector('.engage-bell')).not.toBeNull();
+    expect(document.querySelector('.engage-ask')).toBeNull();
+  });
+
+  it('never more than maxAsks prompts per shopper', async () => {
+    const push = await load({ ua: UA.androidChrome, storage: { asks: '3' }, prompt: { maxAsks: 3 } });
+    expect(await push.ask('add_to_cart')).toBeNull();
+    expect(shownSurfaces()).toEqual([]);
+  });
+
+  it('a second look at the same piece asks about that piece', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    await load({ ua: UA.androidChrome, path: '/products/kundan-jhumka', storage: { seen: '["kundan-jhumka"]' } });
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(shownSurfaces()).toEqual(['product']);
+    expect(document.querySelector('.engage-ask__title').textContent).toBe('Want a price-drop alert for this piece?');
+  });
+
+  it('a first look waits for the product seconds', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    await load({ ua: UA.androidChrome, path: '/products/kundan-jhumka', prompt: { productSeconds: 25 } });
+    await vi.advanceTimersByTimeAsync(24_000);
+    expect(shownSurfaces()).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(shownSurfaces()).toEqual(['product']);
+  });
+
+  it('desktop exit intent asks once, as the pointer leaves through the top', async () => {
+    await load({ ua: UA.desktopChrome, prompt: { exitIntent: true } });
+    document.dispatchEvent(new MouseEvent('mouseout', { clientY: 0, relatedTarget: null }));
+    await tick();
+    document.dispatchEvent(new MouseEvent('mouseout', { clientY: 0, relatedTarget: null }));
+    await tick();
+    expect(shownSurfaces()).toEqual(['exit_intent']);
+  });
+});
+
 /* ------------------------------- early ask -------------------------------- */
 
 describe('early ask while browsing (most Indian stores ask on arrival; we ask softly, a little later)', () => {
@@ -179,7 +261,7 @@ describe('early ask while browsing (most Indian stores ask on arrival; we ask so
     await vi.advanceTimersByTimeAsync(1500);
 
     expect(shownSurfaces()).toEqual(['browse']);
-    expect(document.querySelector('.engage-overlay')).not.toBeNull();
+    expect(document.querySelector('.engage-ask')).not.toBeNull();
     expect(requestPermission).not.toHaveBeenCalled();
   });
 
@@ -198,7 +280,7 @@ describe('early ask while browsing (most Indian stores ask on arrival; we ask so
     expect(shownSurfaces()).toEqual([]);
   });
 
-  it('respects "Not now" for 14 days and a blocked browser', async () => {
+  it('respects "Later" for 7 days and a blocked browser', async () => {
     await load({ ua: UA.androidChrome, session: { pv: '1' }, storage: { dismissed: String(Date.now()) },
                  earlyAsk: { pageViews: 2, seconds: 20 } });
     await vi.advanceTimersByTimeAsync(30_000);
@@ -221,7 +303,7 @@ describe('early ask while browsing (most Indian stores ask on arrival; we ask so
     await vi.advanceTimersByTimeAsync(20_000);
 
     expect(shownSurfaces()).toEqual(['add_to_cart']);
-    expect(document.querySelectorAll('.engage-overlay').length).toBe(1);
+    expect(document.querySelectorAll('.engage-ask').length).toBe(1);
   });
 
   it('on iOS Safari the early moment offers WhatsApp instead', async () => {

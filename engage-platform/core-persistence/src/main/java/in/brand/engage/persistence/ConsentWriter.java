@@ -82,10 +82,26 @@ public class ConsentWriter {
      */
     public int grantWhatsAppFromCheckoutNotice(Connection c, UUID identityId, String orderId, String phoneSource,
                                                OffsetDateTime orderCreatedAt, String noticeVersion) throws SQLException {
+        return grantFromNotice(c, identityId, "order_id", orderId, phoneSource, orderCreatedAt, noticeVersion);
+    }
+
+    /**
+     * The same notice, recorded when the phone is typed at checkout rather than
+     * when the order is placed: the label sits on the phone field, so the shopper
+     * saw it either way. Without this, a first-time shopper who leaves at checkout
+     * has no consent and the abandoned-checkout WhatsApp cannot reach them.
+     */
+    public int grantWhatsAppFromCheckoutPhone(Connection c, UUID identityId, String checkoutToken, String phoneSource,
+                                              OffsetDateTime checkoutAt, String noticeVersion) throws SQLException {
+        return grantFromNotice(c, identityId, "checkout_token", checkoutToken, phoneSource, checkoutAt, noticeVersion);
+    }
+
+    private int grantFromNotice(Connection c, UUID identityId, String refKey, String ref, String phoneSource,
+                                OffsetDateTime at, String noticeVersion) throws SQLException {
         return Sql.update(c, """
                 INSERT INTO consents (identity_id, channel, purpose, state, source, copy_version, evidence, occurred_at)
                 SELECT ?, 'whatsapp', pur, 'granted', 'checkout_notice', v.version,
-                       jsonb_build_object('order_id', ?::text, 'phone_source', ?::text, 'copy_text', v.text,
+                       jsonb_build_object(?::text, ?::text, 'phone_source', ?::text, 'copy_text', v.text,
                                           'basis', CASE pur WHEN 'transactional' THEN 'dpdp_s7a_order_updates'
                                                             ELSE 'notice_opt_out' END,
                                           'affirmative_action', false, 'pre_ticked', false),
@@ -95,7 +111,7 @@ public class ConsentWriter {
                  WHERE v.version = ? AND v.channel = 'whatsapp' AND v.surface = 'checkout_notice'
                    AND NOT EXISTS (SELECT 1 FROM consents x
                                     WHERE x.identity_id = ? AND x.channel = 'whatsapp' AND x.purpose = pur)""",
-                identityId, orderId, phoneSource, orderCreatedAt, noticeVersion, identityId);
+                identityId, refKey, ref, phoneSource, at, noticeVersion, identityId);
     }
 
     /**
@@ -165,6 +181,29 @@ public class ConsentWriter {
 
     public void syncShopifyEmailConsent(Connection c, UUID identityId, String shopifyState, String ref,
                                         OffsetDateTime statedAt) throws SQLException {
+        syncShopifyState(c, identityId, "email", shopifyState, ref, statedAt, null);
+    }
+
+    /**
+     * Shopify's own marketing checkbox for the phone ("Text me with news and
+     * offers"), relabelled to name WhatsApp and SMS. From the day the label
+     * changed ({@code since}), ticking it grants WhatsApp and SMS marketing and
+     * unticking or unsubscribing withdraws both. A choice made before that day
+     * was about SMS only, under the old label, and is ignored.
+     *
+     * @param since null = the label still says SMS only: nothing is recorded
+     */
+    public void syncShopifyPhoneMarketingConsent(Connection c, UUID identityId, String shopifyState, String ref,
+                                                 OffsetDateTime statedAt, OffsetDateTime since, String copyVersion)
+            throws SQLException {
+        if (since == null || statedAt == null || statedAt.isBefore(since)) return;
+        for (var channel : new String[] {"whatsapp", "sms"}) {
+            syncShopifyState(c, identityId, channel, shopifyState, ref, statedAt, copyVersion);
+        }
+    }
+
+    private void syncShopifyState(Connection c, UUID identityId, String channel, String shopifyState, String ref,
+                                  OffsetDateTime statedAt, String copyVersion) throws SQLException {
         String state = switch (shopifyState == null ? "" : shopifyState) {
             case "subscribed" -> "granted";
             case "unsubscribed", "redacted" -> "withdrawn";
@@ -173,20 +212,20 @@ public class ConsentWriter {
         if (state == null || identityId == null || statedAt == null) return;
         var statementRef = ref + "@" + statedAt.toInstant();
         Sql.update(c, """
-                INSERT INTO consents (identity_id, channel, purpose, state, source, evidence, occurred_at)
-                SELECT ?, 'email', 'marketing', ?::consent_state, 'shopify_checkout',
+                INSERT INTO consents (identity_id, channel, purpose, state, source, copy_version, evidence, occurred_at)
+                SELECT ?, CAST(? AS channel), 'marketing', ?::consent_state, 'shopify_checkout', ?,
                        jsonb_build_object('shopify_state', ?::text, 'ref', ?::text), ?
                  WHERE NOT EXISTS (SELECT 1 FROM consents x
-                                    WHERE x.identity_id = ? AND x.channel = 'email' AND x.purpose = 'marketing'
+                                    WHERE x.identity_id = ? AND x.channel = CAST(? AS channel) AND x.purpose = 'marketing'
                                       AND x.evidence->>'ref' = ?::text)
                    AND (SELECT x.state FROM consents x
-                         WHERE x.identity_id = ? AND x.channel = 'email' AND x.purpose = 'marketing'
+                         WHERE x.identity_id = ? AND x.channel = CAST(? AS channel) AND x.purpose = 'marketing'
                            AND x.occurred_at <= ?
                          ORDER BY x.occurred_at DESC, x.id DESC LIMIT 1)
                        IS DISTINCT FROM ?::consent_state""",
-                identityId, state, shopifyState, statementRef, statedAt,
-                identityId, statementRef,
-                identityId, statedAt, state);
+                identityId, channel, state, copyVersion, shopifyState, statementRef, statedAt,
+                identityId, channel, statementRef,
+                identityId, channel, statedAt, state);
     }
 
     private void warnIfUnregisteredCopy(Connection c, String noteAttributesJson, String orderId) throws SQLException {
