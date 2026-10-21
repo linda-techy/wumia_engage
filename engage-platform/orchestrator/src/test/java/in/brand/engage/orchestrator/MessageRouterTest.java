@@ -62,6 +62,32 @@ class MessageRouterTest {
         assertTrue(beacons.verify(sent.sendId(), msg.pushData().get("sig")), "ingest-api must accept this push's beacons");
     }
 
+    @Test void an_offer_with_an_end_caps_the_push_ttl_names_the_end_and_draws_the_countdown_poster() {
+        var s = data.subscriber();
+        var vars = new java.util.HashMap<>(VARS);
+        vars.put("ends_at", "2026-09-28T08:30:00Z");                 // 14:00 IST: two hours from the clock
+        vars.put("countdown_image", "https://engage.example/media/countdown/c1");
+
+        var sent = assertInstanceOf(SendResult.Sent.class, router.send(command(s.id(), key(), vars)));
+
+        var msg = fcm.sent.getFirst();
+        assertEquals(Duration.ofHours(2), msg.ttl(), "never delivered after the offer ends");
+        assertEquals(Long.toString(java.time.Instant.parse("2026-09-28T08:30:00Z").toEpochMilli()), msg.pushData().get("ends_at"),
+                "for the service worker and a native app's timer");
+        assertEquals("https://engage.example/media/countdown/c1?s=" + sent.sendId(), msg.image());
+    }
+
+    @Test void after_the_offer_ends_nothing_is_sent() {
+        var s = data.subscriber();
+        var vars = new java.util.HashMap<>(VARS);
+        vars.put("ends_at", "2026-09-28T06:00:00Z");                 // 11:30 IST: half an hour ago
+
+        var failed = assertInstanceOf(SendResult.Failed.class, router.send(command(s.id(), key(), vars)));
+
+        assertEquals("offer_ended", failed.code());
+        assertTrue(fcm.sent.isEmpty());
+    }
+
     @Test void a_locale_the_template_lacks_gets_the_english_copy() {
         var s = data.subscriber();
         data.locale(s.id(), "hi-Latn");                      // templates are English only (decided 2026-10-10)

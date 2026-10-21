@@ -43,6 +43,10 @@ export interface Campaign {
   followUpChannel: string | null;
   followUpTemplateKey: string | null;
   followUpAfterMinutes: number | null;
+  /** The offer's end (V44): "{time_left}" in the text, the poster band and the reminders count down to it. */
+  endsAt?: string | null;
+  countdownPoster?: boolean;
+  countdownReminders?: boolean;
   estimate: Estimate | null;
   estimatedAt: string | null;
   estimatedCostPaise: number | null;

@@ -48,9 +48,12 @@ public class MessageRouter {
     private final WaTemplateGate waGate;
     private final EmailLinks emailLinks;
     private final Map<Channel, ChannelAdapter> adapters = new EnumMap<>(Channel.class);
+    private final java.time.Clock clock;
 
     public MessageRouter(PolicyEngine policy, SendRepository sends, TemplateRegistry templates, Renderer renderer,
-                         BeaconSignature beacons, WaTemplateGate waGate, EmailLinks emailLinks, List<ChannelAdapter> adapters) {
+                         BeaconSignature beacons, WaTemplateGate waGate, EmailLinks emailLinks, List<ChannelAdapter> adapters,
+                         java.time.Clock clock) {
+        this.clock = clock;
         this.waGate = waGate;
         this.emailLinks = emailLinks;
         this.policy = policy;
@@ -188,12 +191,33 @@ public class MessageRouter {
             return deliver(cmd, allow, sendId, adapter, message);
         }
         try {
-            var r = renderer.render(template, allow.locale(), cmd.vars());
-            if (r.url() == null) throw new IllegalArgumentException("template " + template.key() + " needs variable 'url'");
             boolean push = cmd.channel() == Channel.PUSH;
-            message = new RenderedMessage(cmd.channel(), template.key(), sendId, cmd.intentKey(), r.title(), r.body(),
-                    Utm.apply(r.url(), cmd.channel().dbName(), cmd.intentKey(), sendId), r.image(), null,
-                    cmd.ttl(), cmd.highUrgency(), push ? beacons.sign(sendId) : null);
+            var vars = cmd.vars();
+            var ttl = cmd.ttl();
+            Map<String, String> extra = Map.of();
+            String timeLeft = null;
+            var endsAt = push ? OfferCountdown.endsAt(vars) : java.util.Optional.<java.time.Instant>empty();
+            if (endsAt.isPresent()) {
+                // An offer with an end: the time left as of now, and never delivered after the end.
+                var left = java.time.Duration.between(clock.instant(), endsAt.get());
+                if (left.isNegative() || left.isZero()) return fail(cmd, sendId, "offer_ended", false, false, List.of());
+                timeLeft = OfferCountdown.timeLeft(left);
+                var withTime = new java.util.HashMap<>(vars);
+                withTime.put(OfferCountdown.VAR_TIME_LEFT, timeLeft);
+                vars = withTime;
+                if (ttl.compareTo(left) > 0) ttl = left;
+                extra = Map.of(OfferCountdown.ENDS_AT, Long.toString(endsAt.get().toEpochMilli()));
+            }
+            var r = renderer.render(template, allow.locale(), vars);
+            if (r.url() == null) throw new IllegalArgumentException("template " + template.key() + " needs variable 'url'");
+            var title = timeLeft == null ? r.title() : OfferCountdown.fill(r.title(), timeLeft);
+            var body = timeLeft == null ? r.body() : OfferCountdown.fill(r.body(), timeLeft);
+            // The countdown poster is drawn when the phone fetches it; the send id keeps each fetch its own.
+            var image = endsAt.isPresent() && vars.get(OfferCountdown.VAR_IMAGE) != null
+                    ? vars.get(OfferCountdown.VAR_IMAGE) + "?s=" + sendId : r.image();
+            message = new RenderedMessage(cmd.channel(), template.key(), sendId, cmd.intentKey(), title, body,
+                    Utm.apply(r.url(), cmd.channel().dbName(), cmd.intentKey(), sendId), image, null,
+                    ttl, cmd.highUrgency(), push ? beacons.sign(sendId) : null, null, null, null, extra);
         } catch (IllegalArgumentException e) {
             LOG.error("send {}: cannot render {}: {}", sendId, template.key(), e.getMessage());
             return fail(cmd, sendId, "render_failed", false, false, List.of());

@@ -39,7 +39,9 @@ if (cfg.apiKey && cfg.projectId && cfg.messagingSenderId && cfg.appId) {
       badge: data.badge || undefined,
       image: data.image || undefined,           // large image: Chrome on Android + desktop
       tag: data.tag || data.kind || 'engage',   // collapses repeats of the same intent
-      renotify: false,
+      // An offer countdown's reminder replaces the earlier notification (same tag)
+      // and should alert again: that is the countdown. Everything else is quiet.
+      renotify: Boolean(data.ends_at),
       requireInteraction: false,
       data: { url: data.url, sid: data.sid, sig: data.sig }
     });

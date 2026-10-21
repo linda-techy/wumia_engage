@@ -48,11 +48,14 @@ public class CampaignExecutor {
     private final Db db;
     private final MessageOrchestrator orchestrator;
     private final ConfigResolver config;
+    private final String publicBase;
 
-    public CampaignExecutor(Db db, MessageOrchestrator orchestrator, ConfigResolver config) {
+    public CampaignExecutor(Db db, MessageOrchestrator orchestrator, ConfigResolver config,
+                            @io.micronaut.context.annotation.Value("${PUBLIC_BASE_URL:}") String publicBaseUrl) {
         this.db = db;
         this.orchestrator = orchestrator;
         this.config = config;
+        this.publicBase = publicBaseUrl == null ? "" : publicBaseUrl.strip().replaceAll("/+$", "");
     }
 
     /** One pass over every runnable campaign. @return recipients dispatched */
@@ -105,16 +108,31 @@ public class CampaignExecutor {
         String channel;
         Long cap;
         Map<String, String> vars = new HashMap<>();
+        java.time.OffsetDateTime endsAt;
+        boolean countdownPoster;
+        String name;
         try (var ps = Sql.prepare(c, """
-                SELECT channel::text, budget_cap_paise FROM campaigns WHERE id = ? AND status = 'RUNNING'
+                SELECT channel::text, budget_cap_paise, ends_at, countdown_poster, name FROM campaigns
+                 WHERE id = ? AND status = 'RUNNING'
                    FOR UPDATE SKIP LOCKED""", id); var rs = ps.executeQuery()) {
             if (!rs.next()) return null;                   // paused, finished, or another pod has it
             channel = rs.getString(1);
             cap = Sql.nullableLong(rs, "budget_cap_paise");
+            endsAt = Sql.timestamp(rs, "ends_at");
+            countdownPoster = rs.getBoolean("countdown_poster");
+            name = rs.getString("name");
         }
         try (var ps = Sql.prepare(c, "SELECT key, value FROM campaigns, jsonb_each_text(vars) WHERE id = ?", id);
              var rs = ps.executeQuery()) {
             while (rs.next()) vars.put(rs.getString(1), rs.getString(2));
+        }
+        if (endsAt != null) {
+            // The offer's end (V44): the router fills the time left and stops at the end.
+            vars.put(in.brand.engage.orchestrator.OfferCountdown.VAR_ENDS_AT, endsAt.toInstant().toString());
+            vars.putIfAbsent("offer", name);
+            if (countdownPoster && !publicBase.isEmpty()) {
+                vars.put(in.brand.engage.orchestrator.OfferCountdown.VAR_IMAGE, publicBase + "/media/countdown/" + id);
+            }
         }
 
         // A crashed pod's claims go back to the pool.

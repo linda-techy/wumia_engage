@@ -21,11 +21,22 @@ import java.util.Objects;
  * @param whatsapp    WhatsApp: the template call; null sends {@code body} as a free-form service reply
  * @param sms         SMS: the DLT template and its slot values (null for other channels)
  * @param email       email: subject, HTML and text bodies, unsubscribe link (null for other channels)
+ * @param extra       push: more data fields for whoever draws the notification, e.g.
+ *                    {@code ends_at} (epoch ms) of an offer countdown, which the web service
+ *                    worker and a native app (Android chronometer) both read; empty for none
  */
 public record RenderedMessage(Channel channel, String templateKey, long sendId, String kind,
                               String title, String body, String url, String image, String tag,
                               Duration ttl, boolean highUrgency, String beaconSig, WaTemplateCall whatsapp,
-                              SmsCall sms, EmailContent email) {
+                              SmsCall sms, EmailContent email, Map<String, String> extra) {
+
+    /** Every channel's full form, without extra push data. */
+    public RenderedMessage(Channel channel, String templateKey, long sendId, String kind, String title, String body,
+                           String url, String image, String tag, Duration ttl, boolean highUrgency, String beaconSig,
+                           WaTemplateCall whatsapp, SmsCall sms, EmailContent email) {
+        this(channel, templateKey, sendId, kind, title, body, url, image, tag, ttl, highUrgency, beaconSig, whatsapp, sms,
+                email, Map.of());
+    }
 
     public RenderedMessage {
         Objects.requireNonNull(channel, "channel");
@@ -35,6 +46,7 @@ public record RenderedMessage(Channel channel, String templateKey, long sendId, 
         Objects.requireNonNull(body, "body");
         Objects.requireNonNull(url, "url");
         Objects.requireNonNull(ttl, "ttl");
+        extra = extra == null ? Map.of() : Map.copyOf(extra);
     }
 
     /** SMS (and the other channels, with null calls). */
@@ -68,6 +80,7 @@ public record RenderedMessage(Channel channel, String templateKey, long sendId, 
         if (image != null) data.put("image", image);
         data.put("tag", tag != null ? tag : kind);
         if (beaconSig != null) data.put("sig", beaconSig);
+        extra.forEach(data::putIfAbsent);             // never overrides the fields above
         return data;
     }
 }

@@ -1,0 +1,13 @@
+# The "last chance" reminders of a countdown campaign (V44): 24 h, 3 h and 1 h
+# before the offer ends, to people who have not tapped the campaign yet. Each
+# carries the campaign's tag, so it replaces the previous notification and the
+# shade shows one offer counting down. time_left is filled at send time; the
+# router never sends after the end. No cooldown: up to three in the last day,
+# still under the push frequency caps.
+key: push_offer_countdown_v1
+channel: push
+category: marketing
+locales:
+  en: { title: "{{offer}} ends in {{time_left}}", body: "Last chance to shop the {{offer}}. Tap to see the pieces before it ends." }
+vars: [offer, time_left, url, image]
+samples: { offer: "Diwali Festive Edit", time_left: "1 day 23h" }

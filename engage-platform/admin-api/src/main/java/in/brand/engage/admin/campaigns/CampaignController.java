@@ -80,7 +80,21 @@ public class CampaignController {
                                 @Nullable OffsetDateTime scheduledAt, @Nullable Integer sendRatePerMinute,
                                 @Nullable BigDecimal holdoutPct, @Nullable Long budgetCapPaise,
                                 @Nullable Integer ttlSeconds, @Nullable String followUpChannel,
-                                @Nullable String followUpTemplateKey, @Nullable Integer followUpAfterMinutes) {}
+                                @Nullable String followUpTemplateKey, @Nullable Integer followUpAfterMinutes,
+                                @Nullable OffsetDateTime endsAt, @Nullable Boolean countdownPoster,
+                                @Nullable Boolean countdownReminders) {
+
+        @io.micronaut.core.annotation.Creator
+        public CampaignWrite {}
+
+        /** The fields before the offer countdown (V44): no end, no countdown. */
+        public CampaignWrite(String name, String channel, String templateKey, String segmentId, Map<String, String> vars,
+                             OffsetDateTime scheduledAt, Integer sendRatePerMinute, BigDecimal holdoutPct, Long budgetCapPaise,
+                             Integer ttlSeconds, String followUpChannel, String followUpTemplateKey, Integer followUpAfterMinutes) {
+            this(name, channel, templateKey, segmentId, vars, scheduledAt, sendRatePerMinute, holdoutPct, budgetCapPaise,
+                    ttlSeconds, followUpChannel, followUpTemplateKey, followUpAfterMinutes, null, null, null);
+        }
+    }
 
     private final Db db;
     private final CurrentOperator current;
@@ -136,8 +150,10 @@ public class CampaignController {
             try (var ps = Sql.prepare(c, """
                     INSERT INTO campaigns (name, channel, template_key, segment_id, vars, scheduled_at, send_rate_per_minute,
                                            holdout_pct, budget_cap_paise, ttl_seconds, follow_up_channel,
-                                           follow_up_template_key, follow_up_after_minutes, created_by)
-                    VALUES (?, CAST(? AS channel), ?, ?, ?::jsonb, ?, ?, CAST(? AS numeric), ?, ?, CAST(? AS channel), ?, ?, ?)
+                                           follow_up_template_key, follow_up_after_minutes, ends_at, countdown_poster,
+                                           countdown_reminders, created_by)
+                    VALUES (?, CAST(? AS channel), ?, ?, ?::jsonb, ?, ?, CAST(? AS numeric), ?, ?, CAST(? AS channel), ?, ?,
+                            ?, ?, ?, ?)
                     RETURNING id""", w.params(actor));
                  var rs = ps.executeQuery()) {
                 rs.next();
@@ -167,6 +183,7 @@ public class CampaignController {
                            vars = ?::jsonb, scheduled_at = ?, send_rate_per_minute = ?, holdout_pct = CAST(? AS numeric),
                            budget_cap_paise = ?, ttl_seconds = ?, follow_up_channel = CAST(? AS channel),
                            follow_up_template_key = ?, follow_up_after_minutes = ?,
+                           ends_at = ?, countdown_poster = ?, countdown_reminders = ?,
                            status = 'DRAFT', estimate = NULL, estimated_at = NULL, estimated_cost_paise = NULL,
                            approved_by = NULL, approved_at = NULL, updated_at = now()
                      WHERE id = ?""", params.toArray());
@@ -329,7 +346,8 @@ public class CampaignController {
             SELECT k.id, k.name, k.channel::text AS channel, k.template_key, k.segment_id, s.name AS segment_name,
                    k.vars, k.status, k.paused_reason, k.scheduled_at, k.send_rate_per_minute, k.holdout_pct,
                    k.budget_cap_paise, k.ttl_seconds, k.follow_up_channel::text AS follow_up_channel,
-                   k.follow_up_template_key, k.follow_up_after_minutes, k.estimate, k.estimated_at,
+                   k.follow_up_template_key, k.follow_up_after_minutes, k.ends_at, k.countdown_poster,
+                   k.countdown_reminders, k.estimate, k.estimated_at,
                    k.estimated_cost_paise, cb.email AS created_by, ab.email AS approved_by, k.approved_at,
                    k.config_snapshot_id, k.started_at, k.finished_at, k.stats, k.created_at, k.updated_at
               FROM campaigns k
@@ -437,12 +455,13 @@ public class CampaignController {
     private record Valid(String name, String channel, String templateKey, UUID segmentId, String varsJson,
                          OffsetDateTime scheduledAt, int rate, BigDecimal holdoutPct, Long budgetCapPaise,
                          Integer ttlSeconds, String followUpChannel, String followUpTemplateKey,
-                         Integer followUpAfterMinutes) {
+                         Integer followUpAfterMinutes, OffsetDateTime endsAt, boolean countdownPoster,
+                         boolean countdownReminders) {
 
         Object[] params(UUID actor) {
             return new Object[] {name, channel, templateKey, segmentId, varsJson, scheduledAt, rate,
                     holdoutPct.toPlainString(), budgetCapPaise, ttlSeconds, followUpChannel, followUpTemplateKey,
-                    followUpAfterMinutes, actor};
+                    followUpAfterMinutes, endsAt, countdownPoster, countdownReminders, actor};
         }
 
         Map<String, Object> summary() {
@@ -455,6 +474,9 @@ public class CampaignController {
             m.put("holdoutPct", holdoutPct.toPlainString());
             if (budgetCapPaise != null) m.put("budgetCapPaise", budgetCapPaise);
             if (followUpChannel != null) m.put("followUp", followUpChannel + ":" + followUpTemplateKey);
+            if (endsAt != null) m.put("endsAt", endsAt.toString());
+            if (countdownPoster) m.put("countdownPoster", true);
+            if (countdownReminders) m.put("countdownReminders", true);
             return m;
         }
     }
@@ -522,8 +544,29 @@ public class CampaignController {
         if ((channel.equals("whatsapp") || "whatsapp".equals(fuChannel)) && (cap == null || cap == 0)) {
             throw Problems.badRequest("a WhatsApp campaign needs a budget cap: every send is paid");
         }
+
+        // Offer countdown (V44): an end, then the poster band and the last-chance reminders on top of it.
+        var endsAt = b.endsAt();
+        boolean poster = Boolean.TRUE.equals(b.countdownPoster());
+        boolean reminders = Boolean.TRUE.equals(b.countdownReminders());
+        if ((poster || reminders) && endsAt == null) throw Problems.badRequest("a countdown needs the offer's end (endsAt)");
+        if (endsAt != null) {
+            if (!channel.equals("push")) throw Problems.badRequest("the offer countdown is for push campaigns");
+            var start = scheduledAt != null ? scheduledAt : OffsetDateTime.now();
+            if (!endsAt.isAfter(start.plusMinutes(30))) {
+                throw Problems.badRequest("the offer must end at least 30 minutes after the campaign starts");
+            }
+            if (endsAt.isAfter(start.plusDays(30))) throw Problems.badRequest("an offer countdown is at most 30 days");
+        }
+        if (reminders && fuChannel != null) {
+            throw Problems.badRequest("the last-chance reminders are this campaign's follow-up: remove the other follow-up");
+        }
+        if (poster && blank(vars.get("image"))) throw Problems.badRequest("the countdown poster needs a poster: add one");
+        if (vars.containsKey("offer") && (vars.get("offer").length() > 24)) {
+            throw Problems.badRequest("the offer name is at most 24 characters (it goes in the reminder title)");
+        }
         return new Valid(name, channel, b.templateKey(), segmentId, toJson(vars), scheduledAt, rate, holdout, cap, ttl,
-                fuChannel, fuTemplate, fuAfter);
+                fuChannel, fuTemplate, fuAfter, endsAt, poster, reminders);
     }
 
     /** The same rule as the picker, enforced on write. */

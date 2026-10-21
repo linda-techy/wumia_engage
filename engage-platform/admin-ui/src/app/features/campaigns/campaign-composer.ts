@@ -82,10 +82,32 @@ function isoToIstInput(iso: string | null): string {
             </section>
           }
           <app-poster-picker [value]="image()" (changed)="setImage($event)" />
+          <section class="card space-y-3" aria-labelledby="timer-h">
+            <h2 id="timer-h" class="text-sm font-semibold">Offer timer</h2>
+            <label class="text-sm"><input type="checkbox" [checked]="timer()" (change)="setTimer(checked($event))" />
+              This offer ends at a set time (a countdown, like Myntra's sale timers)</label>
+            @if (timer()) {
+              <div class="grid grid-cols-2 gap-4">
+                <label class="text-sm"><span class="mb-1 block font-medium">Offer ends (IST)</span>
+                  <input type="datetime-local" class="input" [value]="endsAt()" (input)="endsAt.set(val($event))" /></label>
+                <label class="text-sm"><span class="mb-1 flex justify-between font-medium">Offer name
+                  <span class="font-normal" [class.text-red-700]="named('offer').length > 24">{{ named('offer').length }}/24</span></span>
+                  <input class="input" [value]="named('offer')" (input)="setNamed('offer', val($event))" placeholder="Diwali Festive Edit" /></label>
+              </div>
+              <p class="text-xs text-slate-500">Write <code class="rounded bg-slate-100 px-1">&#123;time_left&#125;</code> in the title or text, e.g.
+                "Dhanteras offer ends in &#123;time_left&#125;", and each push says how long is left when it goes. Nothing is delivered after the end.</p>
+              <label class="block text-sm"><input type="checkbox" [checked]="countdownPoster()" (change)="countdownPoster.set(checked($event))" />
+                Countdown on the poster: an "OFFER ENDS IN 02:14:33" band, showing the time left when the phone displays it</label>
+              <label class="block text-sm"><input type="checkbox" [checked]="countdownReminders()" (change)="setReminders(checked($event))" />
+                "Last chance" pushes at 24 h, 3 h and 1 h before the end, to people who have not tapped yet (each replaces the previous one)</label>
+              <p class="text-xs text-slate-500">A future Wumika app gets the same campaign and can show a live ticking timer from the same end time.</p>
+            }
+          </section>
           <section class="card">
             <app-push-preview [title]="custom() ? named('title') : 'Title from ' + (templateKey() || 'the template')"
                               [body]="custom() ? named('body') : 'Text from the template, with your variables'"
-                              [image]="image()" [url]="named('url') || null" />
+                              [image]="image()" [url]="named('url') || null"
+                              [countdownMs]="countdownMs()" [countdownPoster]="timer() && countdownPoster()" />
           </section>
         }
 
@@ -119,7 +141,7 @@ function isoToIstInput(iso: string | null): string {
           }
         </section>
 
-        <section class="card space-y-3">
+        <section class="card space-y-3" [hidden]="timer() && countdownReminders()">
           <label class="text-sm"><input type="checkbox" [checked]="followUp()" (change)="followUp.set(checked($event))" />
             Follow up on {{ otherChannel() }} with people who did not click</label>
           @if (followUp()) {
@@ -178,7 +200,7 @@ export default class CampaignComposerPage {
 
   /** Variables edited by their own fields above, hidden from the generic list. */
   managed(key: string): boolean {
-    return key === 'image' || (this.custom() && (key === 'title' || key === 'body'));
+    return key === 'image' || (this.custom() && (key === 'title' || key === 'body')) || (this.timer() && key === 'offer');
   }
 
   setImage(url: string | null): void {
@@ -198,6 +220,29 @@ export default class CampaignComposerPage {
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
 
+  /** Offer countdown (V44). */
+  readonly timer = signal(false);
+  readonly endsAt = signal('');
+  readonly countdownPoster = signal(true);
+  readonly countdownReminders = signal(true);
+  /** Time left at the campaign's start (or now), for the preview's {time_left} and poster band. */
+  readonly countdownMs = computed(() => {
+    const end = this.timer() ? istInputToIso(this.endsAt()) : null;
+    if (!end) return null;
+    const start = istInputToIso(this.scheduledAt());
+    return Math.max(0, new Date(end).getTime() - (start ? new Date(start).getTime() : Date.now()));
+  });
+
+  setTimer(on: boolean): void {
+    this.timer.set(on);
+    if (on && !this.named('offer')) this.setNamed('offer', this.name().trim().slice(0, 24));
+  }
+
+  setReminders(on: boolean): void {
+    this.countdownReminders.set(on);
+    if (on) this.followUp.set(false);              // the reminders are the follow-up
+  }
+
   readonly otherChannel = computed(() => (this.channel() === 'push' ? 'whatsapp' : 'push'));
   readonly needsCap = computed(() => this.channel() === 'whatsapp' || (this.followUp() && this.otherChannel() === 'whatsapp'));
 
@@ -215,7 +260,8 @@ export default class CampaignComposerPage {
       !!this.segmentId() &&
       (!this.needsCap() || Number(this.budget()) > 0) &&
       (!this.followUp() || !!this.followUpTemplate()) &&
-      (!this.custom() || (this.named('title').trim().length > 0 && this.named('body').trim().length > 0)),
+      (!this.custom() || (this.named('title').trim().length > 0 && this.named('body').trim().length > 0)) &&
+      (!this.timer() || (!!this.endsAt() && this.named('offer').trim().length > 0 && this.named('offer').length <= 24)),
   );
 
   #loaded = false;
@@ -239,6 +285,10 @@ export default class CampaignComposerPage {
         this.followUp.set(!!c.followUpChannel);
         this.followUpTemplate.set(c.followUpTemplateKey ?? '');
         this.followUpHours.set(c.followUpAfterMinutes ? String(c.followUpAfterMinutes / 60) : '6');
+        this.timer.set(!!c.endsAt);
+        this.endsAt.set(isoToIstInput(c.endsAt ?? null));
+        this.countdownPoster.set(!!c.countdownPoster);
+        this.countdownReminders.set(!!c.countdownReminders);
       });
     });
   }
@@ -273,7 +323,9 @@ export default class CampaignComposerPage {
     event.preventDefault();
     this.busy.set(true);
     this.error.set(null);
-    const vars = Object.fromEntries(this.vars().filter((v) => v.key.trim()).map((v) => [v.key.trim(), v.value.trim()]));
+    const timer = this.channel() === 'push' && this.timer();
+    const vars = Object.fromEntries(this.vars().filter((v) => v.key.trim() && (timer || v.key.trim() !== 'offer'))
+      .map((v) => [v.key.trim(), v.value.trim()]));
     const num = (s: string) => (s.trim() === '' ? null : Number(s));
     const body = {
       name: this.name().trim(),
@@ -289,6 +341,9 @@ export default class CampaignComposerPage {
       followUpChannel: this.followUp() ? this.otherChannel() : null,
       followUpTemplateKey: this.followUp() ? this.followUpTemplate() : null,
       followUpAfterMinutes: this.followUp() ? Math.round(Number(this.followUpHours()) * 60) : null,
+      endsAt: timer ? istInputToIso(this.endsAt()) : null,
+      countdownPoster: timer && this.countdownPoster() && !!this.image(),
+      countdownReminders: timer && this.countdownReminders(),
     };
     try {
       const saved = this.id()
