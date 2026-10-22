@@ -54,7 +54,7 @@ public class JourneyDiscount implements StepVars {
     @Override
     public Map<String, String> provide(CascadeRun run, Map<String, String> vars) throws Unavailable {
         var existing = vars.get("code");
-        if (existing != null && !existing.isBlank()) return Map.of();      // shared code, or made on an earlier attempt
+        if (existing != null && !existing.isBlank()) return withPath(vars, existing, Map.of());   // shared code, or made earlier
         if (!"unique".equals(vars.get("discount_mode"))) throw new Unavailable("no_code");
         var prefix = vars.getOrDefault("discount_config", "journey.abandon");
 
@@ -68,7 +68,7 @@ public class JourneyDiscount implements StepVars {
             try {
                 codes.create(new DiscountCodes.Spec(code, run.intentKey() + " " + code + " (run " + run.id() + ")",
                         percent, minOrder, now, ends));
-                return Map.of("code", code, "code_ends_at", ends.toString());
+                return withPath(vars, code, Map.of("code", code, "code_ends_at", ends.toString()));
             } catch (DiscountCodes.Failed e) {
                 if (e.taken() && attempt == 0) continue;                     // 31^8 codes: a clash is rare, retry once
                 LOG.warn("run {}: no discount code: {}", run.id(), e.getMessage());
@@ -76,6 +76,20 @@ public class JourneyDiscount implements StepVars {
             }
         }
         throw new Unavailable("shopify: code taken twice");
+    }
+
+    /**
+     * When the run names a {@code discount_redirect} (e.g. {@code /cart}), also the
+     * WhatsApp button suffix of Shopify's auto-apply link, {@code discount/<code>?redirect=%2Fcart}:
+     * the tap applies the code by itself, so nobody has to type it.
+     */
+    static Map<String, String> withPath(Map<String, String> vars, String code, Map<String, String> out) {
+        var redirect = vars.get("discount_redirect");
+        if (redirect == null || redirect.isBlank()) return out;
+        var all = new java.util.HashMap<>(out);
+        all.put("discount_path", "discount/" + java.net.URLEncoder.encode(code, java.nio.charset.StandardCharsets.UTF_8)
+                + "?redirect=" + java.net.URLEncoder.encode(redirect, java.nio.charset.StandardCharsets.UTF_8));
+        return Map.copyOf(all);
     }
 
     static String newCode() {

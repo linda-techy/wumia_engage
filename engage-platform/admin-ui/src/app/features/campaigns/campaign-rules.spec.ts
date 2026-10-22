@@ -1,4 +1,4 @@
-import { ARM_WITHIN_MS, Campaign, canApprove, canArm, canEdit, canPause, canResume, Me, progress } from './campaign-rules';
+import { ARM_WITHIN_MS, Campaign, canApprove, canArm, canEdit, canPause, canResume, DISCOUNT_CODE, discountLink, discountPath, Me, parseDiscountLink, progress } from './campaign-rules';
 
 const NOW = Date.parse('2026-10-09T12:00:00Z');
 
@@ -52,5 +52,24 @@ describe('composer button rules', () => {
   it('measures progress over treatment recipients, holdout excluded', () => {
     expect(progress({ recipients: { pending: 30, sent: 60, blocked: 10, skipped: 20 } })).toEqual({ done: 70, total: 100, pct: 70 });
     expect(progress({ recipients: {} })).toEqual({ done: 0, total: 0, pct: 0 });
+  });
+});
+
+describe('auto-apply discount links', () => {
+  it('turns a page into a Shopify discount link and back', () => {
+    const link = discountLink('https://wumika.com/collections/diwali-gifts', 'DHANTERAS15');
+    expect(link).toBe('https://wumika.com/discount/DHANTERAS15?redirect=%2Fcollections%2Fdiwali-gifts');
+    expect(parseDiscountLink(link)).toEqual({ code: 'DHANTERAS15', target: '/collections/diwali-gifts' });
+  });
+
+  it('builds the WhatsApp button suffix after https://wumika.com/', () => {
+    expect(discountPath('collections/under-rs-500', 'BHAIDOOJ')).toBe('discount/BHAIDOOJ?redirect=%2Fcollections%2Funder-rs-500');
+    expect(parseDiscountLink('discount/BHAIDOOJ?redirect=%2Fcollections%2Funder-rs-500')?.code).toBe('BHAIDOOJ');
+  });
+
+  it('accepts only codes Shopify can take in a link', () => {
+    expect(DISCOUNT_CODE.test('DIWALI-20')).toBe(true);
+    expect(DISCOUNT_CODE.test('20% OFF')).toBe(false);
+    expect(parseDiscountLink('https://wumika.com/collections/x')).toBeNull();
   });
 });

@@ -5,7 +5,7 @@ import { Api, istInputToIso } from '../../shared/api';
 import { problemDetail } from '../../shared/format';
 import { ErrorState, LoadingState } from '../../shared/states';
 import { SegmentRow } from '../segments/segments';
-import { Campaign } from './campaign-rules';
+import { Campaign, DISCOUNT_CODE, discountLink, discountPath, parseDiscountLink } from './campaign-rules';
 import { PosterPicker } from './poster-picker';
 import { BODY_MAX, CUSTOM_PUSH_TEMPLATE, PushPreview, TITLE_MAX, length } from './push-preview';
 
@@ -110,6 +110,19 @@ function isoToIstInput(iso: string | null): string {
                               [countdownMs]="countdownMs()" [countdownPoster]="timer() && countdownPoster()" />
           </section>
         }
+
+        <section class="card space-y-2" aria-labelledby="discount-h">
+          <h2 id="discount-h" class="text-sm font-semibold">Discount code (applies itself)</h2>
+          <input class="input w-60 font-mono uppercase" [value]="discountCode()" (input)="discountCode.set(val($event).trim())"
+                 placeholder="DHANTERAS15" aria-label="Discount code" />
+          <p class="text-xs text-slate-500">Create the code in Shopify (Discounts) first. The link then applies it by itself, so nobody has
+            to copy it. Leave blank for no code.</p>
+          @if (discountCode() && !discountValid()) {
+            <p class="text-xs text-red-700">Letters, digits, - and _ only, 3 to 40 characters.</p>
+          } @else if (discountCode() && finalLink()) {
+            <p class="break-all text-xs text-slate-600">Link: {{ finalLink() }}</p>
+          }
+        </section>
 
         <section class="card space-y-2">
           <h2 class="text-sm font-semibold">Template variables</h2>
@@ -220,6 +233,21 @@ export default class CampaignComposerPage {
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
 
+  /** Shopify auto-apply code; the link variable carries it (url for push, link_path for WhatsApp). */
+  readonly discountCode = signal('');
+  readonly discountValid = computed(() => DISCOUNT_CODE.test(this.discountCode()));
+  /** The variable that holds the click-through: url (push) or the WhatsApp button's suffix. */
+  readonly linkVar = computed(() => (this.channel() === 'push' ? 'url' : 'link_path'));
+  readonly finalLink = computed(() => {
+    const raw = this.named(this.linkVar()).trim();
+    if (!raw || !this.discountValid()) return null;
+    try {
+      return this.channel() === 'push' ? discountLink(raw, this.discountCode()) : 'https://wumika.com/' + discountPath(raw, this.discountCode());
+    } catch {
+      return null;
+    }
+  });
+
   /** Offer countdown (V44). */
   readonly timer = signal(false);
   readonly endsAt = signal('');
@@ -276,7 +304,14 @@ export default class CampaignComposerPage {
         this.channel.set(c.channel);
         this.templateKey.set(c.templateKey);
         this.segmentId.set(c.segmentId ?? '');
-        this.vars.set(Object.entries(c.vars ?? {}).map(([key, value]) => ({ key, value })));
+        // A saved discount link is shown as the page plus the code, so it can be edited.
+        const linkKey = c.channel === 'push' ? 'url' : 'link_path';
+        const saved = parseDiscountLink((c.vars ?? {})[linkKey] ?? '');
+        this.discountCode.set(saved?.code ?? (c.vars ?? {})['code'] ?? '');
+        this.vars.set(Object.entries(c.vars ?? {}).map(([key, value]) => {
+          if (key !== linkKey || !saved) return { key, value };
+          return { key, value: c.channel === 'push' ? new URL(saved.target, value).href : saved.target.replace(/^\//, '') };
+        }));
         this.scheduledAt.set(isoToIstInput(c.scheduledAt));
         this.rate.set(String(c.sendRatePerMinute));
         this.holdout.set(String(c.holdoutPct ?? ''));
@@ -324,8 +359,18 @@ export default class CampaignComposerPage {
     this.busy.set(true);
     this.error.set(null);
     const timer = this.channel() === 'push' && this.timer();
-    const vars = Object.fromEntries(this.vars().filter((v) => v.key.trim() && (timer || v.key.trim() !== 'offer'))
+    const vars: Record<string, string> = Object.fromEntries(this.vars().filter((v) => v.key.trim() && (timer || v.key.trim() !== 'offer'))
       .map((v) => [v.key.trim(), v.value.trim()]));
+    if (this.discountCode()) {
+      if (!this.discountValid()) {
+        this.error.set('The discount code has letters, digits, - and _ only.');
+        this.busy.set(false);
+        return;
+      }
+      const link = this.finalLink();
+      if (link) vars[this.linkVar()] = this.channel() === 'push' ? link : link.replace('https://wumika.com/', '');
+      vars['code'] = this.discountCode();
+    }
     const num = (s: string) => (s.trim() === '' ? null : Number(s));
     const body = {
       name: this.name().trim(),

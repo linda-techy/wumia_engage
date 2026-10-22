@@ -1,0 +1,13 @@
+# cart_offer with the product's photo as its header and a bold first line.
+# Falls back to cart_offer_v1 without a photo or Meta's approval.
+key: cart_offer_v2
+channel: whatsapp
+category: marketing
+header_image: "https://engage.wumika.com/media/product/{{photo}}"
+fallback: cart_offer_v1
+locales:
+  en: { body: "*A little something for your bag*\n\nHi {{name}}, {{product}} is still in your WUMIKA bag. Use code {{code}} for {{discount}} on your order." }
+buttons:
+  - { text: "Apply code and view bag", url: "https://wumika.com/{{discount_path}}" }
+vars: [name, product, code, discount, discount_path, photo]
+samples: { name: "Priya", product: "Kundan Jhumka Earrings", code: "WUMK7P2QX9M", discount: "10% off", discount_path: "discount/WUMK7P2QX9M?redirect=%2Fcart", photo: "8741079023804-9f1c2a7e" }

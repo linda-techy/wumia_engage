@@ -1,0 +1,13 @@
+# Abandoned cart, last WhatsApp (playbook 2026-10-22): a day after the cart
+# reminder, only when journey.abandon has a discount (a shared code, or a
+# single-use one made at send time). The button is Shopify's auto-apply link,
+# so the bag opens with the code already applied. Marketing.
+key: cart_offer_v1
+channel: whatsapp
+category: marketing
+locales:
+  en: { body: "Hi {{name}}, {{product}} is still in your WUMIKA bag. Use code {{code}} for {{discount}} on your order." }
+buttons:
+  - { text: "Apply code and view bag", url: "https://wumika.com/{{discount_path}}" }
+vars: [name, product, code, discount, discount_path]
+samples: { name: "Priya", product: "Kundan Jhumka Earrings", code: "WUMK7P2QX9M", discount: "10% off", discount_path: "discount/WUMK7P2QX9M?redirect=%2Fcart" }

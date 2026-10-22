@@ -22,15 +22,19 @@ import java.util.Map;
 
 /**
  * {@code cart_recovery} (P5-T04): items left in the cart, no checkout started.
- * WhatsApp first, as most Indian D2C brands do (owner's decision,
- * 2026-10-10), push as the free fallback and second nudge. No SMS.
+ * The owner's playbook (2026-10-22, superseding WhatsApp-first of 2026-10-10):
+ * push first because it is free, WhatsApp for those who did not act, then
+ * WhatsApp with a coupon a day later. A tap on any of them ends the run.
  *
  * <pre>
- * t+45 min  WhatsApp cart_reminder_v2        marketing opt-in, not INCAPABLE, cart ≥ wa_min_cart_paise
- *           (skipped → the push goes at once instead)
- * +4 h      Push     push_cart_recovery_v1   a live browser subscription
- * +20 h     Email    email_cart_v1           email marketing consent (skipped until SES is set up)
+ * t+30 min  Push     push_cart_recovery_v1   a live browser subscription
+ *           (skipped → the WhatsApp goes at once instead)
+ * +1 h      WhatsApp cart_reminder_v2        marketing opt-in, not INCAPABLE, cart ≥ wa_min_cart_paise
+ * +24 h     WhatsApp cart_offer_v2           as above (WhatsApp marketing is one a day), and journey.abandon has a discount: the
+ *                                            button opens the bag with the code applied
+ * +24 h     Email    email_cart_v1           email marketing consent (skipped until SES is set up)
  * </pre>
+ * SMS at 48 h (the playbook's last step) waits for a DLT-registered promotional template.
  *
  * Every cart change restarts the run (cancel the live one, start a new one),
  * an emptied cart ends it, and {@code order_placed} for the cart ends it. A
@@ -61,11 +65,12 @@ public class CartRecovery implements EventConsumer {
         @Bean
         @Singleton
         CascadeDefinition cartRecovery() {
+            var wa = new Guard[] {Guard.WA_MARKETING, Guard.WA_CAPABLE_OR_UNKNOWN, Guard.hasVar(CheckoutAbandon.WA_OK)};
             return new CascadeDefinition(INTENT, Priority.MID_INTENT, List.of(
-                    Step.whatsapp("cart_reminder_v2")
-                            .require(Guard.WA_MARKETING, Guard.WA_CAPABLE_OR_UNKNOWN, Guard.hasVar(CheckoutAbandon.WA_OK))
-                            .waitAfter(Duration.ofHours(4)),
-                    Step.push("push_cart_recovery_v1", TTL).waitAfter(Duration.ofHours(20)),
+                    Step.push("push_cart_recovery_v1", TTL).require(Guard.HAS_LIVE_DEVICE).waitAfter(Duration.ofHours(1)),
+                    Step.whatsapp("cart_reminder_v2").require(wa).waitAfter(Duration.ofHours(24)),   // WhatsApp marketing: one a day
+                    Step.whatsapp("cart_offer_v2").require(wa).require(Guard.hasVar("discount"))
+                            .withVarsFrom(JourneyDiscount.NAME).waitAfter(Duration.ofHours(24)),
                     Step.email("email_cart_v1").require(Guard.HAS_EMAIL_MARKETING)));
         }
     }
@@ -126,6 +131,22 @@ public class CartRecovery implements EventConsumer {
             vars.put("name", CheckoutAbandon.firstName(rs.getString("first_name")));
             vars.put("cart_value_paise", Long.toString(total));
             if (total >= snapshot.longValue("journey.cart_recovery.wa_min_cart_paise", "*")) vars.put(CheckoutAbandon.WA_OK, "1");
+            // The day-later coupon uses the abandoned-checkout offer (journey.abandon.*): the same code rules.
+            if (CheckoutAbandon.offerAllowed(c, identityId, e.occurredAt(), snapshot)) {
+                if ("unique".equals(snapshot.text("journey.abandon.discount_mode", "*").strip())) {
+                    vars.put("discount_mode", "unique");
+                    vars.put("discount_config", "journey.abandon");
+                    vars.put("discount", snapshot.longValue("journey.abandon.discount_percent", "*") + "% off");
+                } else {
+                    var code = snapshot.text("journey.abandon.discount_code", "*").strip();
+                    var label = snapshot.text("journey.abandon.discount_label", "*").strip();
+                    if (!code.isEmpty() && !label.isEmpty()) {
+                        vars.put("code", code);
+                        vars.put("discount", label);
+                    }
+                }
+                vars.put("discount_redirect", "/cart");
+            }
             var delay = Duration.ofMinutes(snapshot.longValue("journey.cart_recovery.start_delay_minutes", "*"));
             return List.of(new MessageIntent(identityId, INTENT, cartToken, Map.copyOf(vars), e.occurredAt().plus(delay)));
         }

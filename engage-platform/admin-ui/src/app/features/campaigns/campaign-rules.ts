@@ -128,3 +128,30 @@ export function progress(c: Pick<Campaign, 'recipients'>): { done: number; total
   const done = total - Number(r['pending'] ?? 0) - Number(r['claimed'] ?? 0);
   return { done: Math.max(0, done), total: Math.max(0, total), pct: total > 0 ? Math.round((Math.max(0, done) / total) * 100) : 0 };
 }
+
+/** A Shopify discount code as Shopify accepts it in a link: letters, digits, - and _. */
+export const DISCOUNT_CODE = /^[A-Za-z0-9_-]{3,40}$/;
+
+/**
+ * Shopify's auto-apply link (playbook §2): the code is applied by itself and
+ * the shopper lands on the page. "https://wumika.com/collections/diwali-gifts" +
+ * DHANTERAS15 → "https://wumika.com/discount/DHANTERAS15?redirect=%2Fcollections%2Fdiwali-gifts".
+ * The server puts the UTMs on the redirect target.
+ */
+export function discountLink(url: string, code: string): string {
+  const u = new URL(url);
+  return `${u.origin}/discount/${encodeURIComponent(code)}?redirect=${encodeURIComponent(u.pathname + u.search)}`;
+}
+
+/** The same for a WhatsApp button, whose fixed part is "https://wumika.com/": the variable suffix. */
+export function discountPath(path: string, code: string): string {
+  const target = '/' + path.replace(/^\/+/, '');
+  return `discount/${encodeURIComponent(code)}?redirect=${encodeURIComponent(target)}`;
+}
+
+/** Back from a discount link to the page and the code, for editing; null when it is not one. */
+export function parseDiscountLink(link: string): { code: string; target: string } | null {
+  const m = /(?:^|\/)discount\/([^/?#]+)\?(?:.*&)?redirect=([^&#]+)/.exec(link);
+  if (!m) return null;
+  return { code: decodeURIComponent(m[1]), target: decodeURIComponent(m[2]) };
+}

@@ -16,6 +16,14 @@ class UtmTest {
                 Utm.apply("https://w.example/p?variant=7#size", "push", "back_in_stock", 9));
     }
 
+    @Test void a_discount_link_carries_the_utms_on_the_page_it_redirects_to() {
+        var tagged = Utm.apply("https://wumika.com/discount/DHANTERAS15?redirect=%2Fcollections%2Fdiwali-gifts",
+                "push", "campaign:x", 7);
+        assertEquals("https://wumika.com/discount/DHANTERAS15?redirect="
+                + java.net.URLEncoder.encode("/collections/diwali-gifts?utm_source=engage&utm_medium=push&utm_campaign=campaign%3Ax&utm_content=7",
+                        java.nio.charset.StandardCharsets.UTF_8), tagged);
+    }
+
     @Test void encodes_the_campaign() {
         assertEquals("https://w.example/?utm_source=engage&utm_medium=push&utm_campaign=campaign%3Aabc+1&utm_content=1",
                 Utm.apply("https://w.example/?", "push", "campaign:abc 1", 1));

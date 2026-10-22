@@ -253,19 +253,44 @@ class CheckoutAbandonTest {
         assertEquals("cancelled|checkout_started", run(cart));
     }
 
-    @Test void cart_recovery_goes_on_whatsapp_first_for_an_opted_in_customer() {
+    @Test void cart_recovery_pushes_first_then_whatsapps_those_who_did_not_tap() {
+        // The owner's playbook (2026-10-22): push at 30 min (free), WhatsApp 1 h later.
         var who = customer(true, true);
         cartRow(who, 1249900);
         event(who, "cart_updated", "{\"cart_token\":\"" + cart + "\",\"item_count\":1}");
         dispatcher.dispatchOnce();
-        at("12:46");
-        assertFalse(wa.all.isEmpty(), attempts(cart));
+        at("12:31");
+        assertEquals("push_cart_recovery_v1", push.all.getLast().templateKey(), attempts(cart));
+        assertTrue(wa.all.isEmpty(), "WhatsApp waits an hour after the push");
+        at("13:32");
         var call = wa.all.getLast().whatsapp();
-        assertEquals("cart_reminder_v1", call.name());
+        assertEquals("cart_reminder_v1", call.name(), "the photo version is not approved in this test");
         assertEquals(List.of("Priya", "Kundan Jhumka Earrings"), call.bodyParams());
-        assertTrue(push.all.isEmpty(), "the push waits 4 h after a WhatsApp");
-        at("16:47");
-        assertEquals("push_cart_recovery_v1", push.all.getLast().templateKey());
+    }
+
+    @Test void a_day_later_the_cart_coupon_opens_the_bag_with_the_code_applied() {
+        db.inTx(c -> {
+            setConfig(c, "journey.abandon.discount_code", "\"WUMIKA10\"");
+            setConfig(c, "journey.abandon.discount_label", "\"10% off\"");
+            Sql.update(c, """
+                    INSERT INTO wa_templates (key, language, provider_name, requested_category, approved_category, status, quality)
+                    VALUES ('cart_offer_v1', 'en', 'cart_offer_v1', 'marketing', 'marketing', 'APPROVED', 'GREEN')
+                    ON CONFLICT (provider_name, language) DO UPDATE SET status = 'APPROVED', quality = 'GREEN'""");
+            return null;
+        });
+        config.invalidate();
+        var who = customer(true, true);
+        cartRow(who, 1249900);
+        event(who, "cart_updated", "{\"cart_token\":\"" + cart + "\",\"item_count\":1}");
+        dispatcher.dispatchOnce();
+        at("12:31");
+        at("13:32");
+        clock.setIst("2026-09-29T13:35:00");
+        orchestrator.tick(200);
+        var call = wa.all.getLast().whatsapp();
+        assertEquals("cart_offer_v1", call.name(), attempts(cart));
+        assertEquals(List.of("Priya", "Kundan Jhumka Earrings", "WUMIKA10", "10% off"), call.bodyParams());
+        assertEquals(List.of("discount/WUMIKA10?redirect=%2Fcart"), call.urlButtonSuffixes());
     }
 
     /* -------------------------------- fixtures -------------------------------- */

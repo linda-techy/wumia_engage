@@ -161,6 +161,30 @@ public class CheckoutAbandon implements EventConsumer {
         }
     }
 
+    /** Every offer message of the abandon journeys: one discount per customer per cooldown, across them. */
+    static final String OFFER_TEMPLATES = "'checkout_offer_v1', 'checkout_offer_v2', 'cart_offer_v1', 'cart_offer_v2'";
+
+    /**
+     * May this customer get an abandon offer at all (cart recovery's coupon)?
+     * None sent within the cooldown, and a first-time buyer if the operator says so.
+     */
+    static boolean offerAllowed(Connection c, UUID identity, java.time.Instant at,
+                                in.brand.engage.policy.ConfigSnapshot snapshot) throws SQLException {
+        var since = at.minus(Duration.ofDays(snapshot.longValue("journey.abandon.discount_cooldown_days", "*")))
+                .atOffset(java.time.ZoneOffset.UTC);
+        boolean newOnly = snapshot.boolValue("journey.abandon.discount_new_customers_only", "*");
+        try (var ps = Sql.prepare(c, """
+                SELECT EXISTS (SELECT 1 FROM sends s
+                                WHERE s.identity_id = ? AND s.template_key IN (%s)
+                                  AND s.status IN ('queued','sent','delivered','read','clicked') AND s.created_at > ?)
+                    OR (? AND EXISTS (SELECT 1 FROM orders o WHERE o.identity_id = ? AND o.cancelled_at IS NULL))"""
+                        .formatted(OFFER_TEMPLATES), identity, since, newOnly, identity);
+             var rs = ps.executeQuery()) {
+            rs.next();
+            return !rs.getBoolean(1);
+        }
+    }
+
     /** May this customer get the discount on this checkout? Decided when the run starts. */
     private static boolean discountAllowed(Connection c, UUID identity, String token, Event e,
                                            in.brand.engage.policy.ConfigSnapshot snapshot) throws SQLException {
@@ -169,12 +193,13 @@ public class CheckoutAbandon implements EventConsumer {
         boolean newOnly = snapshot.boolValue("journey.abandon.discount_new_customers_only", "*");
         try (var ps = Sql.prepare(c, """
                 SELECT EXISTS (SELECT 1 FROM sends s
-                                WHERE s.identity_id = ? AND s.template_key IN ('checkout_offer_v1', 'checkout_offer_v2')
+                                WHERE s.identity_id = ? AND s.template_key IN (%s)
                                   AND s.status IN ('queued','sent','delivered','read','clicked') AND s.created_at > ?)
                     OR EXISTS (SELECT 1 FROM cascade_runs r
                                 WHERE r.identity_id = ? AND r.intent_key = ? AND r.subject_key <> ?
                                   AND r.status IN ('active','waiting') AND r.vars->>'discount' IS NOT NULL)
-                    OR (? AND EXISTS (SELECT 1 FROM orders o WHERE o.identity_id = ? AND o.cancelled_at IS NULL))""",
+                    OR (? AND EXISTS (SELECT 1 FROM orders o WHERE o.identity_id = ? AND o.cancelled_at IS NULL))"""
+                        .formatted(OFFER_TEMPLATES),
                 identity, since, identity, INTENT, token, newOnly, identity);
              var rs = ps.executeQuery()) {
             rs.next();

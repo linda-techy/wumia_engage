@@ -34,6 +34,7 @@ if (cfg.apiKey && cfg.projectId && cfg.messagingSenderId && cfg.appId) {
   // we control rendering; a `notification` block would bypass it.
   messaging.onBackgroundMessage(({ data = {} }) => {
     const shown = self.registration.showNotification(data.title || 'Wumika', {
+      actions: actionsFor(data),
       body: data.body || '',
       icon: data.icon || undefined,
       badge: data.badge || undefined,
@@ -49,9 +50,23 @@ if (cfg.apiKey && cfg.projectId && cfg.messagingSenderId && cfg.appId) {
   });
 }
 
+// Buttons under the notification (Chrome on Android and desktop show up to
+// two), as Indian D2C stores send them: a clear call to action, and "View bag"
+// for anyone with something in it. Both open the store and count as a click.
+function actionsFor(data) {
+  const kind = String(data.kind || '');
+  if (kind.startsWith('cart_') || kind.startsWith('checkout_')) return [{ action: 'cart', title: 'View bag' }];
+  if (kind.startsWith('campaign:')) return [{ action: 'open', title: 'Shop now' }, { action: 'cart', title: 'View bag' }];
+  if (kind === 'back_in_stock' || kind === 'price_drop' || kind === 'browse_abandon') return [{ action: 'open', title: 'View the piece' }];
+  return [];
+}
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const { url = '/', sid, sig } = event.notification.data || {};
+  const data = event.notification.data || {};
+  const { sid, sig } = data;
+  // "View bag" opens the cart on the same store as the notification's link.
+  const url = event.action === 'cart' ? new URL('/cart', new URL(data.url || '/', self.location.origin)).href : (data.url || '/');
   event.waitUntil((async () => {
     beacon('click', { sid, sig });
     // This worker's scope is /apps/push/, so it controls no storefront page, and
