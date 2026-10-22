@@ -58,6 +58,20 @@ class WhatsAppTemplatesPayloadTest {
         assertNull(new WhatsAppTemplates.Submission(text, text.locales().get("en")).samplePhoto());
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void a_campaign_template_is_submitted_with_the_poster_header_and_a_copy_code_button() {
+        var live = loadAll().stream().filter(x -> x.key().equals("campaign_sale_live_v1")).findFirst().orElseThrow();
+        var payload = WhatsAppTemplates.payload(live, live.locales().get("en"), "4::aGFuZGxl");
+        var components = (List<Map<String, Object>>) payload.get("components");
+        assertEquals("IMAGE", components.getFirst().get("format"));
+        var buttons = (List<Map<String, Object>>) components.get(2).get("buttons");
+        assertEquals("URL", buttons.get(0).get("type"));
+        assertEquals(Map.of("type", "COPY_CODE", "example", "DHANTERAS15"), buttons.get(1));
+        assertEquals("https://engage.wumika.com/media/product/8741079023804",
+                new WhatsAppTemplates.Submission(live, live.locales().get("en")).samplePhoto());
+    }
+
     static List<in.brand.engage.orchestrator.templates.MessageTemplate> loadAll() {
         try {
             var m = in.brand.engage.orchestrator.templates.TemplateRegistry.class.getDeclaredMethod("loadClasspath");

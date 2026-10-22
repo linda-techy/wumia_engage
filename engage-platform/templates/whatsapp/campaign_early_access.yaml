@@ -1,0 +1,16 @@
+# Campaign: VIP / WhatsApp-subscriber early access (playbook §4 Exclusivity,
+# §7 Diwali "VIP early access, WhatsApp only, to past buyers and top
+# customers"). The campaign's poster is the header; the code is one tap to copy
+# and the button can be Shopify's auto-apply link (composer: discount code).
+# Marketing. Say "early access" only when the sale really opens later for others.
+key: campaign_early_access_v1
+channel: whatsapp
+category: marketing
+header_image: "{{image}}"
+locales:
+  en: { body: "*Early access, just for you* ✨\n\nThe {{sale}} at WUMIKA opens to you before everyone else: {{offer}}, until {{ends}}. Tap below to shop first." }
+buttons:
+  - { text: "Shop early access", url: "https://wumika.com/{{link_path}}" }
+  - { copy_code: "{{code}}" }
+vars: [sale, offer, ends, link_path, code, image]
+samples: { sale: "Diwali Festive Sale", offer: "Flat 25% off on festive sets", ends: "Thu 29 Oct, 9 PM", link_path: "discount/DIWALI25?redirect=%2Fcollections%2Fdiwali-gifts", code: "DIWALI25", image: "https://engage.wumika.com/media/product/8741079023804" }

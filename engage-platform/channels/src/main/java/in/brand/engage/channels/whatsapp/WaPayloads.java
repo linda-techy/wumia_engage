@@ -46,6 +46,10 @@ final class WaPayloads {
             components.add(Map.of("type", "button", "sub_type", "quick_reply", "index", Integer.toString(i),
                     "parameters", List.of(Map.of("type", "payload", "payload", wa.quickReplyPayloads().get(i)))));
         }
+        if (wa.couponCode() != null) {
+            components.add(Map.of("type", "button", "sub_type", "copy_code", "index", Integer.toString(wa.couponIndex()),
+                    "parameters", List.of(Map.of("type", "coupon_code", "coupon_code", wa.couponCode()))));
+        }
         var t = new LinkedHashMap<String, Object>();
         t.put("name", wa.name());
         t.put("language", Map.of("code", wa.language()));

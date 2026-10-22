@@ -78,7 +78,10 @@ class DeliveryRepliesTest {
 
     @Test
     void without_a_recent_failed_delivery_a_message_keeps_no_text() throws Exception {
-        exec("UPDATE sends SET created_at = now() - interval '10 days' WHERE provider_id = '" + NDR_WAMID + "'");
+        // Ten days before the reply, on the test's own clock (T0), not the calendar's: "now() - 10 days"
+        // drifted into the reply window as real days passed (it failed from 2026-10-22).
+        exec("UPDATE sends SET created_at = to_timestamp(" + (T0 + 6 * 86_400L) + ") - interval '10 days' WHERE provider_id = '"
+                + NDR_WAMID + "'");
         send(MetaInboxTest.text("wamid.IN9", "Hello", T0 + 6 * 86_400L));
         assertEquals("0", q("SELECT count(*) FROM support_requests"));
     }

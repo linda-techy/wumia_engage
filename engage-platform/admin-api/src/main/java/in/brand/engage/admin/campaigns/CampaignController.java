@@ -125,17 +125,26 @@ public class CampaignController {
         return db.inTx(c -> detail(c, uuid(id)));
     }
 
-    /** The composer's template picker: only what a campaign on this channel may send. */
+    /**
+     * The composer's template picker: only templates written for campaigns
+     * ({@code push_campaign_*}, WhatsApp {@code campaign_*}; a journey's template
+     * needs a cart or an order a campaign does not have), with the variables the
+     * composer must ask for and whether the template shows the poster as its header.
+     */
     @RequiresRole(Role.VIEWER)
     @Get("/templates")
     public List<Map<String, Object>> templates(@QueryValue String channel) {
         if (!CHANNELS.contains(channel)) throw Problems.badRequest("channel is push or whatsapp");
         return db.inTx(c -> Rows.list(c, channel.equals("push") ? """
-                SELECT t.key, t.channel::text AS channel FROM templates t
-                 WHERE t.channel = 'push' AND t.category = 'marketing' AND t.status = 'active' ORDER BY t.key"""
+                SELECT t.key, t.channel::text AS channel, array_to_string(t.vars, ',') AS vars, t.header_image
+                  FROM templates t
+                 WHERE t.channel = 'push' AND t.category = 'marketing' AND t.status = 'active'
+                   AND t.key LIKE 'push\\_campaign\\_%' ORDER BY t.key"""
                 : """
-                SELECT DISTINCT t.key, t.channel::text AS channel FROM templates t JOIN wa_templates w ON w.key = t.key
+                SELECT DISTINCT t.key, t.channel::text AS channel, array_to_string(t.vars, ',') AS vars, t.header_image
+                  FROM templates t JOIN wa_templates w ON w.key = t.key
                  WHERE t.channel = 'whatsapp' AND t.category = 'marketing' AND t.status = 'active'
+                   AND t.key LIKE 'campaign\\_%'
                    AND w.status = 'APPROVED' AND w.approved_category = 'marketing' AND w.quality <> 'RED'
                  ORDER BY t.key"""));
     }
@@ -507,6 +516,20 @@ public class CampaignController {
         if (CUSTOM_PUSH_TEMPLATE.equals(b.templateKey())
                 && (blank(vars.get("title")) || blank(vars.get("body")))) {
             throw Problems.badRequest("write the notification title and text");
+        }
+        // Every value the template needs, so no recipient's send fails to render. A push poster is optional.
+        try (var ps = Sql.prepare(c, "SELECT vars, header_image FROM templates WHERE key = ?", b.templateKey());
+             var rs = ps.executeQuery()) {
+            if (rs.next()) {
+                var needed = rs.getArray(1) == null ? new String[0] : (String[]) rs.getArray(1).getArray();
+                for (var v : needed) {
+                    if (channel.equals("push") && v.equals("image")) continue;
+                    if (blank(vars.get(v))) {
+                        throw Problems.badRequest(v.equals("image") ? "this WhatsApp template shows the poster: add one"
+                                : "the template needs a value for '" + v + "'");
+                    }
+                }
+            }
         }
 
         var scheduledAt = b.scheduledAt();

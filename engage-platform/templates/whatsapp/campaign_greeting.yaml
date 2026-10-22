@@ -1,0 +1,13 @@
+# Campaign: a festival greeting, no hard sell (playbook §7 "Diwali: a greeting
+# only"; §10 "hard-selling on the festival day itself" is a mistake). Poster
+# header, one gentle link. Meta classes greetings from a brand as marketing.
+key: campaign_greeting_v1
+channel: whatsapp
+category: marketing
+header_image: "{{image}}"
+locales:
+  en: { body: "*Warm {{festival}} wishes from WUMIKA* 🪔\n\nMay your home glow with light, love and joy. Thank you for being part of our story." }
+buttons:
+  - { text: "Visit WUMIKA", url: "https://wumika.com/" }
+vars: [festival, image]
+samples: { festival: "Diwali", image: "https://engage.wumika.com/media/product/8741079023804" }

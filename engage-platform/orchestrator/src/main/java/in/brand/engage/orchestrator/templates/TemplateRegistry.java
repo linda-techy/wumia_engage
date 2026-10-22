@@ -103,13 +103,15 @@ public class TemplateRegistry implements TemplateCooldowns, ApplicationEventList
             int n = 0;
             for (var t : byKey.values()) {
                 n += Sql.update(c, """
-                        INSERT INTO templates (key, channel, category)
-                        VALUES (?, CAST(? AS channel), CAST(? AS msg_category))
+                        INSERT INTO templates (key, channel, category, vars, header_image)
+                        VALUES (?, CAST(? AS channel), CAST(? AS msg_category), ?, ?)
                         ON CONFLICT (key) DO UPDATE
-                           SET channel = EXCLUDED.channel, category = EXCLUDED.category, updated_at = now()
-                         WHERE (templates.channel, templates.category)
-                               IS DISTINCT FROM (EXCLUDED.channel, EXCLUDED.category)""",
-                        t.key(), t.channel().dbName(), t.category().dbName());
+                           SET channel = EXCLUDED.channel, category = EXCLUDED.category, vars = EXCLUDED.vars,
+                               header_image = EXCLUDED.header_image, updated_at = now()
+                         WHERE (templates.channel, templates.category, templates.vars, templates.header_image)
+                               IS DISTINCT FROM (EXCLUDED.channel, EXCLUDED.category, EXCLUDED.vars, EXCLUDED.header_image)""",
+                        t.key(), t.channel().dbName(), t.category().dbName(), t.vars().toArray(String[]::new),
+                        t.headerImage() != null);
             }
             return n;
         });
@@ -174,7 +176,12 @@ public class TemplateRegistry implements TemplateCooldowns, ApplicationEventList
         var buttons = new ArrayList<MessageTemplate.Button>();
         if (m.get("buttons") instanceof List<?> bs) {
             for (var b : bs) {
-                if (!(b instanceof Map<?, ?> bm)) throw invalid(source, "each button is {text, url} or {text, reply}");
+                if (!(b instanceof Map<?, ?> bm)) throw invalid(source, "each button is {text, url}, {text, reply} or {copy_code}");
+                if (bm.get("copy_code") != null) {
+                    if (bm.size() != 1) throw invalid(source, "a copy_code button has no other fields (Meta sets its label)");
+                    buttons.add(MessageTemplate.Button.copyCode(text(bm, "copy_code", source + " button").strip()));
+                    continue;
+                }
                 var label = text(bm, "text", source + " button");
                 if (bm.get("reply") != null) {
                     if (bm.get("url") != null) throw invalid(source, "button '" + label + "' has both url and reply");

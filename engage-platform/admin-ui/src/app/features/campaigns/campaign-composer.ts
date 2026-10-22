@@ -51,9 +51,9 @@ function isoToIstInput(iso: string | null): string {
               <option value="whatsapp">WhatsApp</option>
             </select></label>
           <label class="text-sm"><span class="mb-1 block font-medium">Template</span>
-            <select class="input" [value]="templateKey()" (change)="templateKey.set(val($event))">
+            <select class="input" [value]="templateKey()" (change)="pickTemplate(val($event))">
               <option value="" disabled>Pick a template</option>
-              @for (t of templates.value() ?? []; track t.key) { <option [value]="t.key">{{ t.key === customKey ? 'Your own title and text (poster)' : t.key }}</option> }
+              @for (t of templates.value() ?? []; track t.key) { <option [value]="t.key">{{ t.key === customKey ? 'Your own title and text (poster)' : t.key }}{{ t.headerImage ? ' · poster' : '' }}</option> }
             </select>
             @if (templates.hasValue() && templates.value().length === 0) {
               <span class="mt-1 block text-xs text-amber-800">No {{ channel() }} template is eligible.{{ channel() === 'whatsapp' ? ' WhatsApp needs APPROVED marketing templates (Phase 4).' : '' }}</span>
@@ -111,6 +111,11 @@ function isoToIstInput(iso: string | null): string {
           </section>
         }
 
+        @if (channel() === 'whatsapp' && waPoster()) {
+          <app-poster-picker [value]="image()" (changed)="setImage($event)" />
+          <p class="-mt-4 text-xs text-slate-500">This WhatsApp template shows the poster above the message.</p>
+        }
+
         <section class="card space-y-2" aria-labelledby="discount-h">
           <h2 id="discount-h" class="text-sm font-semibold">Discount code (applies itself)</h2>
           <input class="input w-60 font-mono uppercase" [value]="discountCode()" (input)="discountCode.set(val($event).trim())"
@@ -126,7 +131,9 @@ function isoToIstInput(iso: string | null): string {
 
         <section class="card space-y-2">
           <h2 class="text-sm font-semibold">Template variables</h2>
-          <p class="text-xs text-slate-500">For example collection, festival, url (https://).</p>
+          <p class="text-xs text-slate-500">{{ channel() === 'whatsapp'
+            ? 'The template needs every value below. link_path is the page after https://wumika.com/, e.g. collections/diwali-gifts.'
+            : 'For example collection, festival, url (https://).' }}</p>
           @for (v of vars(); track $index; let i = $index) {
             @if (!managed(v.key)) {
             <div class="flex gap-2">
@@ -275,7 +282,21 @@ export default class CampaignComposerPage {
   readonly needsCap = computed(() => this.channel() === 'whatsapp' || (this.followUp() && this.otherChannel() === 'whatsapp'));
 
   readonly existing = httpResource<Campaign>(() => (this.id() ? `/api/campaigns/${encodeURIComponent(this.id()!)}` : undefined));
-  readonly templates = httpResource<{ key: string }[]>(() => `/api/campaigns/templates?channel=${this.channel()}`);
+  readonly templates = httpResource<{ key: string; vars?: string; headerImage?: boolean }[]>(
+    () => `/api/campaigns/templates?channel=${this.channel()}`);
+  readonly selected = computed(() => (this.templates.value() ?? []).find((t) => t.key === this.templateKey()));
+  /** A WhatsApp campaign template with the poster as its header. */
+  readonly waPoster = computed(() => !!this.selected()?.headerImage);
+
+  /** Picks a template and adds a row for every value it needs that is not there yet. */
+  pickTemplate(key: string): void {
+    this.templateKey.set(key);
+    const t = (this.templates.value() ?? []).find((x) => x.key === key);
+    const needed = (t?.vars ?? '').split(',').map((v) => v.trim()).filter(Boolean)
+      .filter((v) => v !== 'image' && !(key === CUSTOM_PUSH_TEMPLATE && (v === 'title' || v === 'body')))
+      .filter((v) => !(this.discountCode() && v === 'code'));
+    this.vars.update((vs) => [...vs, ...needed.filter((v) => !vs.some((x) => x.key === v)).map((key) => ({ key, value: '' }))]);
+  }
   readonly followUpTemplates = httpResource<{ key: string }[]>(() =>
     this.followUp() ? `/api/campaigns/templates?channel=${this.otherChannel()}` : undefined,
   );
@@ -289,6 +310,7 @@ export default class CampaignComposerPage {
       (!this.needsCap() || Number(this.budget()) > 0) &&
       (!this.followUp() || !!this.followUpTemplate()) &&
       (!this.custom() || (this.named('title').trim().length > 0 && this.named('body').trim().length > 0)) &&
+      (!this.waPoster() || !!this.image()) &&
       (!this.timer() || (!!this.endsAt() && this.named('offer').trim().length > 0 && this.named('offer').length <= 24)),
   );
 

@@ -24,6 +24,17 @@ class WaPayloadsTest {
 
     @Test
     @SuppressWarnings("unchecked")
+    void a_copy_code_button_sends_its_coupon_at_its_index() {
+        var t = WaPayloads.template(new WaTemplateCall("campaign_sale_live_v1", "en", List.of("Dhanteras Sale"),
+                List.of("discount/D15?redirect=%2F"), List.of(), "https://engage.wumika.com/media/a.jpg", "D15", 1));
+        var components = (List<Map<String, Object>>) t.get("components");
+        assertEquals(Map.of("type", "button", "sub_type", "copy_code", "index", "1",
+                "parameters", List.of(Map.of("type", "coupon_code", "coupon_code", "D15"))), components.getLast());
+        assertEquals("0", components.get(2).get("index"), "the URL button stays at index 0");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
     void a_header_photo_goes_first_as_an_image_link() {
         var t = WaPayloads.template(new WaTemplateCall("cart_reminder_v2", "en", List.of("Priya", "Jhumkas"), List.of(),
                 List.of(), "https://engage.wumika.com/media/product/8741079023804?v=ab12cd34"));

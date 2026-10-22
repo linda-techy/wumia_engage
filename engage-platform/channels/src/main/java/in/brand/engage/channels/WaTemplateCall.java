@@ -14,9 +14,16 @@ import java.util.Objects;
  *                          tap sends back (a template has either URL buttons or quick replies)
  * @param headerImage       the https link of the header photo, for a template approved with an
  *                          IMAGE header; null for a template without a header
+ * @param couponCode        the code of a copy-code button; null without one
+ * @param couponIndex       that button's position among the template's buttons (it is the last)
  */
 public record WaTemplateCall(String name, String language, List<String> bodyParams, List<String> urlButtonSuffixes,
-                             List<String> quickReplyPayloads, String headerImage) {
+                             List<String> quickReplyPayloads, String headerImage, String couponCode, int couponIndex) {
+
+    public WaTemplateCall(String name, String language, List<String> bodyParams, List<String> urlButtonSuffixes,
+                          List<String> quickReplyPayloads, String headerImage) {
+        this(name, language, bodyParams, urlButtonSuffixes, quickReplyPayloads, headerImage, null, -1);
+    }
 
     public WaTemplateCall {
         Objects.requireNonNull(name, "name");

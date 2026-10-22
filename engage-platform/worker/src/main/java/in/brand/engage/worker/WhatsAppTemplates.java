@@ -199,6 +199,13 @@ public class WhatsAppTemplates {
             var buttons = new ArrayList<Map<String, Object>>();
             for (var b : t.buttons()) {
                 var button = new LinkedHashMap<String, Object>();
+                if (b.isCopyCode()) {
+                    var cm = java.util.regex.Pattern.compile("\\{\\{\\s*([a-z_][a-z0-9_]*)\\s*}}").matcher(b.copyCode());
+                    button.put("type", "COPY_CODE");
+                    button.put("example", cm.find() ? t.samples().getOrDefault(cm.group(1), "WUMIKA10") : "WUMIKA10");
+                    buttons.add(button);
+                    continue;
+                }
                 if (b.isQuickReply()) {
                     button.put("type", "QUICK_REPLY");
                     button.put("text", b.text());

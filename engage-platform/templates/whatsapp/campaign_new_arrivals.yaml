@@ -1,0 +1,12 @@
+# Campaign: a new collection or drop (playbook §5 "Product: new launches,
+# restocks, new collections, limited drops"), no code. Poster header. Marketing.
+key: campaign_new_arrivals_v1
+channel: whatsapp
+category: marketing
+header_image: "{{image}}"
+locales:
+  en: { body: "*Just in at WUMIKA* ✨\n\n{{collection}} has just landed. Tap below to see the new pieces before they go." }
+buttons:
+  - { text: "See the new pieces", url: "https://wumika.com/{{link_path}}" }
+vars: [collection, link_path, image]
+samples: { collection: "The Wedding Season Edit", link_path: "collections/necklaces", image: "https://engage.wumika.com/media/product/8741079023804" }

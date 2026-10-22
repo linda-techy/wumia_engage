@@ -53,10 +53,32 @@ public record MessageTemplate(String key, Channel channel, Category category, Du
      * {@code https://wumika.com/apps/track/{{order_no}}} is submitted as
      * {@code .../track/{{1}}} and the value of {@code order_no} is sent as its suffix.
      */
-    public record Button(String text, String url, String reply) {
+    public record Button(String text, String url, String reply, String copyCode) {
+
+        public Button(String text, String url, String reply) {
+            this(text, url, reply, null);
+        }
 
         public Button(String text, String url) {
-            this(text, url, null);
+            this(text, url, null, null);
+        }
+
+        /**
+         * Meta's copy-code button (playbook: "coupon templates with a copy-code
+         * button"): one tap copies the code. Its label is Meta's own ("Copy offer
+         * code"); {@code copyCode} is the variable that holds the code, e.g. {@code {{code}}}.
+         */
+        public static Button copyCode(String variable) {
+            return new Button("Copy offer code", null, null, variable);
+        }
+
+        public boolean isCopyCode() {
+            return copyCode != null;
+        }
+
+        /** A link button: neither a quick reply nor a copy-code button. */
+        public boolean isUrl() {
+            return url != null;
         }
 
         /**
@@ -69,7 +91,7 @@ public record MessageTemplate(String key, Channel channel, Category category, Du
         }
 
         public boolean isQuickReply() {
-            return url == null;
+            return url == null && copyCode == null;
         }
     }
 

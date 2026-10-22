@@ -1,0 +1,14 @@
+# Campaign: the last day of a sale (playbook §6 "last day", §4 time-based
+# urgency). Only for an end that is real: no extensions dressed up as a last
+# call (CCPA dark patterns). Poster header, shop button, copy-code. Marketing.
+key: campaign_last_call_v1
+channel: whatsapp
+category: marketing
+header_image: "{{image}}"
+locales:
+  en: { body: "*Last call* ⏳\n\nThe {{sale}} at WUMIKA ends {{ends}}. {{offer}} until then, so tap below before it is over." }
+buttons:
+  - { text: "Shop before it ends", url: "https://wumika.com/{{link_path}}" }
+  - { copy_code: "{{code}}" }
+vars: [sale, ends, offer, link_path, code, image]
+samples: { sale: "Dhanteras Sale", ends: "tonight at 9 PM", offer: "Flat 15% off festive jewellery", link_path: "discount/DHANTERAS15?redirect=%2Fcollections%2Fdiwali-gifts", code: "DHANTERAS15", image: "https://engage.wumika.com/media/product/8741079023804" }

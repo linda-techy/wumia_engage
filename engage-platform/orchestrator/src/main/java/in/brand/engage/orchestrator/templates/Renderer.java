@@ -48,7 +48,7 @@ public class Renderer {
         var copy = template.locales().get(chosen);
         var subject = fill(copy.title(), vars, template.key());
         var body = fill(copy.body(), vars, template.key());
-        var button = template.buttons().stream().filter(b -> !b.isQuickReply()).findFirst().orElse(null);
+        var button = template.buttons().stream().filter(MessageTemplate.Button::isUrl).findFirst().orElse(null);
         var layout = EmailLayout.render(subject, body, button == null ? null : button.text(),
                 button == null ? null : fill(button.url(), vars, template.key()), unsubscribeUrl);
         return new EmailRendered(subject, layout.html(), layout.text());
@@ -90,7 +90,12 @@ public class Renderer {
         for (var name : placeholders(copy.body())) params.add(require(vars, name, template.key()));
         var suffixes = new ArrayList<String>();
         var replies = new ArrayList<String>();
+        String coupon = null;
         for (var b : template.buttons()) {
+            if (b.isCopyCode()) {
+                coupon = fill(b.copyCode(), vars, template.key());
+                continue;
+            }
             if (b.isQuickReply()) {
                 replies.add(b.reply());
                 continue;
@@ -100,7 +105,8 @@ public class Renderer {
         }
         var header = template.headerImage() == null ? null : fill(template.headerImage(), vars, template.key());
         return new WhatsAppRendered(chosen, body,
-                new WaTemplateCall(copy.providerName(), copy.language(), params, suffixes, replies, header));
+                new WaTemplateCall(copy.providerName(), copy.language(), params, suffixes, replies, header,
+                        coupon, coupon == null ? -1 : template.buttons().size() - 1));
     }
 
     /**

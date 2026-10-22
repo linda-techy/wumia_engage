@@ -115,8 +115,8 @@ class WhatsAppTemplateTest {
 
     @Test void the_lint_holds_a_photo_template_to_its_fallback() {
         var lint = TemplateLinter.standard();
-        var noFallback = lint.lint(parse(PHOTO.replace("fallback: cart_v1\n", "")));
-        assertTrue(noFallback.stream().anyMatch(p -> p.contains("needs a fallback")), noFallback.toString());
+        // A campaign template shows the campaign's poster, which the composer requires: no fallback needed.
+        assertEquals(List.of(), lint.lint(parse(PHOTO.replace("fallback: cart_v1\n", ""))));
 
         var missing = lint.lintAll(List.of(parse(PHOTO)));
         assertTrue(missing.stream().anyMatch(p -> p.contains("is not a template")), missing.toString());
@@ -144,6 +144,43 @@ class WhatsAppTemplateTest {
                 vars: [url]
                 samples: { url: "https://x" }
                 """), "header_image is WhatsApp only");
+    }
+
+    @Test void a_copy_code_button_renders_its_code_at_its_button_index() {
+        var t = parse("""
+                key: campaign_x_v1
+                channel: whatsapp
+                category: marketing
+                header_image: "{{image}}"
+                locales:
+                  en: { body: "*The {{sale}} is live*\\n\\nShop it at WUMIKA, until the end of the week." }
+                buttons:
+                  - { text: "Shop the sale", url: "https://wumika.com/{{link_path}}" }
+                  - { copy_code: "{{code}}" }
+                vars: [sale, link_path, code, image]
+                samples: { sale: "Dhanteras Sale", link_path: "collections/x", code: "DIWALI25", image: "https://e.example/p.jpg" }
+                """);
+        assertEquals(List.of(), TemplateLinter.standard().lint(t));
+        var call = new Renderer().whatsapp(t, "en", Map.of("sale", "Dhanteras Sale", "link_path", "discount/D15?redirect=%2F",
+                "code", "D15", "image", "https://engage.wumika.com/media/a.jpg")).call();
+        assertEquals("D15", call.couponCode());
+        assertEquals(1, call.couponIndex());
+        assertEquals(List.of("discount/D15?redirect=%2F"), call.urlButtonSuffixes());
+        assertEquals("https://engage.wumika.com/media/a.jpg", call.headerImage());
+
+        var notLast = TemplateLinter.standard().lint(parse("""
+                key: campaign_y_v1
+                channel: whatsapp
+                category: marketing
+                locales:
+                  en: { body: "Shop the sale at WUMIKA today." }
+                buttons:
+                  - { copy_code: "{{code}}" }
+                  - { text: "Shop", url: "https://wumika.com/" }
+                vars: [code]
+                samples: { code: "D15" }
+                """));
+        assertTrue(notLast.stream().anyMatch(p -> p.contains("must be the last button")), notLast.toString());
     }
 
     @Test void a_photo_template_and_its_fallback_share_one_cooldown() {

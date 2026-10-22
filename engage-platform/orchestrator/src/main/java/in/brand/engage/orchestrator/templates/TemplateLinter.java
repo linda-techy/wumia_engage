@@ -104,7 +104,8 @@ public final class TemplateLinter {
             used.addAll(Renderer.placeholders(c.title()));
             used.addAll(Renderer.placeholders(c.body()));
         });
-        t.buttons().stream().filter(b -> !b.isQuickReply()).forEach(b -> used.addAll(Renderer.placeholders(b.url())));
+        t.buttons().stream().filter(MessageTemplate.Button::isUrl).forEach(b -> used.addAll(Renderer.placeholders(b.url())));
+        t.buttons().stream().filter(MessageTemplate.Button::isCopyCode).forEach(b -> used.addAll(Renderer.placeholders(b.copyCode())));
         if (t.headerImage() != null) used.addAll(Renderer.placeholders(t.headerImage()));
         if (t.channel() == Channel.WHATSAPP) problems.addAll(whatsapp(t, where));
         if (t.channel() == Channel.SMS) problems.addAll(sms(t, where));
@@ -213,7 +214,7 @@ public final class TemplateLinter {
         if (t.category() != in.brand.engage.core.messaging.Category.MARKETING) {
             problems.add(where + "Engage sends marketing email only; Shopify sends transactional email");
         }
-        var urlButtons = t.buttons().stream().filter(b -> !b.isQuickReply()).count();
+        var urlButtons = t.buttons().stream().filter(MessageTemplate.Button::isUrl).count();
         if (urlButtons != 1 || t.buttons().size() != 1) problems.add(where + "an email needs exactly one URL button (its call to action)");
         for (var e : t.locales().entrySet()) {
             var placeholdersKnown = Renderer.placeholders(e.getValue().title()).stream().allMatch(t.samples()::containsKey)
@@ -325,19 +326,29 @@ public final class TemplateLinter {
         if (t.freeForm() && !t.buttons().isEmpty()) problems.add(where + "a free-form (SERVICE) reply cannot have buttons");
         if (t.headerImage() != null) {
             if (t.freeForm()) problems.add(where + "a free-form (SERVICE) reply cannot have a header photo");
-            if (!t.headerImage().startsWith("https://")) problems.add(where + "header_image must be an https link");
-            if (t.fallback() == null) {
-                problems.add(where + "a template with header_image needs a fallback without one, for people whose product has no photo");
-            }
+            var header = Renderer.placeholders(t.headerImage()).stream().allMatch(t.samples()::containsKey)
+                    ? Renderer.fill(t.headerImage(), t.samples(), t.key()) : t.headerImage();
+            if (!header.startsWith("https://")) problems.add(where + "header_image must be an https link (with the sample values)");
         }
         if (t.fallback() != null && t.fallback().equals(t.key())) problems.add(where + "a template cannot be its own fallback");
         long replies = t.buttons().stream().filter(MessageTemplate.Button::isQuickReply).count();
-        if (replies > 0 && replies < t.buttons().size()) {
+        long copies = t.buttons().stream().filter(MessageTemplate.Button::isCopyCode).count();
+        if (copies > 1) problems.add(where + "more than one copy-code button");
+        if (copies == 1) {
+            if (replies > 0) problems.add(where + "a copy-code button goes with URL buttons, not quick replies");
+            if (!t.buttons().getLast().isCopyCode()) problems.add(where + "the copy-code button must be the last button");
+            var code = t.buttons().stream().filter(MessageTemplate.Button::isCopyCode).findFirst().orElseThrow().copyCode();
+            if (Renderer.placeholders(code).size() != 1 || !code.matches("\\{\\{\\s*[a-z_][a-z0-9_]*\\s*}}")) {
+                problems.add(where + "copy_code is one variable, e.g. {{code}}");
+            }
+        }
+        if (replies > 0 && replies < t.buttons().size() - copies) {
             problems.add(where + "mix of quick-reply and URL buttons; use one kind per template");
         }
         if (replies > 3) problems.add(where + "more than 3 quick replies");
         var payloads = new HashSet<String>();
         for (var b : t.buttons()) {
+            if (b.isCopyCode()) continue;
             if (b.isQuickReply()) {
                 if (Renderer.length(b.text()) > WA_BUTTON_TEXT_MAX) problems.add(where + "button label '" + b.text() + "' is over 25 characters");
                 if (!QUICK_REPLY.matcher(b.reply()).matches()) {

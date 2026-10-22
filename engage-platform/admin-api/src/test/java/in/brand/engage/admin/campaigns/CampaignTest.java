@@ -31,9 +31,9 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 class CampaignTest {
 
     static final String PUSH_TPL = "push_campaign_new_arrivals_v1";
-    static final String WA_OK = "wa_campaign_ok";
-    static final String WA_PENDING = "wa_campaign_pending";
-    static final String WA_RED = "wa_campaign_red";
+    static final String WA_OK = "campaign_wa_ok";      // campaign_*: the picker offers only campaign templates
+    static final String WA_PENDING = "campaign_wa_pending";
+    static final String WA_RED = "campaign_wa_red";
     static final AtomicInteger SEQ = new AtomicInteger();
 
     @Inject @Client("/") HttpClient client;
@@ -68,7 +68,9 @@ class CampaignTest {
                       (?, 'push', 'marketing', 'active'), (?, 'whatsapp', 'marketing', 'active'),
                       (?, 'whatsapp', 'marketing', 'active'), (?, 'whatsapp', 'marketing', 'active')
                     ON CONFLICT (key) DO UPDATE SET status = 'active'""", PUSH_TPL, WA_OK, WA_PENDING, WA_RED);
-            Sql.update(c, "DELETE FROM wa_templates WHERE key LIKE 'wa\\_campaign\\_%'");
+            // As the registry sync writes it (V46): what the composer must ask for.
+            Sql.update(c, "UPDATE templates SET vars = '{collection,url,image}' WHERE key = ?", PUSH_TPL);
+            Sql.update(c, "DELETE FROM wa_templates WHERE provider_name IN ('ok', 'pending', 'red')");
             Sql.update(c, """
                     INSERT INTO wa_templates (key, language, provider_name, requested_category, approved_category, status, quality)
                     VALUES (?, 'en', 'ok', 'marketing', 'marketing', 'APPROVED', 'GREEN'),
@@ -185,12 +187,19 @@ class CampaignTest {
         assertEquals(400, status(() -> create("push", WA_OK)), "a WhatsApp template on push");
     }
 
+    @Test void a_campaign_must_give_every_value_its_template_needs() {
+        var e = assertThrows(io.micronaut.http.client.exceptions.HttpClientResponseException.class,
+                () -> create("push", PUSH_TPL, "vars", Map.of("url", "https://w.example/c/linen")));
+        assertEquals(400, e.getStatus().getCode());
+        assertTrue(e.getResponse().getBody(String.class).orElse("").contains("collection"), "names the missing value");
+    }
+
     @Test void editing_an_estimated_campaign_sends_it_back_to_draft() {
         var created = create("push", PUSH_TPL);
         var id = created.get("id");
         act(lead, id, "estimate");
         var body = new HashMap<String, Object>(Map.of("name", "Renamed", "channel", "push", "templateKey", PUSH_TPL,
-                "segmentId", segment));
+                "segmentId", segment, "vars", Map.of("collection", "Linen", "url", "https://w.example/c/linen")));
         var edited = client.toBlocking().retrieve(HttpRequest.PATCH("/api/campaigns/" + id, body).bearerAuth(lead), Map.class);
         assertEquals("DRAFT", edited.get("status"));
         assertNull(edited.get("estimate"));

@@ -1,0 +1,14 @@
+# Campaign: a sale is live (playbook §6 "launch"). Poster header, a shop button
+# (an auto-apply discount link when the composer has a code) and copy-code.
+# Marketing.
+key: campaign_sale_live_v1
+channel: whatsapp
+category: marketing
+header_image: "{{image}}"
+locales:
+  en: { body: "*The {{sale}} is live* 🪔\n\n{{offer}} on WUMIKA jewellery, until {{ends}}. Tap below to shop the edit." }
+buttons:
+  - { text: "Shop the sale", url: "https://wumika.com/{{link_path}}" }
+  - { copy_code: "{{code}}" }
+vars: [sale, offer, ends, link_path, code, image]
+samples: { sale: "Dhanteras Sale", offer: "Flat 15% off festive jewellery", ends: "Fri 6 Nov, 9 PM", link_path: "discount/DHANTERAS15?redirect=%2Fcollections%2Fdiwali-gifts", code: "DHANTERAS15", image: "https://engage.wumika.com/media/product/8741079023804" }
