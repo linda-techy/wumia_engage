@@ -188,6 +188,14 @@ class AnalyticsTest {
         assertEquals(4, n((Map<String, Object>) list.getFirst(), "recipients"));
     }
 
+    @Test void a_range_with_no_sends_still_answers_every_list_empty_not_missing() {
+        // Production on day one: no sends yet. The console reads o.channels.find(...).
+        var o = get("/api/analytics/overview?from=2025-01-01&to=2025-01-31");
+        assertEquals(java.util.List.of(), o.get("channels"));
+        assertEquals(java.util.List.of(), o.get("journeys"));
+        assertNotNull(o.get("daily"), "daily is a list (zero days), present either way");
+    }
+
     @Test void ranges_are_checked_and_spend_blocks_and_quality_answer() {
         var token = data.loginAsViewer(client);
         var e = assertThrows(HttpClientResponseException.class, () -> client.toBlocking().retrieve(

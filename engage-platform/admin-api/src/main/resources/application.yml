@@ -2,6 +2,12 @@
 micronaut:
   application:
     name: engage-admin
+  serde:
+    serialization:
+      # Micronaut's default (NON_EMPTY) drops empty lists, so a fresh install
+      # with no sends answered {"total":…} without "channels" and the console's
+      # Analytics page crashed. Keep empty lists and strings; still omit nulls.
+      inclusion: non_absent
   server:
     port: ${ADMIN_API_PORT:8083}
 
