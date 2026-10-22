@@ -28,7 +28,7 @@ public class MediaController {
         this.db = db;
     }
 
-    @Get("/{file}")
+    @Get(value = "/{file}", produces = "*/*")
     @ExecuteOn(TaskExecutors.BLOCKING)
     public HttpResponse<byte[]> get(@PathVariable String file) {
         var m = FILE.matcher(file);

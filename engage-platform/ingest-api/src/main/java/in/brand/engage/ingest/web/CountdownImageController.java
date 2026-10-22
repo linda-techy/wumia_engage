@@ -75,7 +75,7 @@ public class CountdownImageController {
 
     private record Campaign(Instant endsAt, byte[] poster) {}
 
-    @Get("/{id}")
+    @Get(value = "/{id}", produces = "*/*")
     @ExecuteOn(TaskExecutors.BLOCKING)
     public HttpResponse<byte[]> get(@PathVariable String id) {
         UUID campaignId;

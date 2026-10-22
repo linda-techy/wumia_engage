@@ -50,7 +50,7 @@ public class ProductPhotoController {
         this.fetcher = fetcher;
     }
 
-    @Get("/{ref}")
+    @Get(value = "/{ref}", produces = "*/*")   // the type is set per photo; an image-only Accept (Meta, browsers) must not get 406
     @ExecuteOn(TaskExecutors.BLOCKING)
     public HttpResponse<byte[]> get(@PathVariable String ref) {
         var m = REF.matcher(ref);

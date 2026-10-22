@@ -65,6 +65,26 @@ class ProductPhotoTest {
                 FETCHED.toString());
 
         assertEquals(200, status("/media/product/" + id), "the hash is optional");
+
+        // Meta's fetcher and browsers ask for images only; that once got 406 (wa-submit, 2026-10-22).
+        for (var accept : new String[] {"image/jpeg, image/png", "image/*", "image/webp,image/apng,image/*,*/*;q=0.8"}) {
+            var imageOnly = client.toBlocking().exchange(HttpRequest.GET("/media/product/" + id).header("Accept", accept), byte[].class);
+            assertEquals(200, imageOnly.code(), accept);
+        }
+    }
+
+    @Test void countdown_and_poster_images_answer_an_image_only_accept_too() {
+        assertNotEquals(406, statusWithAccept("/media/countdown/" + java.util.UUID.randomUUID(), "image/*"), "404 for unknown, never 406");
+        assertNotEquals(406, statusWithAccept("/media/" + "ab".repeat(32) + ".png", "image/*"));
+        assertEquals(200, statusWithAccept("/brand/push-icon-192.png", "image/*"));
+    }
+
+    int statusWithAccept(String path, String accept) {
+        try {
+            return client.toBlocking().exchange(HttpRequest.GET(path).header("Accept", accept), byte[].class).code();
+        } catch (HttpClientResponseException e) {
+            return e.code();
+        }
     }
 
     @Test void nothing_but_a_known_product_on_shopifys_cdn_is_ever_fetched() {

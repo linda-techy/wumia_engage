@@ -24,7 +24,7 @@ public class BrandController {
 
     private final Map<String, byte[]> files = Map.of(ICON, read(ICON), BADGE, read(BADGE));
 
-    @Get("/{file}")
+    @Get(value = "/{file}", produces = "*/*")
     public HttpResponse<byte[]> get(@PathVariable String file) {
         var bytes = files.get(file);
         if (bytes == null) return HttpResponse.notFound();
