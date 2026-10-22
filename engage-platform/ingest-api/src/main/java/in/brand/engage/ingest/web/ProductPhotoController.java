@@ -84,7 +84,7 @@ public class ProductPhotoController {
         static final int ENTRIES = 64;
 
         private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5))
-                .followRedirects(HttpClient.Redirect.NEVER).build();
+                .version(HttpClient.Version.HTTP_1_1).followRedirects(HttpClient.Redirect.NEVER).build();
         private final Clock clock;
         private final Map<String, Cached> cache = new LinkedHashMap<>(16, 0.75f, true) {
             @Override
@@ -137,7 +137,8 @@ public class ProductPhotoController {
 
         protected Photo fetch(String url) {
             var req = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(10))
-                    .header("Accept", "image/jpeg, image/png").GET().build();
+                    .header("Accept", "image/jpeg, image/png")
+                    .header("User-Agent", "Mozilla/5.0 (compatible; WUMIKA-Engage/1.0; +https://engage.wumika.com)").GET().build();
             try {
                 var res = http.send(req, java.net.http.HttpResponse.BodyHandlers.ofInputStream());
                 try (var in = res.body()) {

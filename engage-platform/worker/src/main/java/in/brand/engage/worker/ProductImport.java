@@ -30,11 +30,19 @@ import java.util.Map;
  * <p>Read-only towards Shopify (the same JSON any visitor's browser can load)
  * and holds no customer data. Like the webhook, a row is only overwritten by a
  * newer {@code updated_at}, so running it again is harmless.
+ *
+ * <p>Shopify's edge (Cloudflare) rate-limits the feed per IP and answered the
+ * production server's Java client 429 where curl got 200. So: HTTP/1.1 with a
+ * named User-Agent, a pause between pages, and up to five waits on 429. If it
+ * still refuses, {@code products-import --from <dir>} reads pages saved with
+ * curl ({@code page-1.json}, {@code page-2.json}, …).
  */
 final class ProductImport {
 
     static final int PAGE = 250;
     static final int MAX_PAGES = 100;
+    static final String USER_AGENT = "Mozilla/5.0 (compatible; WUMIKA-Engage/1.0; +https://engage.wumika.com)";
+    static final int ATTEMPTS = 5;
 
     private ProductImport() {}
 
@@ -49,11 +57,20 @@ final class ProductImport {
             var db = ctx.getBean(Db.class);
             var json = ctx.getBean(JsonMapper.class);
             var storefront = ctx.getBean(Storefront.class);
-            var http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10))
+            var http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).version(HttpClient.Version.HTTP_1_1)
                     .followRedirects(HttpClient.Redirect.NORMAL).build();
+            java.nio.file.Path from = args.length > 2 && args[1].equals("--from") ? java.nio.file.Path.of(args[2]) : null;
             int seen = 0, changed = 0, photos = 0;
             for (int page = 1; page <= MAX_PAGES; page++) {
-                var products = page(http, json, storefront.path("products.json?limit=" + PAGE + "&page=" + page));
+                List<Map<String, Object>> products;
+                if (from != null) {
+                    var file = from.resolve("page-" + page + ".json");
+                    if (!java.nio.file.Files.exists(file)) break;
+                    products = parse(json, readAll(file));
+                } else {
+                    if (page > 1) sleep(1500);                 // gentle on the storefront
+                    products = page(http, json, storefront.path("products.json?limit=" + PAGE + "&page=" + page));
+                }
                 if (products.isEmpty()) break;
                 seen += products.size();
                 for (var p : products) if (image(p) != null) photos++;
@@ -71,11 +88,54 @@ final class ProductImport {
 
     private static List<Map<String, Object>> page(HttpClient http, JsonMapper json, String url) {
         var req = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(30))
-                .header("Accept", "application/json").GET().build();
+                .header("Accept", "application/json, */*").header("User-Agent", USER_AGENT).GET().build();
         try {
-            var res = http.send(req, HttpResponse.BodyHandlers.ofByteArray());
-            if (res.statusCode() != 200) throw new IllegalStateException("GET " + url + ": HTTP " + res.statusCode());
-            Map<String, Object> body = json.readValue(res.body(), Argument.mapOf(String.class, Object.class));
+            for (int attempt = 1; ; attempt++) {
+                var res = http.send(req, HttpResponse.BodyHandlers.ofByteArray());
+                if (res.statusCode() == 200) return parse(json, res.body());
+                if (res.statusCode() != 429 || attempt == ATTEMPTS) {
+                    throw new IllegalStateException("GET " + url + ": HTTP " + res.statusCode()
+                            + (res.statusCode() == 429 ? " (rate-limited; save the pages with curl and use --from <dir>)" : ""));
+                }
+                long wait = res.headers().firstValue("Retry-After").map(ProductImport::seconds).orElse(5L << (attempt - 1));
+                System.out.printf("products-import: rate-limited, waiting %d s%n", wait);
+                sleep(Math.min(wait, 120) * 1000);
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("interrupted");
+        }
+    }
+
+    private static long seconds(String retryAfter) {
+        try {
+            return Math.max(1, Long.parseLong(retryAfter.strip()));
+        } catch (NumberFormatException e) {
+            return 10;
+        }
+    }
+
+    private static void sleep(long ms) {
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private static byte[] readAll(java.nio.file.Path file) {
+        try {
+            return java.nio.file.Files.readAllBytes(file);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    static List<Map<String, Object>> parse(JsonMapper json, byte[] bytes) {
+        try {
+            Map<String, Object> body = json.readValue(bytes, Argument.mapOf(String.class, Object.class));
             var out = new ArrayList<Map<String, Object>>();
             if (body.get("products") instanceof List<?> list) {
                 for (var o : list) {
@@ -88,9 +148,6 @@ final class ProductImport {
             return out;
         } catch (IOException e) {
             throw new UncheckedIOException(e);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("interrupted");
         }
     }
 
