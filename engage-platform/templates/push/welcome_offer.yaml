@@ -1,0 +1,9 @@
+# Welcome series, day 5 (playbook §3: first-order offer), only when
+# journey.welcome.discount_code is set. The link applies the code by itself.
+key: push_welcome_offer_v1
+channel: push
+category: marketing
+locales:
+  en: { title: "{{discount}} on your first order 🎁", body: "Use code {{code}}, or tap and it is applied for you at checkout." }
+vars: [discount, code, url]
+samples: { discount: "10% off", code: "WELCOME10" }

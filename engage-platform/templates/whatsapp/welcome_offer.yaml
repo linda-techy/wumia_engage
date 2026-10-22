@@ -1,0 +1,13 @@
+# Welcome series, last step (playbook §3: first-order offer): the day after
+# the offer push, for those who did not tap it, with WhatsApp marketing
+# consent. Auto-apply link and copy-code. Marketing.
+key: welcome_offer_v1
+channel: whatsapp
+category: marketing
+locales:
+  en: { body: "Hi {{name}}, here is {{discount}} on your first WUMIKA order. Use code {{code}}, or tap below to have it applied for you." }
+buttons:
+  - { text: "Shop with my offer", url: "https://wumika.com/{{discount_path}}" }
+  - { copy_code: "{{code}}" }
+vars: [name, discount, code, discount_path]
+samples: { name: "Priya", discount: "10% off", code: "WELCOME10", discount_path: "discount/WELCOME10?redirect=%2Fcollections%2Fbest-sellers" }

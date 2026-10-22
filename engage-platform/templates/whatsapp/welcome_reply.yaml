@@ -1,0 +1,8 @@
+# Welcome series, day 0 for a WhatsApp opt-in (playbook §3): the reply to
+# their START, inside the 24 h window they just opened, so it is free
+# (service, never submitted to Meta).
+key: wa_welcome_v1
+channel: whatsapp
+category: service
+locales:
+  en: { body: "Welcome to WUMIKA ✨ You will get your order updates, new drops and offers here. Reply STOP any time to opt out. Start with the pieces our customers love most: https://wumika.com/collections/best-sellers" }

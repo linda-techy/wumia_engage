@@ -1,0 +1,9 @@
+# Welcome series, day 2 (playbook §3: bestsellers): social proof that is true,
+# the store's own Best-Sellers collection.
+key: push_welcome_bestsellers_v1
+channel: push
+category: marketing
+locales:
+  en: { title: "Our most-loved pieces 💎", body: "Jhumkas, necklaces and bracelets our customers keep coming back for. Take a look." }
+vars: [url]
+samples: {}

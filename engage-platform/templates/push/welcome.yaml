@@ -1,0 +1,8 @@
+# Welcome series, day 0 for someone who just allowed notifications (playbook §3).
+key: push_welcome_v1
+channel: push
+category: marketing
+locales:
+  en: { title: "Welcome to WUMIKA ✨", body: "You're in! Start with the pieces our customers love most." }
+vars: [url]
+samples: {}
