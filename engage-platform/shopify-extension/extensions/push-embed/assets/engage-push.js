@@ -159,7 +159,10 @@ export async function ask(surface, { userInitiated = false } = {}) {
   }
   track(surface, 'soft_accepted');
 
-  const result = await Notification.requestPermission();      // still within the click gesture
+  // Point at the browser's own prompt while it is open: most "Block"s are
+  // people who did not see where to tap. Gone as soon as they answer.
+  const hideGuide = showGuide();
+  const result = await Notification.requestPermission().finally(hideGuide);   // still within the click gesture
   track(surface, result === 'granted' ? 'native_granted'
                : result === 'denied' ? 'native_denied' : 'native_dismissed');
   if (result !== 'granted') { if (result === 'default') showBell(); return null; }
@@ -376,35 +379,61 @@ function el(tag, attrs = {}, ...kids) {
   return n;
 }
 
-// The soft ask: a branded card that slides in (bottom sheet on phones, top
-// corner on desktop) without darkening or blocking the page, like the native
-// prompt it stands in for. Esc or "Later" dismisses it.
+// The soft ask, as Indian D2C sites show it: the page dims behind a branded
+// card (a bottom sheet on phones, centred on desktop) with the reasons to say
+// yes and one big "Allow". The choice stays the shopper's: "Later" is always
+// visible, a tap on the dimmed page or Esc means Later, and no wording shames
+// a no (CCPA dark-pattern guidelines). PROMPT.backdrop = false brings back the
+// light card without the dimmed page.
 function softAskDialog(surface) {
   return new Promise((resolve) => {
+    const modal = PROMPT.backdrop !== false;
     const done = (v) => {
       document.removeEventListener('keydown', onKey);
       card.classList.remove('engage-ask--in');
       card.classList.add('engage-ask--out');         // gone for ask(), still fading out
-      setTimeout(() => card.remove(), 200);
+      backdrop?.classList.remove('engage-backdrop--in');
+      setTimeout(() => { card.remove(); backdrop?.remove(); }, 200);
       resolve(v);
     };
     const onKey = (e) => { if (e.key === 'Escape') done(false); };
-    const yes = el('button', { class: 'engage-btn engage-btn--primary', type: 'button', onclick: () => done(true) }, 'Allow');
+    const yes = el('button', { class: 'engage-btn engage-btn--primary engage-btn--allow', type: 'button', onclick: () => done(true) }, 'Allow');
     const no = el('button', { class: 'engage-btn engage-btn--quiet', type: 'button', onclick: () => done(false) }, 'Later');
     const headline = HEADLINES[surface] || HEADLINES.browse;
-    const card = el('div', { class: 'engage-ask', role: 'dialog', 'aria-label': headline },
+    const benefits = String(PROMPT.benefits ?? 'New drops before anyone else|Price-drop and back-in-stock alerts|Live updates on your orders')
+      .split('|').map((b) => b.trim()).filter(Boolean).slice(0, 4);
+    const card = el('div', { class: 'engage-ask' + (modal ? ' engage-ask--modal' : ''), role: 'dialog',
+                             'aria-modal': modal ? 'true' : 'false', 'aria-label': headline },
       el('div', { class: 'engage-ask__head' },
         PROMPT.logo ? el('img', { class: 'engage-ask__logo', src: PROMPT.logo, alt: '' }) : '',
         el('strong', { class: 'engage-ask__title' }, headline)),
-      el('p', { class: 'engage-ask__text' }, CFG.copy.push || 'Get order updates, and an alert when your size is back or your bag price drops.'),
+      benefits.length ? el('ul', { class: 'engage-ask__benefits' }, ...benefits.map((b) => el('li', {}, b))) : '',
       // An offer line only with a code to give: never promise what the welcome cannot deliver.
       PROMPT.offerText && (PROMPT.offerCode || '').trim() ? el('p', { class: 'engage-ask__offer' }, PROMPT.offerText) : '',
-      el('div', { class: 'engage-ask__actions' }, no, yes));
+      el('div', { class: 'engage-ask__actions' }, yes, no),
+      // The registered consent sentence (CFG.copy.push): what the shopper agrees to, word for word.
+      el('p', { class: 'engage-ask__text' }, CFG.copy.push || 'Get order updates, and an alert when your size is back or your bag price drops.'));
+    const backdrop = modal ? el('div', { class: 'engage-backdrop', onclick: () => done(false) }) : null;
     document.addEventListener('keydown', onKey);
+    if (backdrop) document.body.append(backdrop);
     document.body.append(card);
-    setTimeout(() => card.classList.add('engage-ask--in'), 30);
+    setTimeout(() => { card.classList.add('engage-ask--in'); backdrop?.classList.add('engage-backdrop--in'); }, 30);
     yes.focus({ preventScroll: true });
   });
+}
+
+// While the browser's own permission prompt is open: the page stays dimmed and
+// a pointer says where to tap. On desktop Chrome the prompt hangs under the
+// address bar (top left); on phones it is the browser's own sheet, so the text
+// alone. Returns the function that removes it.
+function showGuide() {
+  const desktop = !matchMedia('(pointer: coarse)').matches;
+  const guide = el('div', { class: 'engage-guide' + (desktop ? ' engage-guide--desktop' : ''), role: 'status' },
+    desktop ? el('span', { class: 'engage-guide__arrow', 'aria-hidden': 'true' }, '\u2191') : '',
+    el('p', { class: 'engage-guide__text' }, 'Tap \u201cAllow\u201d in your browser\u2019s message to turn on alerts'));
+  document.body.append(guide);
+  setTimeout(() => guide.classList.add('engage-guide--in'), 30);
+  return () => guide.remove();
 }
 
 // The reward for saying yes (reciprocity): the welcome code, revealed only

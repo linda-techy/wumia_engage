@@ -92,6 +92,36 @@
 .engage-ask__actions { display: flex; gap: 8px; justify-content: flex-end; }
 .engage-btn--quiet { border-color: transparent; color: var(--engage-muted); }
 
+/* The dimmed page behind the soft ask, and behind the browser's own prompt. */
+.engage-backdrop, .engage-guide {
+  position: fixed; inset: 0; z-index: calc(var(--engage-z) - 1);
+  background: rgba(12, 6, 10, .55); backdrop-filter: blur(2px);
+  opacity: 0; transition: opacity .2s;
+}
+.engage-backdrop--in, .engage-guide--in { opacity: 1; }
+
+/* With the backdrop: a bottom sheet on phones, centred on desktop, one big Allow. */
+.engage-ask--modal { max-width: 420px; padding: 20px 20px 16px; }
+@media (min-width: 640px) {
+  .engage-ask--modal { left: 50%; right: auto; top: 50%; bottom: auto; transform: translate(-50%, -46%); width: 420px; }
+  .engage-ask--modal.engage-ask--in { transform: translate(-50%, -50%); }
+}
+.engage-ask__benefits { margin: 4px 0 12px; padding: 0; list-style: none; font-size: 14px; line-height: 1.5; }
+.engage-ask__benefits li { padding-left: 24px; position: relative; margin: 4px 0; }
+.engage-ask__benefits li::before { content: "\2713"; position: absolute; left: 0; color: var(--engage-accent); font-weight: 700; }
+.engage-ask--modal .engage-ask__actions { flex-direction: column; gap: 4px; }
+.engage-btn--allow { width: 100%; justify-content: center; min-height: 48px; font-size: 16px; font-weight: 600; }
+.engage-ask--modal .engage-btn--quiet { width: 100%; justify-content: center; }
+.engage-ask--modal .engage-ask__text { margin: 10px 0 0; font-size: 12px; text-align: center; }
+
+/* "Tap Allow" while the browser's prompt is open. */
+.engage-guide { z-index: var(--engage-z); display: flex; align-items: center; justify-content: center; padding: 24px; }
+.engage-guide__text { margin: 0; max-width: 320px; color: #fff; font-size: 18px; font-weight: 600; text-align: center; line-height: 1.4; }
+.engage-guide--desktop { align-items: flex-start; justify-content: flex-start; padding: 150px 0 0 90px; }
+.engage-guide__arrow { position: absolute; top: 70px; left: 120px; color: #fff; font-size: 56px; line-height: 1;
+                       animation: engage-nudge 1s ease-in-out infinite; }
+@keyframes engage-nudge { 50% { transform: translateY(-10px); } }
+
 /* After "Later": one tap to subscribe, no prompt. */
 .engage-bell {
   position: fixed; left: 16px; bottom: 16px; z-index: calc(var(--engage-z) - 1);
@@ -106,5 +136,6 @@
 @keyframes engage-fade { from { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
   .engage-overlay { animation: none; }
-  .engage-toast, .engage-ask { transition: none; }
+  .engage-toast, .engage-ask, .engage-backdrop, .engage-guide { transition: none; }
+  .engage-guide__arrow { animation: none; }
 }

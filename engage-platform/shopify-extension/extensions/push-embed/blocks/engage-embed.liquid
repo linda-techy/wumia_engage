@@ -31,6 +31,8 @@
       reaskDays: {{ block.settings.reask_days | json }},
       maxAsks: {{ block.settings.max_asks | json }},
       exitIntent: {{ block.settings.exit_intent | json }},
+      backdrop: {{ block.settings.backdrop | json }},
+      benefits: {{ block.settings.benefits | json }},
       bell: {{ block.settings.bell | json }}
     },
     copy: {
@@ -74,6 +76,10 @@
     { "type": "header", "content": "Soft-ask look and offer",
       "info": "An offer lifts opt-ins. The code shows only after Allow; create it in Shopify first." },
     { "type": "image_picker", "id": "logo", "label": "Logo on the prompt" },
+    { "type": "checkbox", "id": "backdrop", "label": "Dim the page behind the prompt", "default": true,
+      "info": "Focus on the choice, as most Indian D2C stores do. Later stays visible." },
+    { "type": "text", "id": "benefits", "label": "Reasons to allow (separate with |)",
+      "default": "New drops before anyone else|Price-drop and back-in-stock alerts|Live updates on your orders" },
     { "type": "text", "id": "headline", "label": "Headline (browsing)", "default": "Be the first to know" },
     { "type": "text", "id": "offer_text", "label": "Offer line (shown only when an offer code is set)", "default": "Allow notifications and get 5% off your first order" },
     { "type": "text", "id": "offer_code", "label": "Offer code shown after Allow (blank = none)" },

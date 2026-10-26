@@ -249,6 +249,58 @@ describe('what earns the Allow: intent moments, an offer, and no nagging', () =>
   });
 });
 
+/* ---------------------------- backdrop and guide ---------------------------- */
+
+describe('the dimmed page and the pointer to the browser prompt (what Indian D2C stores do)', () => {
+  it('dims the page behind one big Allow, with the reasons to say yes; Later stays visible', async () => {
+    const push = await load({ ua: UA.androidChrome });
+    push.ask('browse');
+    await tick();
+    expect(document.querySelector('.engage-backdrop')).not.toBeNull();
+    const card = document.querySelector('.engage-ask');
+    expect(card.getAttribute('aria-modal')).toBe('true');
+    const buttons = [...card.querySelectorAll('.engage-ask__actions button')].map((b) => b.textContent);
+    expect(buttons).toEqual(['Allow', 'Later']);
+    expect([...card.querySelectorAll('.engage-ask__benefits li')].map((li) => li.textContent))
+      .toEqual(['New drops before anyone else', 'Price-drop and back-in-stock alerts', 'Live updates on your orders']);
+    expect(card.querySelector('.engage-ask__text').textContent).toBe('Get size-back alerts');   // the consent copy, still shown
+  });
+
+  it('a tap on the dimmed page is a Later, never an Allow', async () => {
+    const push = await load({ ua: UA.androidChrome });
+    const result = push.ask('browse');
+    await tick();
+    document.querySelector('.engage-backdrop').click();
+    expect(await result).toBeNull();
+    expect(events()).toEqual(['soft_shown', 'soft_dismissed']);
+    expect(requestPermission).not.toHaveBeenCalled();
+  });
+
+  it('while the browser prompt is open a guide points at it, and goes when they answer', async () => {
+    const push = await load({ ua: UA.desktopChrome });
+    let answer;
+    requestPermission.mockImplementation(() => new Promise((r) => { answer = r; }));
+    const result = push.ask('browse');
+    await tick();
+    document.querySelector('.engage-btn--allow').click();
+    await tick();
+    expect(document.querySelector('.engage-guide')).not.toBeNull();
+    expect(document.querySelector('.engage-guide__text').textContent).toContain('Allow');
+    answer('denied');
+    await result;
+    expect(document.querySelector('.engage-guide')).toBeNull();
+  });
+
+  it('the store can turn the backdrop off and set its own reasons', async () => {
+    const push = await load({ ua: UA.androidChrome, prompt: { backdrop: false, benefits: 'Early access to sales' } });
+    push.ask('browse');
+    await tick();
+    expect(document.querySelector('.engage-backdrop')).toBeNull();
+    expect(document.querySelector('.engage-ask').getAttribute('aria-modal')).toBe('false');
+    expect([...document.querySelectorAll('.engage-ask__benefits li')].map((li) => li.textContent)).toEqual(['Early access to sales']);
+  });
+});
+
 /* ------------------------------- early ask -------------------------------- */
 
 describe('early ask while browsing (most Indian stores ask on arrival; we ask softly, a little later)', () => {
