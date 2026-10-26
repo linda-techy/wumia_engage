@@ -83,6 +83,9 @@ engage:
   privacy:
     # Empty = refuse to start (fail closed). * = every customer.
     customer-allowlist-emails: ${CUSTOMER_ALLOWLIST_EMAILS:}
+    # true = push subscriptions from every visitor are kept (push released),
+    # while WhatsApp, SMS and order data stay behind the allowlist above.
+    push-open-to-all: ${PUSH_OPEN_TO_ALL:false}
 
 endpoints:
   prometheus:

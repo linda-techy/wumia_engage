@@ -28,7 +28,8 @@ import org.slf4j.LoggerFactory;
  * Storefront push subscribers (phase-2 §8, §9): binds a browser's FCM token to
  * an identity and records push consent in the append-only ledger.
  *
- * <p><b>Who can be stored.</b> The customer allowlist applies here as it does to
+ * <p><b>Who can be stored.</b> With {@code PUSH_OPEN_TO_ALL} every browser is.
+ * Otherwise the customer allowlist applies here as it does to
  * webhooks: while it is restricted, only a signed-in customer whose email is
  * allowlisted is written. Anonymous browsers and everyone else are
  * acknowledged ({@link Outcome#FILTERED}) and nothing is written — not the
@@ -61,14 +62,17 @@ public class SubscriberService {
     private final DeviceRepository devices;
     private final EventWriter events;
     private final CustomerAllowlist allowlist;
+    private final boolean pushOpenToAll;
 
     public SubscriberService(Db db, IdentityResolver identities, DeviceRepository devices, EventWriter events,
-                             CustomerAllowlist allowlist) {
+                             CustomerAllowlist allowlist,
+                             @io.micronaut.context.annotation.Value("${engage.privacy.push-open-to-all:false}") boolean pushOpenToAll) {
         this.db = db;
         this.identities = identities;
         this.devices = devices;
         this.events = events;
         this.allowlist = allowlist;
+        this.pushOpenToAll = pushOpenToAll;
     }
 
     /* ------------------------------ register ----------------------------- */
@@ -217,7 +221,10 @@ public class SubscriberService {
      * a customers/* or order webhook) is on it.
      */
     private boolean mayStore(Connection c, ProxyContext ctx) throws SQLException {
-        if (allowlist.allowAll()) return true;
+        // Push released to everyone (PUSH_OPEN_TO_ALL, owner 2026-10-27): every browser that allows
+        // notifications is kept. WhatsApp, SMS and order data stay behind the customer allowlist,
+        // which governs the Shopify webhooks those channels need.
+        if (allowlist.allowAll() || pushOpenToAll) return true;
         var customerId = ctx.loggedInCustomerId();
         if (customerId.isEmpty()) return false;
         try (var ps = Sql.prepare(c, """
