@@ -99,6 +99,9 @@
   opacity: 0; transition: opacity .2s;
 }
 .engage-backdrop--in, .engage-guide--in { opacity: 1; }
+/* Themes like Dawn hide empty elements (div:empty { display: none } in base.css),
+   and the backdrop is an empty div: this selector outranks that rule. */
+div.engage-backdrop:empty, .engage-backdrop { display: block; }
 
 /* With the backdrop: a bottom sheet on phones, centred on desktop, one big Allow. */
 .engage-ask--modal { max-width: 420px; padding: 20px 20px 16px; }
