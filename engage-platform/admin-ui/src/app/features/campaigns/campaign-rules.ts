@@ -47,6 +47,8 @@ export interface Campaign {
   endsAt?: string | null;
   countdownPoster?: boolean;
   countdownReminders?: boolean;
+  /** Hidden from the list (V48); its sends and report stay. */
+  archivedAt?: string | null;
   estimate: Estimate | null;
   estimatedAt: string | null;
   estimatedCostPaise: number | null;
@@ -119,6 +121,45 @@ export function canResume(c: Campaign, me: Me): Verdict {
 export function canCancel(c: Campaign, me: Me): Verdict {
   if (!me.canSend) return no('Needs campaign sending rights');
   return ['COMPLETED', 'CANCELLED', 'FAILED'].includes(c.status) ? no('Already finished') : yes;
+}
+
+/** Where a campaign is in its life, which decides the actions worth showing. */
+export type Stage = 'prepare' | 'live' | 'paused' | 'done';
+
+export function stageOf(c: Pick<Campaign, 'status'>): Stage {
+  if (c.status === 'SCHEDULED' || c.status === 'RUNNING') return 'live';
+  if (c.status === 'PAUSED') return 'paused';
+  if (c.status === 'COMPLETED' || c.status === 'CANCELLED' || c.status === 'FAILED') return 'done';
+  return 'prepare';
+}
+
+/** A campaign that never sent can be deleted; one that did is archived instead. */
+export function canDelete(c: Campaign, me: Me): Verdict {
+  if (!me.canEdit) return no('Needs campaign editing rights');
+  return stageOf(c) === 'prepare' && !c.startedAt ? yes : no('It has sent: archive it instead');
+}
+
+export function canArchive(c: Campaign, me: Me): Verdict {
+  if (!me.canEdit) return no('Needs campaign editing rights');
+  return stageOf(c) === 'done' ? yes : no('Cancel it first, or let it finish');
+}
+
+/** One plain sentence on where the campaign stands and what comes next. */
+export function statusLine(c: Campaign, fmt: (iso: string) => string): string {
+  const r = c.recipients ?? {};
+  const reached = (r['sent'] ?? 0);
+  switch (c.status) {
+    case 'DRAFT': return 'Draft. Run the dry run to see who it reaches and what it costs.';
+    case 'READY': return 'Dry run done. Approve it, then arm it.';
+    case 'PENDING_APPROVAL': return 'Dry run done, waiting for approval. Tick the review below, then Approve.';
+    case 'SCHEDULED': return c.scheduledAt ? `Armed. It starts ${fmt(c.scheduledAt)}. Pause or cancel until then.` : 'Armed. It starts within a minute.';
+    case 'RUNNING': return 'Sending now. Pause stops it within one batch; cancel ends it.';
+    case 'PAUSED': return c.pausedReason === 'budget_cap' ? 'Stopped at its budget cap. Cancel it, or raise the cap in a new campaign.' : 'Paused. Resume to carry on, or cancel.';
+    case 'COMPLETED': return `Finished${c.finishedAt ? ' ' + fmt(c.finishedAt) : ''}: ${reached} reached. Nothing left to cancel. Archive it to hide it from the list.`;
+    case 'CANCELLED': return `Cancelled${c.finishedAt ? ' ' + fmt(c.finishedAt) : ''}. Archive it to hide it from the list.`;
+    case 'FAILED': return 'Failed. Archive it to hide it from the list.';
+    default: return '';
+  }
 }
 
 /** Recipients handled so far, for the live progress bar. */

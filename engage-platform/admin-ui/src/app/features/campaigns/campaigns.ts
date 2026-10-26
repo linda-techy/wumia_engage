@@ -1,5 +1,5 @@
 import { httpResource } from '@angular/common/http';
-import { Component, computed, inject } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { TokenService } from '../../core/auth/token.service';
 import { InrPipe, IstPipe } from '../../shared/format';
@@ -16,9 +16,12 @@ import { Campaign } from './campaign-rules';
         <h1 class="text-2xl font-semibold">Campaigns</h1>
         <p class="text-sm text-slate-500">Draft, dry run, approval, then a throttled run. Policy still decides every send.</p>
       </div>
-      @if (canEdit()) {
-        <a routerLink="/campaigns/new" class="btn-primary">New campaign</a>
-      }
+      <div class="flex items-center gap-4">
+        <label class="text-sm"><input type="checkbox" [checked]="archived()" (change)="archived.set(checkedOf($event))" /> Show archived</label>
+        @if (canEdit()) {
+          <a routerLink="/campaigns/new" class="btn-primary">New campaign</a>
+        }
+      </div>
     </header>
     @if (campaigns.isLoading() && !campaigns.hasValue()) {
       <app-loading />
@@ -26,7 +29,7 @@ import { Campaign } from './campaign-rules';
       <app-error [error]="campaigns.error()" (retry)="campaigns.reload()" />
     } @else if (campaigns.hasValue()) {
       @if (campaigns.value().length === 0) {
-        <app-empty text="No campaigns yet." />
+        <app-empty [text]="archived() ? 'No archived campaigns.' : 'No campaigns yet.'" />
       } @else {
         <table class="table">
           <thead><tr><th>Name</th><th>Channel</th><th>Segment</th><th>Status</th><th class="num">Est. cost</th><th>Created</th></tr></thead>
@@ -49,6 +52,12 @@ import { Campaign } from './campaign-rules';
 })
 export default class CampaignsPage {
   readonly #tokens = inject(TokenService);
-  readonly campaigns = httpResource<Campaign[]>(() => '/api/campaigns');
+  /** Archived campaigns (finished, hidden) are listed only on request. */
+  readonly archived = signal(false);
+  readonly campaigns = httpResource<Campaign[]>(() => (this.archived() ? '/api/campaigns?archived=true' : '/api/campaigns'));
+
+  checkedOf(e: Event): boolean {
+    return (e.target as HTMLInputElement).checked;
+  }
   readonly canEdit = computed(() => this.#tokens.has('CAMPAIGN_EDIT'));
 }

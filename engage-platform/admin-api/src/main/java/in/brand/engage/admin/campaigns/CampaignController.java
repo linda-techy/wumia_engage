@@ -15,6 +15,7 @@ import io.micronaut.core.type.Argument;
 import io.micronaut.http.HttpResponse;
 import io.micronaut.http.annotation.Body;
 import io.micronaut.http.annotation.Controller;
+import io.micronaut.http.annotation.Delete;
 import io.micronaut.http.annotation.Get;
 import io.micronaut.http.annotation.Patch;
 import io.micronaut.http.annotation.PathVariable;
@@ -113,10 +114,78 @@ public class CampaignController {
         this.config = config;
     }
 
+    /** Newest first; archived campaigns only when asked ({@code ?archived=true}). */
     @RequiresRole(Role.VIEWER)
     @Get
-    public List<Map<String, Object>> list() {
-        return db.inTx(c -> Rows.list(c, this::parse, SELECT + " ORDER BY k.created_at DESC LIMIT 200"));
+    public List<Map<String, Object>> list(@QueryValue(defaultValue = "false") boolean archived) {
+        return db.inTx(c -> Rows.list(c, this::parse, SELECT
+                + (archived ? " WHERE k.archived_at IS NOT NULL" : " WHERE k.archived_at IS NULL")
+                + " ORDER BY k.created_at DESC LIMIT 200"));
+    }
+
+    static final Set<String> FINISHED = Set.of("COMPLETED", "CANCELLED", "FAILED");
+    static final Set<String> NEVER_SENT = Set.of("DRAFT", "READY", "PENDING_APPROVAL");
+
+    /**
+     * Hides a finished campaign from the list (tests, old festivals). Nothing is
+     * deleted: its sends, report and audit stay; {@code unarchive} brings it back.
+     */
+    @RequiresRole(Role.CAMPAIGN_EDIT)
+    @Post("/{id}/archive")
+    public Map<String, Object> archive(@PathVariable String id) {
+        var campaignId = uuid(id);
+        var actor = current.id();
+        return db.inTx(c -> {
+            var k = lock(c, campaignId);
+            if (!FINISHED.contains((String) k.get("status"))) {
+                throw Problems.conflict("campaign-not-finished",
+                        "only a completed, cancelled or failed campaign can be archived; cancel it first");
+            }
+            Sql.update(c, "UPDATE campaigns SET archived_at = COALESCE(archived_at, now()), updated_at = now() WHERE id = ?", campaignId);
+            audit.record(c, actor, "campaign.archive", "campaign", campaignId.toString(), null, null);
+            return detail(c, campaignId);
+        });
+    }
+
+    @RequiresRole(Role.CAMPAIGN_EDIT)
+    @Post("/{id}/unarchive")
+    public Map<String, Object> unarchive(@PathVariable String id) {
+        var campaignId = uuid(id);
+        var actor = current.id();
+        return db.inTx(c -> {
+            lock(c, campaignId);
+            Sql.update(c, "UPDATE campaigns SET archived_at = NULL, updated_at = now() WHERE id = ?", campaignId);
+            audit.record(c, actor, "campaign.unarchive", "campaign", campaignId.toString(), null, null);
+            return detail(c, campaignId);
+        });
+    }
+
+    /**
+     * Deletes a campaign that never sent anything: a draft, a dry-run one, or
+     * one waiting for approval, never armed. Anything that was armed has sends
+     * and a report: archive it instead.
+     */
+    @RequiresRole(Role.CAMPAIGN_EDIT)
+    @Delete("/{id}")
+    public HttpResponse<Void> delete(@PathVariable String id) {
+        var campaignId = uuid(id);
+        var actor = current.id();
+        db.inTx(c -> {
+            var k = lock(c, campaignId);
+            if (!NEVER_SENT.contains((String) k.get("status")) || k.get("startedAt") != null) {
+                throw Problems.conflict("campaign-sent", "only a campaign that never sent can be deleted; archive it instead");
+            }
+            try (var ps = Sql.prepare(c, "SELECT EXISTS (SELECT 1 FROM campaign_recipients WHERE campaign_id = ?)", campaignId);
+                 var rs = ps.executeQuery()) {
+                rs.next();
+                if (rs.getBoolean(1)) throw Problems.conflict("campaign-sent", "this campaign was armed: archive it instead");
+            }
+            Sql.update(c, "DELETE FROM campaigns WHERE id = ?", campaignId);
+            audit.record(c, actor, "campaign.delete", "campaign", campaignId.toString(),
+                    toJson(Map.of("name", k.get("name"), "status", k.get("status"))), null);
+            return null;
+        });
+        return HttpResponse.noContent();
     }
 
     @RequiresRole(Role.VIEWER)
@@ -358,7 +427,7 @@ public class CampaignController {
                    k.follow_up_template_key, k.follow_up_after_minutes, k.ends_at, k.countdown_poster,
                    k.countdown_reminders, k.estimate, k.estimated_at,
                    k.estimated_cost_paise, cb.email AS created_by, ab.email AS approved_by, k.approved_at,
-                   k.config_snapshot_id, k.started_at, k.finished_at, k.stats, k.created_at, k.updated_at
+                   k.config_snapshot_id, k.started_at, k.finished_at, k.stats, k.archived_at, k.created_at, k.updated_at
               FROM campaigns k
               LEFT JOIN segments s ON s.id = k.segment_id
               LEFT JOIN operators cb ON cb.id = k.created_by
@@ -385,11 +454,13 @@ public class CampaignController {
         try (var ps = Sql.prepare(c, """
                 SELECT status, channel::text AS channel, follow_up_channel::text AS follow_up_channel, template_key,
                        segment_id, holdout_pct, send_rate_per_minute, scheduled_at, estimated_at, estimated_cost_paise,
-                       created_by, approved_by, paused_reason
+                       created_by, approved_by, paused_reason, name, started_at
                   FROM campaigns WHERE id = ? FOR UPDATE""", id); var rs = ps.executeQuery()) {
             if (!rs.next()) throw Problems.notFound("no such campaign");
             var m = new LinkedHashMap<String, Object>();
             m.put("status", rs.getString("status"));
+            m.put("name", rs.getString("name"));
+            m.put("startedAt", rs.getObject("started_at"));
             m.put("channel", rs.getString("channel"));
             m.put("followUpChannel", rs.getString("follow_up_channel"));
             m.put("templateKey", rs.getString("template_key"));

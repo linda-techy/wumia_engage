@@ -8,7 +8,8 @@ import { ErrorState, LoadingState } from '../../shared/states';
 import { CUSTOM_PUSH_TEMPLATE, PushPreview } from './push-preview';
 import { CampaignReport } from '../../core/api/models';
 import { rate } from '../analytics/analytics-model';
-import { Campaign, canApprove, canArm, canCancel, canEdit, canEstimate, canPause, canResume, Me, progress, Verdict } from './campaign-rules';
+import { Campaign, canApprove, canArchive, canArm, canCancel, canDelete, canEdit, canEstimate, canPause, canResume, Me, progress, stageOf, statusLine, Verdict } from './campaign-rules';
+import { Router } from '@angular/router';
 
 const LIVE = ['SCHEDULED', 'RUNNING'];
 
@@ -37,25 +38,46 @@ const LIVE = ['SCHEDULED', 'RUNNING'];
           </p>
         </div>
         <span class="badge text-sm" [class.badge-green]="c.status === 'RUNNING'" [class.badge-red]="c.status === 'PAUSED'">
-          {{ c.status }}{{ c.pausedReason ? ' (' + c.pausedReason + ')' : '' }}</span>
+          {{ c.status }}{{ c.pausedReason ? ' (' + c.pausedReason + ')' : '' }}{{ c.archivedAt ? ' · archived' : '' }}</span>
       </header>
+      <p class="mb-3 text-sm text-slate-700">{{ line() }}</p>
 
       @if (notice()) { <p class="mb-4 rounded bg-emerald-50 p-3 text-sm text-emerald-800" role="status">{{ notice() }}</p> }
       @if (error()) { <p class="mb-4 rounded bg-red-50 p-3 text-sm text-red-800" role="alert">{{ error() }}</p> }
 
-      <section class="mb-6 flex flex-wrap gap-2">
-        @if (v().edit.allowed) {
-          <a class="btn" [routerLink]="['/campaigns', c.id, 'edit']">Edit</a>
+      <!-- Only the actions that make sense now; a disabled one says why in text, not in a hover tooltip. -->
+      <section class="mb-6 flex flex-wrap items-center gap-2">
+        @switch (stage()) {
+          @case ('prepare') {
+            @if (v().edit.allowed) { <a class="btn" [routerLink]="['/campaigns', c.id, 'edit']">Edit</a> }
+            <button type="button" class="btn" [disabled]="busy() || !v().estimate.allowed" (click)="act('estimate')">Run dry run</button>
+            @if (c.status === 'PENDING_APPROVAL') {
+              <button type="button" class="btn" [disabled]="busy() || !v().approve.allowed || !reviewed()" (click)="act('approve')">Approve</button>
+            }
+            <button type="button" class="btn-primary" [disabled]="busy() || !v().arm.allowed" (click)="act('start')">Arm and start</button>
+            @if (v().del.allowed) {
+              <button type="button" class="btn ml-auto text-red-700" [disabled]="busy()" (click)="remove()">Delete draft</button>
+            }
+          }
+          @case ('live') {
+            <button type="button" class="btn" [disabled]="busy() || !v().pause.allowed" (click)="act('pause')">Pause</button>
+            <button type="button" class="btn text-red-700" [disabled]="busy() || !v().cancel.allowed" (click)="act('cancel')">Cancel campaign</button>
+          }
+          @case ('paused') {
+            <button type="button" class="btn-primary" [disabled]="busy() || !v().resume.allowed" (click)="act('resume')">Resume</button>
+            <button type="button" class="btn text-red-700" [disabled]="busy() || !v().cancel.allowed" (click)="act('cancel')">Cancel campaign</button>
+          }
+          @case ('done') {
+            @if (c.archivedAt) {
+              <button type="button" class="btn" [disabled]="busy() || !v().archive.allowed" (click)="act('unarchive')">Unarchive</button>
+            } @else {
+              <button type="button" class="btn" [disabled]="busy() || !v().archive.allowed" (click)="act('archive')">Archive</button>
+            }
+          }
         }
-        <button type="button" class="btn" [disabled]="busy() || !v().estimate.allowed" [title]="why(v().estimate)" (click)="act('estimate')">Run dry run</button>
-        <button type="button" class="btn" [disabled]="busy() || !v().approve.allowed || !reviewed()" [title]="reviewed() ? why(v().approve) : 'Tick the review checklist first'" (click)="act('approve')">Approve</button>
-        <button type="button" class="btn-primary" [disabled]="busy() || !v().arm.allowed" [title]="why(v().arm)" (click)="act('start')">Arm and start</button>
-        <button type="button" class="btn" [disabled]="busy() || !v().pause.allowed" [title]="why(v().pause)" (click)="act('pause')">Pause</button>
-        <button type="button" class="btn" [disabled]="busy() || !v().resume.allowed" [title]="why(v().resume)" (click)="act('resume')">Resume</button>
-        <button type="button" class="btn" [disabled]="busy() || !v().cancel.allowed" [title]="why(v().cancel)" (click)="act('cancel')">Cancel</button>
       </section>
-      @if (!v().arm.allowed && ['READY', 'PENDING_APPROVAL', 'DRAFT'].includes(c.status)) {
-        <p class="-mt-4 mb-6 text-xs text-slate-500">Arm: {{ why(v().arm) }}.@if (!v().approve.allowed && c.status === 'PENDING_APPROVAL') { Approve: {{ why(v().approve) }}. }</p>
+      @if (reasons().length) {
+        <p class="-mt-4 mb-6 text-xs text-slate-500">{{ reasons().join(' · ') }}</p>
       }
 
       @if (['PENDING_APPROVAL', 'READY', 'DRAFT'].includes(c.status)) {
@@ -224,7 +246,28 @@ export default class CampaignDetailPage {
       pause: canPause(c, me),
       resume: canResume(c, me),
       cancel: canCancel(c, me),
+      del: canDelete(c, me),
+      archive: canArchive(c, me),
     };
+  });
+  readonly stage = computed(() => stageOf(this.c() ?? { status: 'DRAFT' }));
+  readonly line = computed(() => (this.c() ? statusLine(this.c()!, (iso) => new Date(iso).toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })) : ''));
+  /** Why the shown buttons are disabled, in words. */
+  readonly reasons = computed(() => {
+    const v = this.v();
+    const out: string[] = [];
+    switch (this.stage()) {
+      case 'prepare':
+        if (this.c()?.status === 'PENDING_APPROVAL' && !this.reviewed()) out.push('Approve: tick the review checklist first');
+        else if (this.c()?.status === 'PENDING_APPROVAL' && !v.approve.allowed) out.push('Approve: ' + this.why(v.approve));
+        if (!v.arm.allowed) out.push('Arm: ' + this.why(v.arm));
+        break;
+      case 'live': if (!v.pause.allowed) out.push(this.why(v.pause)); break;
+      case 'paused': if (!v.resume.allowed) out.push('Resume: ' + this.why(v.resume)); break;
+      case 'done': if (!v.archive.allowed) out.push(this.why(v.archive)); break;
+    }
+    return out;
   });
   readonly live = computed(() => LIVE.includes(this.c()?.status ?? ''));
   readonly prog = computed(() => progress(this.c() ?? { recipients: {} }));
@@ -249,7 +292,24 @@ export default class CampaignDetailPage {
     return Object.entries(m ?? {});
   }
 
-  async act(action: 'estimate' | 'approve' | 'start' | 'pause' | 'resume' | 'cancel'): Promise<void> {
+  readonly #router = inject(Router);
+
+  /** Deletes a campaign that never sent, then back to the list. */
+  async remove(): Promise<void> {
+    if (!confirm('Delete this draft? It never sent, so nothing else is affected.')) return;
+    this.busy.set(true);
+    this.error.set(null);
+    try {
+      await this.#api.delete(`/api/campaigns/${encodeURIComponent(this.id())}`);
+      await this.#router.navigate(['/campaigns']);
+    } catch (e) {
+      this.error.set(problemDetail(e, 'Could not delete it.'));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  async act(action: 'estimate' | 'approve' | 'start' | 'pause' | 'resume' | 'cancel' | 'archive' | 'unarchive'): Promise<void> {
     if (action === 'cancel' && !confirm('Cancel this campaign? People not yet reached will not be.')) return;
     this.busy.set(true);
     this.error.set(null);
@@ -257,7 +317,8 @@ export default class CampaignDetailPage {
     try {
       await this.#api.post(`/api/campaigns/${encodeURIComponent(this.id())}/${action}`, {});
       this.notice.set(
-        { estimate: 'Dry run done.', approve: 'Approved.', start: 'Armed.', pause: 'Paused.', resume: 'Resumed.', cancel: 'Cancelled.' }[action],
+        { estimate: 'Dry run done.', approve: 'Approved.', start: 'Armed.', pause: 'Paused.', resume: 'Resumed.', cancel: 'Cancelled.',
+          archive: 'Archived: hidden from the campaign list (Show archived to see it).', unarchive: 'Back in the campaign list.' }[action],
       );
       if (action === 'estimate') this.reviewed.set(false);   // new numbers: review them again
       this.now.set(Date.now());

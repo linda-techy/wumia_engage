@@ -187,6 +187,39 @@ class CampaignTest {
         assertEquals(400, status(() -> create("push", WA_OK)), "a WhatsApp template on push");
     }
 
+    @Test void a_finished_campaign_can_be_archived_out_of_the_list_and_brought_back() {
+        var id = create("push", PUSH_TPL).get("id");
+        assertEquals(409, status(() -> act(lead, id, "archive")), "a draft is deleted, not archived");
+
+        act(sender, id, "cancel");
+        var archived = act(lead, id, "archive");
+        assertNotNull(archived.get("archivedAt"));
+        assertFalse(listIds(false).contains(id), "hidden from the list");
+        assertTrue(listIds(true).contains(id), "shown under archived");
+        assertEquals(1L, data.countAudit("campaign.archive"));
+
+        act(lead, id, "unarchive");
+        assertTrue(listIds(false).contains(id));
+    }
+
+    @Test void a_campaign_that_never_sent_can_be_deleted_and_one_that_did_cannot() {
+        var draft = create("push", PUSH_TPL).get("id");
+        var res = client.toBlocking().exchange(HttpRequest.DELETE("/api/campaigns/" + draft).bearerAuth(lead));
+        assertEquals(204, res.code());
+        assertEquals(404, status(() -> client.toBlocking().retrieve(HttpRequest.GET("/api/campaigns/" + draft).bearerAuth(lead), Map.class)));
+        assertEquals(1L, data.countAudit("campaign.delete"));
+
+        var sent = create("push", PUSH_TPL).get("id");
+        act(sender, sent, "cancel");
+        assertEquals(409, status(() -> client.toBlocking().exchange(HttpRequest.DELETE("/api/campaigns/" + sent).bearerAuth(lead))),
+                "finished: archive it instead");
+    }
+
+    List<Object> listIds(boolean archived) {
+        return client.toBlocking().retrieve(HttpRequest.GET("/api/campaigns" + (archived ? "?archived=true" : "")).bearerAuth(lead),
+                Argument.listOf(Map.class)).stream().map(m -> ((Map<String, Object>) m).get("id")).toList();
+    }
+
     @Test void a_campaign_must_give_every_value_its_template_needs() {
         var e = assertThrows(io.micronaut.http.client.exceptions.HttpClientResponseException.class,
                 () -> create("push", PUSH_TPL, "vars", Map.of("url", "https://w.example/c/linen")));

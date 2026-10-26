@@ -1,4 +1,4 @@
-import { ARM_WITHIN_MS, Campaign, canApprove, canArm, canEdit, canPause, canResume, DISCOUNT_CODE, discountLink, discountPath, Me, parseDiscountLink, progress } from './campaign-rules';
+import { ARM_WITHIN_MS, Campaign, canApprove, canArm, canEdit, canPause, canResume, canArchive, canDelete, stageOf, statusLine, DISCOUNT_CODE, discountLink, discountPath, Me, parseDiscountLink, progress } from './campaign-rules';
 
 const NOW = Date.parse('2026-10-09T12:00:00Z');
 
@@ -71,5 +71,32 @@ describe('auto-apply discount links', () => {
     expect(DISCOUNT_CODE.test('DIWALI-20')).toBe(true);
     expect(DISCOUNT_CODE.test('20% OFF')).toBe(false);
     expect(parseDiscountLink('https://wumika.com/collections/x')).toBeNull();
+  });
+});
+
+describe('what a campaign page offers at each stage', () => {
+  const editor: Me = { email: 'a@x', canEdit: true, canSend: true };
+  const fmt = (iso: string) => iso.slice(0, 10);
+
+  it('only a never-sent campaign can be deleted; a finished one is archived', () => {
+    expect(canDelete(campaign({ status: 'DRAFT' }), editor).allowed).toBe(true);
+    expect(canDelete(campaign({ status: 'COMPLETED' }), editor).allowed).toBe(false);
+    expect(canArchive(campaign({ status: 'COMPLETED' }), editor).allowed).toBe(true);
+    expect(canArchive(campaign({ status: 'CANCELLED' }), editor).allowed).toBe(true);
+    expect(canArchive(campaign({ status: 'RUNNING' }), editor).allowed).toBe(false);
+  });
+
+  it('groups statuses into the stage that decides the buttons', () => {
+    expect(stageOf({ status: 'PENDING_APPROVAL' })).toBe('prepare');
+    expect(stageOf({ status: 'SCHEDULED' })).toBe('live');
+    expect(stageOf({ status: 'PAUSED' })).toBe('paused');
+    expect(stageOf({ status: 'COMPLETED' })).toBe('done');
+  });
+
+  it('a completed campaign says there is nothing to cancel and how to hide it', () => {
+    const line = statusLine(campaign({ status: 'COMPLETED', recipients: { sent: 1 }, finishedAt: '2026-10-26T18:12:45Z' }), fmt);
+    expect(line).toContain('1 reached');
+    expect(line).toContain('Nothing left to cancel');
+    expect(line).toContain('Archive');
   });
 });
