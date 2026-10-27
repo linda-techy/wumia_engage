@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Map;
 
 /** Graph API {@code /messages} request bodies. */
-final class WaPayloads {
+public final class WaPayloads {
 
     private WaPayloads() {}
 
@@ -19,15 +19,35 @@ final class WaPayloads {
         out.put("recipient_type", "individual");
         out.put("to", to);
         var wa = m.whatsapp();
-        if (wa == null) {
+        var buttons = replyButtons(m);
+        if (wa == null && !buttons.isEmpty()) {
+            out.put("type", "interactive");
+            out.put("interactive", Map.of("type", "button", "body", Map.of("text", m.body()),
+                    "action", Map.of("buttons", buttons)));
+        } else if (wa == null) {
             out.put("type", "text");
-            out.put("text", Map.of("preview_url", false, "body", m.body()));
+            out.put("text", Map.of("preview_url", m.body().contains("https://"), "body", m.body()));
         } else {
             out.put("type", "template");
             out.put("template", template(wa));
         }
         return out;
     }
+
+    /** {@code extra.reply_buttons}: one "id<TAB>label" per line, from a free-form template's quick replies. */
+    public static List<Map<String, Object>> replyButtons(RenderedMessage m) {
+        var raw = m.extra() == null ? null : m.extra().get(REPLY_BUTTONS);
+        if (raw == null || raw.isBlank()) return List.of();
+        var out = new ArrayList<Map<String, Object>>();
+        for (var line : raw.split("\n")) {
+            var parts = line.split("\t", 2);
+            if (parts.length == 2) out.add(Map.of("type", "reply", "reply", Map.of("id", parts[0], "title", parts[1])));
+        }
+        return out;
+    }
+
+    /** The {@link RenderedMessage#extra()} key the router fills for a free-form reply with buttons. */
+    public static final String REPLY_BUTTONS = "reply_buttons";
 
     static Map<String, Object> template(WaTemplateCall wa) {
         var components = new ArrayList<Map<String, Object>>();

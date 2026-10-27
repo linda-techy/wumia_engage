@@ -1,0 +1,10 @@
+# The WhatsApp inbox (V50): Engage's answer to a menu tap (the order's courier
+# status, the bestsellers link, "a person will reply"). The worker writes the
+# text; a free-form reply in the window the tap opened.
+key: inbox_auto_reply
+channel: whatsapp
+category: service
+locales:
+  en: { body: "{{text}}" }
+vars: [text]
+samples: { text: "Your order #1042 is on its way with Delhivery (AWB 1234567890). Track it here: https://www.delhivery.com/track/package/1234567890" }

@@ -1,0 +1,13 @@
+# The WhatsApp inbox (V50): the answer outside support hours (Settings →
+# WhatsApp support hours), at most once per 12 h. Free-form, like the greeting.
+key: inbox_away
+channel: whatsapp
+category: service
+locales:
+  en: { body: "Hi {{name}}, thanks for messaging WUMIKA! Our team is online {{opens}} to {{closes}} and will reply after {{opens}}. Meanwhile, you can track your order or browse our bestsellers below." }
+buttons:
+  - { text: "Track my order", reply: "inbox_track" }
+  - { text: "Shop bestsellers", reply: "inbox_shop" }
+  - { text: "Talk to us", reply: "inbox_talk" }
+vars: [name, opens, closes]
+samples: { name: "Priya", opens: "10 AM", closes: "7 PM" }

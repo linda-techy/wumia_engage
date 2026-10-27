@@ -1,0 +1,10 @@
+# The WhatsApp inbox (V49/V50): what a staff member types in the console,
+# sent by the worker through policy like every other message (CLAUDE.md §1.1).
+# Free-form: only inside the 24 h window the customer's last message opened.
+key: inbox_staff_reply
+channel: whatsapp
+category: service
+locales:
+  en: { body: "{{text}}" }
+vars: [text]
+samples: { text: "Yes, the Kundan Jhumka is in stock. Shall I share the link?" }

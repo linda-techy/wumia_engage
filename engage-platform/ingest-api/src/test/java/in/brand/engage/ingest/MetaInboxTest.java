@@ -181,6 +181,16 @@ class MetaInboxTest {
         send(status("wamid.OUT.1", "read", T0 + 20, ""));
         send(status("wamid.OUT.1", "delivered", T0 + 10, ""));
         assertEquals("read", q("SELECT status FROM wa_messages WHERE wamid = 'wamid.OUT.1'"));
+
+        // A tap on the greeting's menu is an event of its own, which the worker answers.
+        send("""
+                {"object":"whatsapp_business_account","entry":[{"id":"W","changes":[{"field":"messages","value":{
+                 "messaging_product":"whatsapp","metadata":{"phone_number_id":"P"},
+                 "messages":[{"from":"%s","id":"wamid.IN.TAP","timestamp":"%d","type":"interactive",
+                              "interactive":{"type":"button_reply","button_reply":{"id":"inbox_track","title":"Track my order"}}}]}}]}]}"""
+                .formatted(PHONE, T0 + 30));
+        assertEquals("interactive|Track my order", q("SELECT kind || '|' || body FROM wa_messages WHERE wamid = 'wamid.IN.TAP'"));
+        assertEquals("1", q("SELECT count(*) FROM events WHERE name = 'inbox_track' AND props->>'message_id' = 'wamid.IN.TAP'"));
     }
 
     @Test

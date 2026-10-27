@@ -1,5 +1,5 @@
 import { httpResource } from '@angular/common/http';
-import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
+import { Component, computed, DestroyRef, effect, inject, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { HaltBar } from '../../features/halt/halt-bar';
 import { Role } from '../api/models';
@@ -10,6 +10,28 @@ interface NavItem {
   path: string;
   label: string;
   role: Role;
+}
+
+/** Two soft notes for a new WhatsApp message while the console is open (no audio file to load). */
+function chime(): void {
+  try {
+    const ctx = new AudioContext();
+    [880, 1320].forEach((hz, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.frequency.value = hz;
+      const t = ctx.currentTime + i * 0.18;
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(0.2, t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.25);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.3);
+    });
+    setTimeout(() => void ctx.close(), 1000);
+  } catch {
+    // browsers block sound until the page has been touched once; the badge still shows
+  }
 }
 
 const NAV: NavItem[] = [
@@ -99,7 +121,18 @@ export default class Shell {
 
   constructor() {
     const timer = setInterval(() => { if (this.#tokens.has('ANALYST')) this.unread.reload(); }, 20000);
-    inject(DestroyRef).onDestroy(() => clearInterval(timer));
+    inject(DestroyRef).onDestroy(() => { clearInterval(timer); document.title = 'WUMIKA Engage'; });
+
+    // The tab shows "(2) WUMIKA Engage"; a rise in waiting messages chimes.
+    let lastMessages = -1;
+    effect(() => {
+      const u = this.unread.hasValue() ? this.unread.value() : null;
+      const threads = u?.threads ?? 0;
+      document.title = threads > 0 ? `(${threads}) WUMIKA Engage` : 'WUMIKA Engage';
+      const messages = u?.messages ?? 0;
+      if (lastMessages >= 0 && messages > lastMessages) chime();
+      if (u) lastMessages = messages;
+    });
   }
 
   async signOut(): Promise<void> {

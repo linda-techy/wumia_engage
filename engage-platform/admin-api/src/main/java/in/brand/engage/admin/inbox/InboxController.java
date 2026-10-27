@@ -8,8 +8,8 @@ import in.brand.engage.admin.privacy.PiiAccess;
 import in.brand.engage.admin.web.Problems;
 import in.brand.engage.admin.web.Rows;
 import in.brand.engage.persistence.Db;
+import in.brand.engage.persistence.EventWriter;
 import in.brand.engage.persistence.Sql;
-import in.brand.engage.persistence.WaInboxLog;
 import io.micronaut.core.annotation.Nullable;
 import io.micronaut.http.HttpHeaders;
 import io.micronaut.http.HttpResponse;
@@ -42,6 +42,9 @@ import java.util.UUID;
  *     {@link #FOLLOW_UPS}, utility customer-care follow-ups.</li>
  * <li>Engage's own automated messages appear in the same thread, read-only.</li>
  * </ul>
+ * Staff messages are events the worker turns into sends (CLAUDE.md §1.1: one
+ * door): policy checks the WhatsApp halt, the window and, for the template,
+ * the opt-in; a refusal shows in the thread with its reason.
  * Reading a thread shows the customer's number, so it needs ANALYST (contact
  * details) and every open is recorded like any other contact-detail view.
  */
@@ -67,18 +70,21 @@ public class InboxController {
     private final PiiAccess pii;
     private final AuditLog audit;
     private final WhatsAppGraph wa;
+    private final EventWriter events;
     private final Clock clock;
 
-    public InboxController(Db db, CurrentOperator current, PiiAccess pii, AuditLog audit, WhatsAppGraph wa) {
-        this(db, current, pii, audit, wa, Clock.systemUTC());
+    @jakarta.inject.Inject
+    public InboxController(Db db, CurrentOperator current, PiiAccess pii, AuditLog audit, WhatsAppGraph wa, EventWriter events) {
+        this(db, current, pii, audit, wa, events, Clock.systemUTC());
     }
 
-    InboxController(Db db, CurrentOperator current, PiiAccess pii, AuditLog audit, WhatsAppGraph wa, Clock clock) {
+    InboxController(Db db, CurrentOperator current, PiiAccess pii, AuditLog audit, WhatsAppGraph wa, EventWriter events, Clock clock) {
         this.db = db;
         this.current = current;
         this.pii = pii;
         this.audit = audit;
         this.wa = wa;
+        this.events = events;
         this.clock = clock;
     }
 
@@ -130,12 +136,16 @@ public class InboxController {
             var out = new LinkedHashMap<String, Object>(head.getFirst());
             out.put("email", one(c, "SELECT value FROM identity_keys WHERE identity_id = ? AND kind = 'email' LIMIT 1", id));
             out.put("orders", Rows.list(c, """
-                    SELECT order_number, total_paise, created_at, cancelled_at IS NOT NULL AS cancelled
-                      FROM orders WHERE identity_id = ? ORDER BY created_at DESC LIMIT 5""", id));
+                    SELECT o.order_number, o.total_paise, o.created_at, o.cancelled_at IS NOT NULL AS cancelled,
+                           s.status AS shipment_status, s.carrier, s.awb, s.tracking_url
+                      FROM orders o
+                      LEFT JOIN LATERAL (SELECT status, carrier, awb, tracking_url FROM shipments
+                                          WHERE order_id = o.id ORDER BY status_at DESC LIMIT 1) s ON true
+                     WHERE o.identity_id = ? ORDER BY o.created_at DESC LIMIT 5""", id));
             out.put("messages", Rows.list(c, """
                     SELECT * FROM (
-                      SELECT m.id, m.direction, m.kind, m.body, m.media_id IS NOT NULL AS has_media, m.media_mime, m.media_name,
-                             m.template_key, m.send_id IS NOT NULL AS automated, o.email AS sent_by, m.status, m.failed_reason, m.at
+                      SELECT m.id, m.direction, m.wamid, m.kind, m.body, m.media_id IS NOT NULL AS has_media, m.media_mime, m.media_name,
+                             m.template_key, (m.direction = 'out' AND m.sent_by IS NULL) AS automated, o.email AS sent_by, m.status, m.failed_reason, m.at
                         FROM wa_messages m LEFT JOIN operators o ON o.id = m.sent_by
                        WHERE m.identity_id = ? ORDER BY m.at DESC LIMIT 300) x ORDER BY at""", id));
             out.put("windowOpen", windowOpen(c, id));
@@ -146,11 +156,29 @@ public class InboxController {
         });
     }
 
+    /** Clears the unread count and shows the customer blue ticks on their latest message (best effort). */
     @RequiresRole(Role.ANALYST)
     @Post("/{identityId}/read")
     public HttpResponse<Void> read(@PathVariable String identityId) {
         var id = uuid(identityId);
-        db.inTx(c -> Sql.update(c, "UPDATE wa_threads SET unread = 0, updated_at = now() WHERE identity_id = ?", id));
+        var latest = db.inTx(c -> {
+            int unread = 0;
+            try (var ps = Sql.prepare(c, "SELECT unread FROM wa_threads WHERE identity_id = ? FOR UPDATE", id); var rs = ps.executeQuery()) {
+                if (rs.next()) unread = rs.getInt(1);
+            }
+            Sql.update(c, "UPDATE wa_threads SET unread = 0, updated_at = now() WHERE identity_id = ?", id);
+            // Meta accepts read receipts for messages up to 30 days old.
+            return unread == 0 ? null : one(c, """
+                    SELECT wamid FROM wa_messages WHERE identity_id = ? AND direction = 'in' AND at > now() - interval '30 days'
+                     ORDER BY at DESC LIMIT 1""", id);
+        });
+        if (latest != null && wa.configured()) {
+            try {
+                wa.markRead(latest);
+            } catch (WhatsAppGraph.GraphException e) {
+                // ticks are a courtesy; the inbox works without them
+            }
+        }
         return HttpResponse.noContent();
     }
 
@@ -165,56 +193,56 @@ public class InboxController {
         return HttpResponse.noContent();
     }
 
-    /** A free-form reply: only inside the 24 h the customer's last message opened. */
+    /**
+     * A free-form reply: only inside the 24 h the customer's last message opened.
+     * Queued for the worker, which sends it within a second or two.
+     */
     @RequiresRole(Role.ANALYST)
     @Post("/{identityId}/reply")
-    public Map<String, Object> reply(@PathVariable String identityId, @Body ReplyBody body) {
+    public HttpResponse<Map<String, Object>> reply(@PathVariable String identityId, @Body ReplyBody body) {
         var id = uuid(identityId);
         var text = body == null || body.text() == null ? "" : body.text().strip();
         if (text.isEmpty() || text.length() > TEXT_MAX) throw Problems.badRequest("write a message of 1 to 4096 characters");
         var actor = current.id();
-        var to = db.inTx(c -> {
+        db.inTx(c -> {
             if (!windowOpen(c, id)) {
                 throw Problems.conflict("window-closed", "the 24-hour reply window has closed: send the follow-up template instead");
             }
-            return recipient(c, id);
-        });
-        var wamid = send(() -> wa.sendText(to, text));
-        return db.inTx(c -> {
-            WaInboxLog.outbound(c, id, wamid, "text", text, null, null, actor, clock.instant());
+            recipient(c, id);
+            events.write(c, id, "inbox_staff_reply", "admin", "inbox_staff:" + UUID.randomUUID(),
+                    Map.of("text", text, "operator_id", actor.toString()));
             Sql.update(c, "UPDATE wa_threads SET unread = 0, updated_at = now() WHERE identity_id = ?", id);
             pii.record(c, actor, id, "whatsapp_reply", "WhatsApp inbox reply");
-            return message(c, wamid);
+            return null;
         });
+        return HttpResponse.accepted().body(Map.of("status", "queued"));
     }
 
-    /** After the window: an approved utility follow-up, which re-opens the conversation when the customer answers. */
+    /**
+     * After the window: the approved utility follow-up, which re-opens the
+     * conversation when the customer answers. Business-initiated, so the worker's
+     * policy sends it only to a customer who opted in to WhatsApp.
+     */
     @RequiresRole(Role.ANALYST)
     @Post("/{identityId}/template")
-    public Map<String, Object> template(@PathVariable String identityId, @Body TemplateBody body) {
+    public HttpResponse<Map<String, Object>> template(@PathVariable String identityId, @Body TemplateBody body) {
         var id = uuid(identityId);
         var key = body == null ? null : body.templateKey();
         if (key == null || !FOLLOW_UPS.contains(key)) throw Problems.badRequest("templateKey is one of " + FOLLOW_UPS);
         var actor = current.id();
-        record Ready(String to, String providerName, String name, String rendered) {}
-        var ready = db.inTx(c -> {
-            String providerName;
+        db.inTx(c -> {
             try (var ps = Sql.prepare(c, """
-                    SELECT provider_name FROM wa_templates WHERE key = ? AND language = 'en' AND status = 'APPROVED'
-                       AND quality <> 'RED' ORDER BY synced_at DESC LIMIT 1""", key); var rs = ps.executeQuery()) {
+                    SELECT 1 FROM wa_templates WHERE key = ? AND language = 'en' AND status = 'APPROVED' AND quality <> 'RED'""", key);
+                 var rs = ps.executeQuery()) {
                 if (!rs.next()) throw Problems.conflict("template-not-approved", key + " is not approved by Meta yet");
-                providerName = rs.getString(1);
             }
-            var name = String.valueOf(firstName(c, id));
-            return new Ready(recipient(c, id), providerName, name,
-                    "Hi " + name + ", this is WUMIKA customer care following up on your message. Reply here and we will help you.");
-        });
-        var wamid = send(() -> wa.sendTemplate(ready.to(), ready.providerName(), "en", List.of(ready.name())));
-        return db.inTx(c -> {
-            WaInboxLog.outbound(c, id, wamid, "template", ready.rendered(), key, null, actor, clock.instant());
+            recipient(c, id);
+            events.write(c, id, "inbox_followup", "admin", "inbox_followup:" + UUID.randomUUID(),
+                    Map.of("operator_id", actor.toString()));
             audit.record(c, actor, "inbox.template", "identity", id.toString(), null, "{\"template\":\"" + key + "\"}");
-            return message(c, wamid);
+            return null;
         });
+        return HttpResponse.accepted().body(Map.of("status", "queued"));
     }
 
     /** A customer's photo, voice note or document, fetched from Meta on demand (only media the customer sent here). */
@@ -237,17 +265,6 @@ public class InboxController {
 
     /* ------------------------------------------------------------------ */
 
-    private String send(java.util.function.Supplier<String> call) {
-        try {
-            return call.get();
-        } catch (WhatsAppGraph.GraphException e) {
-            var hint = e.code != null && e.code == 131047 ? "the 24-hour window has closed: send the follow-up template"
-                    : e.code != null && e.code == 131026 ? "this number cannot receive WhatsApp messages"
-                    : e.getMessage();
-            throw Problems.conflict("whatsapp-refused", "WhatsApp did not send it: " + hint);
-        }
-    }
-
     private boolean windowOpen(Connection c, UUID id) throws SQLException {
         try (var ps = Sql.prepare(c, "SELECT wa_window_until > ? FROM profiles WHERE identity_id = ?",
                 clock.instant().atOffset(java.time.ZoneOffset.UTC), id); var rs = ps.executeQuery()) {
@@ -262,21 +279,6 @@ public class InboxController {
                  ORDER BY kind = 'wa_id' DESC LIMIT 1""", id);
         if (to == null) throw Problems.conflict("no-number", "this customer has no WhatsApp number on file");
         return to.replaceAll("[^0-9]", "");
-    }
-
-    private static Object firstName(Connection c, UUID id) throws SQLException {
-        var n = one(c, """
-                SELECT COALESCE(NULLIF(attrs->>'first_name', ''), NULLIF(split_part(attrs->>'wa_name', ' ', 1), ''))
-                  FROM profiles WHERE identity_id = ?""", id);
-        return n == null ? "there" : n;
-    }
-
-    private static Map<String, Object> message(Connection c, String wamid) throws SQLException {
-        var rows = Rows.list(c, """
-                SELECT m.id, m.direction, m.kind, m.body, false AS has_media, m.template_key, false AS automated,
-                       o.email AS sent_by, m.status, m.failed_reason, m.at
-                  FROM wa_messages m LEFT JOIN operators o ON o.id = m.sent_by WHERE m.wamid = ?""", wamid);
-        return rows.isEmpty() ? Map.of() : rows.getFirst();
     }
 
     private static String one(Connection c, String sql, Object... params) throws SQLException {

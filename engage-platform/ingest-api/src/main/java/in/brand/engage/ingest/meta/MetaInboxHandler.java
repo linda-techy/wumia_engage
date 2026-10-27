@@ -77,7 +77,8 @@ public class MetaInboxHandler implements InboxHandler {
     static final Pattern START = Pattern.compile(
             "^\\s*(start|resume|subscribe|shuru karo|chalu karo)\\s*[.!]*\\s*$",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
-    static final Set<String> QUICK_REPLIES = Set.of("wa_optin_yes", "ndr_reschedule", "fit_ok", "review_love", "review_help");
+    static final Set<String> QUICK_REPLIES = Set.of("wa_optin_yes", "ndr_reschedule", "fit_ok", "review_love", "review_help",
+            "inbox_track", "inbox_shop", "inbox_talk");
     static final String INTHREAD_COPY = "wa_inthread_v1";
 
     private final DeliveryReplies deliveryReplies;
@@ -407,7 +408,7 @@ public class MetaInboxHandler implements InboxHandler {
             var inboxKind = m.type() == null ? "other" : Set.of("text", "image", "video", "audio", "document", "sticker",
                     "location", "button", "interactive", "reaction").contains(m.type()) ? m.type() : "other";
             in.brand.engage.persistence.WaInboxLog.inbound(c, identity, m.id(), inboxKind,
-                    shown == null && "other".equals(inboxKind) ? "[" + m.type() + " message: open WhatsApp to see it]" : shown,
+                    shown == null && "other".equals(inboxKind) ? "[" + m.type() + " message: WhatsApp does not share this type with Engage]" : shown,
                     m.mediaId(), m.mediaMime(), m.mediaName(), m.context(), m.at());
 
             Sql.update(c, """

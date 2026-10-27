@@ -32,7 +32,8 @@ import java.util.regex.Pattern;
  *       starting or ending with a variable, or two variables side by side; a
  *       Meta name or language Meta would refuse; a URL button that is not
  *       https, whose variable is not at the very end, or whose label is over
- *       25 characters; buttons on a free-form (SERVICE) reply; the same Meta
+ *       25 characters; on a free-form (SERVICE) reply, anything but up to 3
+ *       quick replies of 20 characters; the same Meta
  *       name and language twice; a header photo that is not an https link,
  *       or with no fallback; a fallback that is missing, not the same
  *       category and cooldown, has a header itself, or needs a variable the
@@ -301,6 +302,8 @@ public final class TemplateLinter {
     static final java.util.regex.Pattern TRAILING_VAR = java.util.regex.Pattern.compile("}}[^\\p{L}\\p{N}]*$");
     static final int WA_BODY_MAX = 1024;
     static final int WA_BUTTON_TEXT_MAX = 25;
+    /** Interactive reply buttons (free-form replies): Meta cuts labels at 20. */
+    static final int WA_REPLY_BUTTON_MAX = 20;
 
     private static List<String> whatsapp(MessageTemplate t, String where) {
         var problems = new ArrayList<String>();
@@ -308,13 +311,14 @@ public final class TemplateLinter {
             var body = e.getValue().body().strip();
             var at = where + "locale " + e.getKey() + ": ";
             if (Renderer.length(body) > WA_BODY_MAX) problems.add(at + "body is over " + WA_BODY_MAX + " characters");
-            // Meta (subcode 2388299) counts punctuation as nothing: "…for {{2}}." and "({{3}})." end with a variable.
-            if (LEADING_VAR.matcher(body).find()) problems.add(at + "the body starts with a variable, which Meta rejects");
-            if (TRAILING_VAR.matcher(body).find()) {
-                problems.add(at + "the body ends with a variable (only punctuation after it), which Meta rejects; end with words");
-            }
-            if (ADJACENT.matcher(body).find()) problems.add(at + "two variables side by side, which Meta rejects");
             if (!t.freeForm()) {
+                // Meta's review rules; a free-form reply is never reviewed (it may be a single {{text}}).
+                // Meta (subcode 2388299) counts punctuation as nothing: "…for {{2}}." and "({{3}})." end with a variable.
+                if (LEADING_VAR.matcher(body).find()) problems.add(at + "the body starts with a variable, which Meta rejects");
+                if (TRAILING_VAR.matcher(body).find()) {
+                    problems.add(at + "the body ends with a variable (only punctuation after it), which Meta rejects; end with words");
+                }
+                if (ADJACENT.matcher(body).find()) problems.add(at + "two variables side by side, which Meta rejects");
                 if (e.getValue().providerName() == null || !META_NAME.matcher(e.getValue().providerName()).matches()) {
                     problems.add(at + "Meta name '" + e.getValue().providerName() + "' must be lowercase letters, digits and _");
                 }
@@ -323,7 +327,13 @@ public final class TemplateLinter {
                 }
             }
         }
-        if (t.freeForm() && !t.buttons().isEmpty()) problems.add(where + "a free-form (SERVICE) reply cannot have buttons");
+        if (t.freeForm()) {
+            // Sent as an interactive message: up to 3 reply buttons of 20 characters, nothing else.
+            if (t.buttons().stream().anyMatch(b -> !b.isQuickReply())) problems.add(where + "a free-form (SERVICE) reply can only have quick-reply buttons");
+            if (t.buttons().stream().anyMatch(b -> b.isQuickReply() && Renderer.length(b.text()) > WA_REPLY_BUTTON_MAX)) {
+                problems.add(where + "a free-form reply button label is over " + WA_REPLY_BUTTON_MAX + " characters");
+            }
+        }
         if (t.headerImage() != null) {
             if (t.freeForm()) problems.add(where + "a free-form (SERVICE) reply cannot have a header photo");
             var header = Renderer.placeholders(t.headerImage()).stream().allMatch(t.samples()::containsKey)

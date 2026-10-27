@@ -63,6 +63,15 @@ public final class WaInboxLog {
                 identity, utc(at), preview(kind, body));
     }
 
+    /** A staff member's message that did not go out, with why; it has no WhatsApp id. */
+    public static void refused(Connection c, UUID identity, String body, String templateKey, Long sendId, UUID sentBy,
+                               String reason, Instant at) throws SQLException {
+        Sql.update(c, """
+                INSERT INTO wa_messages (identity_id, direction, wamid, kind, body, template_key, send_id, sent_by, status, failed_reason, at)
+                VALUES (?, 'out', NULL, ?, ?, ?, ?, ?, 'failed', ?, ?)""",
+                identity, body == null ? "template" : "text", body, templateKey, sendId, sentBy, reason, utc(at));
+    }
+
     /** Meta's delivery status for a message Engage sent; never moves backwards (read stays read). */
     public static void status(Connection c, String wamid, String status, String failedReason) throws SQLException {
         if (wamid == null || status == null) return;

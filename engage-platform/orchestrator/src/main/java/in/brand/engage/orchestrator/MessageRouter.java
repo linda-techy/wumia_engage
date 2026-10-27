@@ -108,7 +108,10 @@ public class MessageRouter {
 
         return switch (decision) {
             case Decision.Block b -> sends.recordBlocked(cmd, category, b)
-                    .<SendResult>map(id -> new SendResult.Blocked(id, b.reason()))
+                    .<SendResult>map(id -> {
+                        sends.logInboxRefusal(cmd, id, b.reason().name());
+                        return new SendResult.Blocked(id, b.reason());
+                    })
                     .orElseGet(() -> duplicate(cmd));
             case Decision.Defer d ->
                     new SendResult.Deferred(sends.recordDeferred(cmd, category, d), d.until(), d.reason());
@@ -154,7 +157,8 @@ public class MessageRouter {
                     if (refusal != null) return fail(cmd, sendId, refusal, false, false, List.of());
                 }
                 message = new RenderedMessage(cmd.channel(), template.key(), sendId, cmd.intentKey(), "", wa.body(),
-                        cmd.vars().getOrDefault("url", ""), null, null, cmd.ttl(), false, null, wa.call());
+                        cmd.vars().getOrDefault("url", ""), null, null, cmd.ttl(), false, null, wa.call(), null, null,
+                        wa.call() == null ? replyButtons(template) : Map.of());
             } catch (IllegalArgumentException e) {
                 LOG.error("send {}: cannot render {}: {}", sendId, template.key(), e.getMessage());
                 return fail(cmd, sendId, "render_failed", false, false, List.of());
@@ -233,8 +237,7 @@ public class MessageRouter {
             sends.markSent(sendId, cmd.channel(), allow.effectiveCategory(), allow.unitCostPaise(), result);
             if (cmd.channel() == Channel.WHATSAPP) {
                 try {
-                    sends.logToInbox(cmd.identityId(), sendId, result.providerId(), message.body(), message.templateKey(),
-                            message.whatsapp() != null);
+                    sends.logToInbox(cmd, sendId, result.providerId(), message);
                 } catch (RuntimeException e) {
                     LOG.warn("send {}: sent, but not recorded in the inbox: {}", sendId, e.toString());   // never fails a send
                 }
@@ -242,6 +245,7 @@ public class MessageRouter {
             return new SendResult.Sent(sendId, result.delivered());
         } catch (ChannelException.Permanent e) {
             sends.markFailed(sendId, cmd.identityId(), cmd.channel(), e.code(), e.suppress(), e.prunes());
+            sends.logInboxRefusal(cmd, sendId, e.code());
             return new SendResult.Failed(sendId, e.code(), false, e.escalateImmediately());
         } catch (ChannelException.Transient e) {
             LOG.warn("send {}: transient provider failure: {}", sendId, e.getMessage());
@@ -254,7 +258,15 @@ public class MessageRouter {
     private SendResult fail(SendCommand cmd, long sendId, String code, boolean suppress, boolean retriable,
                             List<in.brand.engage.channels.TokenPrune> prunes) {
         sends.markFailed(sendId, cmd.identityId(), cmd.channel(), code, suppress, prunes);
+        if (!retriable) sends.logInboxRefusal(cmd, sendId, code);
         return new SendResult.Failed(sendId, code, retriable);
+    }
+
+    /** A free-form template's quick replies as {@code extra.reply_buttons} (WaPayloads). */
+    private static Map<String, String> replyButtons(MessageTemplate template) {
+        var lines = template.buttons().stream().filter(MessageTemplate.Button::isQuickReply)
+                .map(b -> b.reply() + "\t" + b.text()).toList();
+        return lines.isEmpty() ? Map.of() : Map.of(in.brand.engage.channels.whatsapp.WaPayloads.REPLY_BUTTONS, String.join("\n", lines));
     }
 
     private SendResult duplicate(SendCommand cmd) {

@@ -31,6 +31,8 @@ import java.util.Optional;
 @Singleton
 public class SendRepository {
 
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(SendRepository.class);
+
     /** A queued row older than this was lost between the two transactions. */
     public static final java.time.Duration LOST_AFTER = java.time.Duration.ofMinutes(10);
 
@@ -99,13 +101,48 @@ public class SendRepository {
 
     /** Step 3 after an accepted send: mark sent, book spend (not WhatsApp), prune dead tokens. */
     /** An automated WhatsApp message in the inbox thread (V49), so staff see what Engage told the customer. */
-    public void logToInbox(java.util.UUID identityId, long sendId, String wamid, String body, String templateKey, boolean template) {
-        if (wamid == null || identityId == null) return;
+    /** Intents a staff member started in the inbox; {@code vars.operator_id} names them. */
+    static final java.util.Set<String> STAFF_INTENTS = java.util.Set.of("inbox_staff_reply", "inbox_followup");
+
+    /** A WhatsApp message that went out, in the inbox thread (V49); a staff member's carries their id. */
+    public void logToInbox(SendCommand cmd, long sendId, String wamid, in.brand.engage.channels.RenderedMessage m) {
+        if (wamid == null || cmd.identityId() == null) return;
+        var buttons = in.brand.engage.channels.whatsapp.WaPayloads.replyButtons(m);
+        var kind = m.whatsapp() != null ? "template" : buttons.isEmpty() ? "text" : "interactive";
+        var body = buttons.isEmpty() ? m.body() : m.body() + "\n\n" + buttons.stream()
+                .map(b -> "[" + ((java.util.Map<?, ?>) b.get("reply")).get("title") + "]").collect(java.util.stream.Collectors.joining(" "));
         db.inTx(c -> {
-            in.brand.engage.persistence.WaInboxLog.outbound(c, identityId, wamid, template ? "template" : "text", body,
-                    templateKey, sendId, null, clock.instant());
+            in.brand.engage.persistence.WaInboxLog.outbound(c, cmd.identityId(), wamid, kind, body, m.templateKey(), sendId,
+                    operator(cmd), clock.instant());
             return null;
         });
+    }
+
+    /**
+     * A message a staff member asked for that did not go out (policy said no, or
+     * WhatsApp refused it), shown in the thread with the reason so they know.
+     * Engage's own journeys keep their refusals in {@code sends} only.
+     */
+    public void logInboxRefusal(SendCommand cmd, long sendId, String reason) {
+        if (cmd.channel() != Channel.WHATSAPP || cmd.identityId() == null || !STAFF_INTENTS.contains(cmd.intentKey())) return;
+        try {
+            db.inTx(c -> {
+                in.brand.engage.persistence.WaInboxLog.refused(c, cmd.identityId(), cmd.vars().getOrDefault("text", null),
+                        cmd.templateKey(), sendId, operator(cmd), reason, clock.instant());
+                return null;
+            });
+        } catch (RuntimeException e) {
+            LOG.warn("send {}: refusal not recorded in the inbox: {}", sendId, e.toString());
+        }
+    }
+
+    private static java.util.UUID operator(SendCommand cmd) {
+        var raw = cmd.vars().get("operator_id");
+        try {
+            return raw == null ? null : java.util.UUID.fromString(raw);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     public void markSent(long sendId, Channel channel, Category category, long unitCostPaise, DispatchResult result) {

@@ -11,14 +11,13 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
- * The few WhatsApp Cloud API calls the inbox makes for staff: a free-form
- * reply inside the 24 h window, a template outside it, and fetching a
- * customer's photo or document. Automated messages go through the worker's
- * router, not here.
+ * The two WhatsApp Cloud API calls the console makes that send nothing to a
+ * customer: fetching a photo or document they sent, and the read receipt
+ * (blue ticks) when staff open their chat. Every message to a customer goes
+ * through the worker's orchestrator (CLAUDE.md §1.1).
  */
 @Singleton
 public class WhatsAppGraph {
@@ -56,32 +55,19 @@ public class WhatsAppGraph {
         return !phoneNumberId.isEmpty() && !token.isEmpty();
     }
 
-    /** @return the WhatsApp message id */
-    public String sendText(String to, String text) {
+    /** Blue ticks on the customer's message (and every earlier one in the chat). */
+    public void markRead(String wamid) {
         var body = new LinkedHashMap<String, Object>();
         body.put("messaging_product", "whatsapp");
-        body.put("recipient_type", "individual");
-        body.put("to", to);
-        body.put("type", "text");
-        body.put("text", Map.of("preview_url", true, "body", text));
-        return send(body);
-    }
-
-    /** @return the WhatsApp message id */
-    public String sendTemplate(String to, String name, String language, List<String> bodyParams) {
-        var template = new LinkedHashMap<String, Object>();
-        template.put("name", name);
-        template.put("language", Map.of("code", language));
-        if (!bodyParams.isEmpty()) {
-            template.put("components", List.of(Map.of("type", "body", "parameters",
-                    bodyParams.stream().map(v -> Map.of("type", "text", "text", v)).toList())));
+        body.put("status", "read");
+        body.put("message_id", wamid);
+        try {
+            call(HttpRequest.newBuilder(URI.create(base + phoneNumberId + "/messages")).timeout(Duration.ofSeconds(10))
+                    .header("Authorization", "Bearer " + token).header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofByteArray(json.writeValueAsBytes(body))).build());
+        } catch (IOException e) {
+            throw new GraphException(e.getMessage(), null);
         }
-        var body = new LinkedHashMap<String, Object>();
-        body.put("messaging_product", "whatsapp");
-        body.put("to", to);
-        body.put("type", "template");
-        body.put("template", template);
-        return send(body);
     }
 
     /** A customer's photo, voice note or document, by its WhatsApp media id. */
@@ -103,22 +89,6 @@ public class WhatsAppGraph {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new GraphException("interrupted", null);
-        }
-    }
-
-    private String send(Map<String, Object> body) {
-        if (!configured()) throw new GraphException("WhatsApp is not configured (WA_PHONE_NUMBER_ID, WA_ACCESS_TOKEN)", null);
-        try {
-            var res = call(HttpRequest.newBuilder(URI.create(base + phoneNumberId + "/messages")).timeout(Duration.ofSeconds(15))
-                    .header("Authorization", "Bearer " + token).header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofByteArray(json.writeValueAsBytes(body))).build());
-            if (res.get("messages") instanceof List<?> list && !list.isEmpty() && list.getFirst() instanceof Map<?, ?> m
-                    && m.get("id") instanceof String id) {
-                return id;
-            }
-            throw new GraphException("accepted without a message id", null);
-        } catch (IOException e) {
-            throw new GraphException(e.getMessage(), null);
         }
     }
 

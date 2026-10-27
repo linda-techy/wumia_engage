@@ -12,6 +12,28 @@ class WaPayloadsTest {
 
     @Test
     @SuppressWarnings("unchecked")
+    void a_free_form_reply_with_buttons_is_an_interactive_message() {
+        var m = new in.brand.engage.channels.RenderedMessage(in.brand.engage.core.messaging.Channel.WHATSAPP, "inbox_greeting", 7L,
+                "inbox_greeting", "", "Hi Priya, welcome to WUMIKA!", "", null, null, java.time.Duration.ofHours(1), false, null,
+                null, null, null, Map.of(WaPayloads.REPLY_BUTTONS, "inbox_track\tTrack my order\ninbox_talk\tTalk to us"));
+        var p = WaPayloads.message("919876543210", m);
+        assertEquals("interactive", p.get("type"));
+        var i = (Map<String, Object>) p.get("interactive");
+        assertEquals("button", i.get("type"));
+        assertEquals(Map.of("text", "Hi Priya, welcome to WUMIKA!"), i.get("body"));
+        var buttons = (List<Map<String, Object>>) ((Map<String, Object>) i.get("action")).get("buttons");
+        assertEquals(Map.of("type", "reply", "reply", Map.of("id", "inbox_track", "title", "Track my order")), buttons.getFirst());
+        assertEquals(2, buttons.size());
+
+        var plain = WaPayloads.message("919876543210", new in.brand.engage.channels.RenderedMessage(
+                in.brand.engage.core.messaging.Channel.WHATSAPP, "inbox_auto_reply", 8L, "inbox_auto_reply", "",
+                "Track it here: https://t.example/1", "", null, null, java.time.Duration.ofHours(1), false, null, null));
+        assertEquals("text", plain.get("type"));
+        assertEquals(true, ((Map<String, Object>) plain.get("text")).get("preview_url"), "a link gets its preview");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
     void quick_replies_carry_their_payload_by_button_index() {
         var t = WaPayloads.template(new WaTemplateCall("review_ask_v1", "en", List.of("Priya", "Jhumkas"), List.of(),
                 List.of("review_love", "review_help")));

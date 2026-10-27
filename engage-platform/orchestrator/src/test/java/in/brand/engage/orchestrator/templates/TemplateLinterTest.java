@@ -15,8 +15,40 @@ class TemplateLinterTest {
 
     @Test void every_template_in_the_repository_lints_clean() {
         var templates = TemplateRegistry.loadClasspath();
-        assertEquals(62, templates.size(), "templates/push, whatsapp, sms and email");
+        assertEquals(66, templates.size(), "templates/push, whatsapp, sms and email");
         assertEquals(List.of(), lint.lintAll(templates));
+    }
+
+    @Test void a_free_form_reply_may_be_one_variable_with_up_to_three_short_reply_buttons() {
+        var ok = TemplateRegistry.parse("""
+                key: inbox_menu_test
+                channel: whatsapp
+                category: service
+                locales:
+                  en: { body: "{{text}}" }
+                buttons:
+                  - { text: "Track my order", reply: "inbox_track" }
+                  - { text: "Talk to us", reply: "inbox_talk" }
+                vars: [text]
+                samples: { text: "Hello" }
+                """, "inbox_menu_test.yaml");
+        assertEquals(List.of(), lint.lint(ok), "Meta never reviews a free-form reply");
+
+        var long_ = TemplateRegistry.parse("""
+                key: inbox_menu_test
+                channel: whatsapp
+                category: service
+                locales:
+                  en: { body: "Hi there, how can we help?" }
+                buttons:
+                  - { text: "Track my order please", reply: "inbox_track" }
+                  - { text: "Site", url: "https://www.wumika.com" }
+                vars: []
+                samples: {}
+                """, "inbox_menu_test.yaml");
+        var problems = String.join("; ", lint.lint(long_));
+        assertTrue(problems.contains("can only have quick-reply buttons"), problems);
+        assertTrue(problems.contains("reply button label is over 20 characters"), problems);
     }
 
     @Test void a_utility_template_saying_flat_200_off_fails() throws IOException {

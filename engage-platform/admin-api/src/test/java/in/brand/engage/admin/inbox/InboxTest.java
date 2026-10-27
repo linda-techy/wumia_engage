@@ -25,23 +25,22 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 
-/** The WhatsApp inbox: threads, the 24 h reply rule, the follow-up template, read/done. Meta is faked. */
+/**
+ * The WhatsApp inbox: threads, the 24 h reply rule, queued staff sends (the
+ * worker sends them through policy), saved answers, alert subscriptions and
+ * read receipts. Meta is faked.
+ */
 @MicronautTest(transactional = false)
 @EnabledIfEnvironmentVariable(named = "DB_PASSWORD", matches = "^(?!CHANGE_ME).+")
 @SuppressWarnings("unchecked")
 class InboxTest {
 
-    /** Records what would have gone to Meta. */
+    /** Records what would have gone to Meta; nothing leaves the JVM. */
     static class FakeGraph extends WhatsAppGraph {
-        final List<String> sent = new ArrayList<>();
-        int n;
+        final List<String> calls = new ArrayList<>();
         FakeGraph(JsonMapper json) { super(json, "v25.0", "123", "token"); }
-        @Override public String sendText(String to, String text) { sent.add("text:" + to + ":" + text); return "wamid.out" + (++n); }
-        @Override public String sendTemplate(String to, String name, String language, List<String> params) {
-            sent.add("template:" + to + ":" + name + ":" + params);
-            return "wamid.out" + (++n);
-        }
-        @Override public Media media(String mediaId) { return new Media("image/jpeg", new byte[] {1, 2, 3}); }
+        @Override public void markRead(String wamid) { calls.add("read:" + wamid); }
+        @Override public Media media(String mediaId) { calls.add("media:" + mediaId); return new Media("image/jpeg", new byte[] {1, 2, 3}); }
     }
 
     @Inject @Client("/") HttpClient client;
@@ -59,10 +58,12 @@ class InboxTest {
     @BeforeEach void reset() {
         data.cleanAdminTables();
         data.truncateCustomerTables();
-        ((FakeGraph) graph).sent.clear();
+        ((FakeGraph) graph).calls.clear();
         mary = UUID.fromString(data.createIdentity("mary@example.com", "918606572870"));
         db.inTx(c -> {
             Sql.update(c, "DELETE FROM wa_templates WHERE key = 'support_followup_v1'");
+            Sql.update(c, "DELETE FROM events WHERE name IN ('inbox_staff_reply', 'inbox_followup')");
+            Sql.update(c, "TRUNCATE staff_push_subscriptions");
             WaInboxLog.inbound(c, mary, "wamid.in1", "image", "Is this in stock?", "media-1", "image/jpeg", null, null,
                     Instant.now().minus(1, ChronoUnit.HOURS));
             return null;
@@ -72,6 +73,14 @@ class InboxTest {
     void window(Instant until) {
         db.inTx(c -> Sql.update(c, "UPDATE profiles SET wa_window_until = ? WHERE identity_id = ?",
                 until.atOffset(java.time.ZoneOffset.UTC), mary));
+    }
+
+    String q(String sql) {
+        return db.inTx(c -> {
+            try (var ps = Sql.prepare(c, sql); var rs = ps.executeQuery()) {
+                return rs.next() ? rs.getString(1) : null;
+            }
+        });
     }
 
     @Test void the_list_and_thread_show_the_customers_message_and_opening_is_logged() {
@@ -95,36 +104,49 @@ class InboxTest {
         assertEquals("Is this in stock?", messages.getFirst().get("body"));
         assertEquals(Boolean.TRUE, messages.getFirst().get("hasMedia"));
         assertEquals("mary@example.com", thread.get("email"));
-        assertEquals(1L, db.<Long>inTx(c -> {
-            try (var ps = Sql.prepare(c, "SELECT count(*) FROM pii_unmask_log WHERE field = 'whatsapp_inbox'"); var rs = ps.executeQuery()) {
-                rs.next();
-                return rs.getLong(1);
-            }
-        }));
-
-        client.toBlocking().exchange(HttpRequest.POST("/api/inbox/" + mary + "/read", Map.of()).bearerAuth(analyst));
-        unread = client.toBlocking().retrieve(HttpRequest.GET("/api/inbox/unread").bearerAuth(analyst), Map.class);
-        assertEquals(0, ((Number) unread.get("threads")).intValue());
+        assertEquals("1", q("SELECT count(*) FROM pii_unmask_log WHERE field = 'whatsapp_inbox'"));
 
         var media = client.toBlocking().exchange(HttpRequest.GET("/api/inbox/media/" + messages.getFirst().get("id")).bearerAuth(analyst), byte[].class);
         assertEquals("image/jpeg", media.getContentType().orElseThrow().toString());
     }
 
-    @Test void inside_the_window_a_reply_goes_out_and_joins_the_thread() {
-        window(Instant.now().plus(23, ChronoUnit.HOURS));
+    @Test void opening_an_unread_chat_clears_the_badge_and_shows_the_customer_blue_ticks_once() {
         var analyst = data.loginAsAnalyst(client);
-        var sent = client.toBlocking().retrieve(HttpRequest.POST("/api/inbox/" + mary + "/reply", Map.of("text", "Yes, in stock!")).bearerAuth(analyst), Map.class);
-        assertEquals("out", sent.get("direction"));
-        assertEquals("analyst@example.com", sent.get("sentBy"));
-        assertEquals(List.of("text:918606572870:Yes, in stock!"), ((FakeGraph) graph).sent);
-
-        var thread = client.toBlocking().retrieve(HttpRequest.GET("/api/inbox/" + mary).bearerAuth(analyst), Map.class);
-        assertEquals(2, ((List<?>) thread.get("messages")).size());
-        assertEquals("Yes, in stock!", thread.get("lastPreview"));
-        assertEquals(0, ((Number) thread.get("unread")).intValue(), "answering clears the unread count");
+        client.toBlocking().exchange(HttpRequest.POST("/api/inbox/" + mary + "/read", Map.of()).bearerAuth(analyst));
+        var unread = client.toBlocking().retrieve(HttpRequest.GET("/api/inbox/unread").bearerAuth(analyst), Map.class);
+        assertEquals(0, ((Number) unread.get("threads")).intValue());
+        client.toBlocking().exchange(HttpRequest.POST("/api/inbox/" + mary + "/read", Map.of()).bearerAuth(analyst));
+        assertEquals(List.of("read:wamid.in1"), ((FakeGraph) graph).calls, "nothing new the second time");
     }
 
-    @Test void after_the_window_a_reply_is_refused_and_only_the_approved_follow_up_may_go() {
+    @Test void the_thread_shows_each_orders_courier_status() {
+        db.inTx(c -> {
+            Sql.update(c, "INSERT INTO orders (id, order_number, identity_id, total_paise, created_at) VALUES ('o-1', '#1042', ?, 149900, now())", mary);
+            return Sql.update(c, """
+                    INSERT INTO shipments (order_id, awb, carrier, tracking_url, status, status_at)
+                    VALUES ('o-1', 'AWB77', 'Delhivery', 'https://t.example/AWB77', 'out_for_delivery', now())""");
+        });
+        var analyst = data.loginAsAnalyst(client);
+        var thread = client.toBlocking().retrieve(HttpRequest.GET("/api/inbox/" + mary).bearerAuth(analyst), Map.class);
+        var order = ((List<Map<String, Object>>) thread.get("orders")).getFirst();
+        assertEquals("#1042", order.get("orderNumber"));
+        assertEquals("out_for_delivery", order.get("shipmentStatus"));
+        assertEquals("https://t.example/AWB77", order.get("trackingUrl"));
+    }
+
+    @Test void inside_the_window_a_reply_is_queued_for_the_worker_with_the_staff_member() {
+        window(Instant.now().plus(23, ChronoUnit.HOURS));
+        var analyst = data.loginAsAnalyst(client);
+        var res = client.toBlocking().exchange(HttpRequest.POST("/api/inbox/" + mary + "/reply", Map.of("text", "Yes, in stock!")).bearerAuth(analyst), Map.class);
+        assertEquals(202, res.code());
+        assertEquals("Yes, in stock!|true", q("""
+                SELECT e.props->>'text' || '|' || (e.props->>'operator_id' = o.id::text)
+                  FROM events e JOIN operators o ON o.email = 'analyst@example.com' WHERE e.name = 'inbox_staff_reply'"""));
+        assertTrue(((FakeGraph) graph).calls.isEmpty(), "the console never calls WhatsApp to send");
+        assertEquals("1", q("SELECT count(*) FROM pii_unmask_log WHERE field = 'whatsapp_reply'"));
+    }
+
+    @Test void after_the_window_a_reply_is_refused_and_only_the_approved_follow_up_may_be_queued() {
         window(Instant.now().minus(1, ChronoUnit.MINUTES));
         var analyst = data.loginAsAnalyst(client);
         var closed = assertThrows(HttpClientResponseException.class, () -> client.toBlocking().retrieve(
@@ -141,10 +163,10 @@ class InboxTest {
         db.inTx(c -> Sql.update(c, """
                 INSERT INTO wa_templates (key, language, provider_name, requested_category, status, quality)
                 VALUES ('support_followup_v1', 'en', 'support_followup_v1', 'utility', 'APPROVED', 'GREEN')"""));
-        var sent = client.toBlocking().retrieve(HttpRequest.POST("/api/inbox/" + mary + "/template",
+        var res = client.toBlocking().exchange(HttpRequest.POST("/api/inbox/" + mary + "/template",
                 Map.of("templateKey", "support_followup_v1")).bearerAuth(analyst), Map.class);
-        assertEquals("support_followup_v1", sent.get("templateKey"));
-        assertEquals(List.of("template:918606572870:support_followup_v1:[Mary]"), ((FakeGraph) graph).sent);
+        assertEquals(202, res.code());
+        assertEquals("1", q("SELECT count(*) FROM events WHERE name = 'inbox_followup'"));
         assertEquals(1L, data.countAudit("inbox.template"));
     }
 
@@ -158,5 +180,46 @@ class InboxTest {
         var open = client.toBlocking().retrieve(HttpRequest.GET("/api/inbox").bearerAuth(analyst), Argument.listOf(Map.class));
         assertEquals(1, open.size());
         assertEquals("Hello again", open.getFirst().get("lastPreview"));
+    }
+
+    @Test void saved_answers_are_listed_edited_and_audited() {
+        var analyst = data.loginAsAnalyst(client);
+        // (V50's seeded answers are gone here: cleanAdminTables truncates operators CASCADE.)
+        var made = client.toBlocking().retrieve(HttpRequest.POST("/api/inbox/quick-replies",
+                Map.of("title", "Gift wrap", "body", "Yes {name}, we can gift wrap it.")).bearerAuth(analyst), Map.class);
+        var id = ((Number) made.get("id")).longValue();
+        var edited = client.toBlocking().retrieve(HttpRequest.PUT("/api/inbox/quick-replies/" + id,
+                Map.of("title", "Gift wrap", "body", "Yes {name}, gift wrap is free.", "sort", 5)).bearerAuth(analyst), Map.class);
+        assertEquals("Yes {name}, gift wrap is free.", edited.get("body"));
+        var tooLong = assertThrows(HttpClientResponseException.class, () -> client.toBlocking().retrieve(HttpRequest.POST(
+                "/api/inbox/quick-replies", Map.of("title", "x".repeat(41), "body", "b")).bearerAuth(analyst), Map.class));
+        assertEquals(400, tooLong.getStatus().getCode());
+        var list = client.toBlocking().retrieve(HttpRequest.GET("/api/inbox/quick-replies").bearerAuth(analyst), Argument.listOf(Map.class));
+        assertEquals("Gift wrap", list.getFirst().get("title"), "sorted by sort, then title");
+        client.toBlocking().exchange(HttpRequest.DELETE("/api/inbox/quick-replies/" + id).bearerAuth(analyst));
+        assertEquals(1L, data.countAudit("inbox.quick_reply.create"));
+        assertEquals(1L, data.countAudit("inbox.quick_reply.update"));
+        assertEquals(1L, data.countAudit("inbox.quick_reply.delete"));
+    }
+
+    @Test void alerts_register_only_browser_push_services() {
+        var analyst = data.loginAsAnalyst(client);
+        var key = client.toBlocking().retrieve(HttpRequest.GET("/api/staff-push/key").bearerAuth(analyst), Map.class);
+        assertEquals(87, ((String) key.get("publicKey")).length(), "a 65-byte P-256 point, base64url");
+
+        var endpoint = "https://fcm.googleapis.com/fcm/send/abc:def";
+        client.toBlocking().exchange(HttpRequest.POST("/api/staff-push/subscribe", Map.of("endpoint", endpoint)).bearerAuth(analyst));
+        var status = client.toBlocking().retrieve(HttpRequest.POST("/api/staff-push/status", Map.of("endpoint", endpoint)).bearerAuth(analyst), Map.class);
+        assertEquals(Boolean.TRUE, status.get("on"));
+
+        for (var bad : List.of("http://fcm.googleapis.com/x", "https://evil.example/fcm.googleapis.com", "https://169.254.169.254/latest",
+                "https://fcm.googleapis.com:8443/x")) {
+            var e = assertThrows(HttpClientResponseException.class, () -> client.toBlocking().exchange(
+                    HttpRequest.POST("/api/staff-push/subscribe", Map.of("endpoint", bad)).bearerAuth(analyst)), bad);
+            assertEquals(400, e.getStatus().getCode(), bad);
+        }
+
+        client.toBlocking().exchange(HttpRequest.POST("/api/staff-push/unsubscribe", Map.of("endpoint", endpoint)).bearerAuth(analyst));
+        assertEquals("0", q("SELECT count(*) FROM staff_push_subscriptions"));
     }
 }
