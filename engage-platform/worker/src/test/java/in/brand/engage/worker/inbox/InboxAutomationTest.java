@@ -58,6 +58,20 @@ class InboxAutomationTest {
         }
     }
 
+    /** Shopify that never leaves the JVM: the orders it knows, or a failure. */
+    @Singleton
+    @Replaces(OrderLookup.Shopify.class)
+    static class FakeOrders implements OrderLookup {
+        final java.util.Map<String, ShopOrder> orders = new java.util.concurrent.ConcurrentHashMap<>();
+        volatile boolean down;
+
+        @Override public java.util.Optional<ShopOrder> byName(String name) throws in.brand.engage.worker.shopify.ShopifyAdmin.Failure {
+            if (down) throw new in.brand.engage.worker.shopify.ShopifyAdmin.Failure("Shopify Admin API 503");
+            return java.util.Optional.ofNullable(orders.get(name));
+        }
+    }
+
+    @Inject FakeOrders shop;
     @Inject EventDispatcher dispatcher;
     @Inject StaffAlerts alerts;
     @Inject WorkerTestBeans.FakeWhatsApp wa;
@@ -73,6 +87,8 @@ class InboxAutomationTest {
     @BeforeEach void reset() {
         clock.setIst("2026-10-27T12:00:00");
         wa.reset();
+        shop.orders.clear();
+        shop.down = false;
         push.calls.clear();
         push.status = 201;
         mary = UUID.randomUUID();
@@ -205,7 +221,8 @@ class InboxAutomationTest {
     @Test void no_order_gets_asked_for_the_order_number() {
         tap("inbox_track", "Track my order");
         dispatcher.dispatchOnce();
-        assertTrue(last().body().startsWith("We couldn't find an order linked to this number"), last().body());
+        assertEquals("Please reply with your order number. It starts with WUM, like WUM1001, and is in your order confirmation email.",
+                last().body());
     }
 
     @Test void staff_in_the_chat_replies_to_our_messages_and_old_messages_get_no_greeting() {
@@ -240,6 +257,66 @@ class InboxAutomationTest {
         inbound("text", "Hi again");
         dispatcher.dispatchOnce();
         assertTrue(wa.all.isEmpty());
+    }
+
+    /* ---------------------------- order numbers ---------------------------- */
+
+    @Test void order_numbers_are_found_however_they_are_typed() {
+        assertEquals("WUM1001", InboxAutoReply.orderNumber("#wum1001"));
+        assertEquals("WUM1001", InboxAutoReply.orderNumber("my order is WUM 1001 please"));
+        assertEquals("WUM1001", InboxAutoReply.orderNumber("Wum-1001"));
+        assertNull(InboxAutoReply.orderNumber("wumika is lovely"));
+        assertNull(InboxAutoReply.orderNumber("call 9876543210"));
+        assertTrue(InboxAutoReply.sameOrder("#WUM1001", "WUM1001"));
+    }
+
+    OrderLookup.ShopOrder order(String email, String phone, boolean cancelled, OrderLookup.Fulfillment... f) {
+        return new OrderLookup.ShopOrder("#WUM1001", email, phone == null ? List.of() : List.of(phone), cancelled, List.of(f));
+    }
+
+    @Test void the_owner_gets_the_status_of_the_order_number_they_type_even_after_the_greeting() {
+        shop.orders.put("WUM1001", order("someone@example.com", "+91 " + phone.substring(2, 7) + " " + phone.substring(7), false,
+                new OrderLookup.Fulfillment("IN_TRANSIT", "Delhivery", "1234567890", "https://www.delhivery.com/track/1234567890", null)));
+        inbound("text", "Hi");
+        dispatcher.dispatchOnce();
+        assertEquals("inbox_greeting", last().templateKey());
+
+        inbound("text", "#wum1001");
+        dispatcher.dispatchOnce();
+        assertEquals("Your order #WUM1001 is on its way with Delhivery (AWB 1234567890). Track it here: https://www.delhivery.com/track/1234567890",
+                last().body());
+    }
+
+    @Test void an_order_on_her_email_counts_as_hers_and_delivery_and_packing_read_right() {
+        db.inTx(c -> Sql.update(c, "INSERT INTO identity_keys (identity_id, kind, value, verified) VALUES (?, 'email', ?, true)",
+                mary, "mary-" + mary + "@example.com"));
+        shop.orders.put("WUM1001", order("Mary-" + mary + "@Example.com", null, false,
+                new OrderLookup.Fulfillment("DELIVERED", null, null, null, java.time.Instant.parse("2026-10-20T08:00:00Z"))));
+        inbound("text", "WUM1001");
+        dispatcher.dispatchOnce();
+        assertTrue(last().body().startsWith("Your order #WUM1001 was delivered on 20 Oct."), last().body());
+
+        assertEquals("Your order #WUM1001 is being packed. Orders are dispatched within 1–2 business days, and you'll get the "
+                + "tracking link as soon as it ships.", InboxAutoReply.shopStatus(order(null, null, false)));
+        assertTrue(InboxAutoReply.shopStatus(order(null, null, true)).contains("was cancelled"));
+    }
+
+    @Test void someone_elses_order_is_left_to_staff_and_an_unknown_number_or_shopify_down_still_gets_an_answer() {
+        shop.orders.put("WUM1001", order("other@example.com", "+919999999999", false,
+                new OrderLookup.Fulfillment("IN_TRANSIT", "Delhivery", "123", "https://t.example/123", null)));
+        inbound("text", "status of WUM1001?");
+        dispatcher.dispatchOnce();
+        assertTrue(last().body().startsWith("Thanks! For your privacy we only share order details"), last().body());
+        assertFalse(last().body().contains("Delhivery"), "nothing about another person's order");
+
+        inbound("text", "WUM2002");
+        dispatcher.dispatchOnce();
+        assertTrue(last().body().startsWith("We couldn't find order WUM2002."), last().body());
+
+        shop.down = true;
+        inbound("text", "WUM1001");
+        dispatcher.dispatchOnce();
+        assertEquals("Thanks! Our team will check order WUM1001 and reply here shortly.", last().body());
     }
 
     /* ------------------------------ staff sends ----------------------------- */

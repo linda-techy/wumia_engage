@@ -20,6 +20,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 /**
  * The greeting and away message the WhatsApp Business app used to send, now
@@ -31,6 +32,9 @@ import java.util.UUID;
  * <li><b>Shop bestsellers</b>: the bestsellers page;</li>
  * <li><b>Talk to us</b>: a promise that a person replies (staff are alerted).</li>
  * </ul>
+ * A message with an order number in it (WUM1001) gets that order's status
+ * from Shopify, when the order's phone or email is the customer's own; anyone
+ * else's order is left to staff, so nobody can read another person's order.
  * Inside support hours a new conversation gets the greeting; outside them the
  * away message, at most once per 12 h. Nothing is sent while staff are in the
  * conversation, to replies to Engage's own messages (their flows answer
@@ -78,11 +82,16 @@ public class InboxAutoReply implements EventConsumer {
         }
     }
 
+    /** "WUM1001", "#wum1001", "wum-1001", "WUM 1001": the store's order numbers start with WUM. */
+    static final Pattern ORDER_NUMBER = Pattern.compile("(?i)(?<![a-z0-9])#?\\s*wum[\\s-]*(\\d{3,8})(?!\\d)");
+
     private final InboxSettings settings;
+    private final OrderLookup orders;
     private final Clock clock;
 
-    public InboxAutoReply(InboxSettings settings, Clock clock) {
+    public InboxAutoReply(InboxSettings settings, OrderLookup orders, Clock clock) {
         this.settings = settings;
+        this.orders = orders;
         this.clock = clock;
     }
 
@@ -114,7 +123,12 @@ public class InboxAutoReply implements EventConsumer {
                         : "Sure, " + name + "! Type your question here and our team will reply after " + hours.opens() + ".");
             }
             default -> {
-                // wa_message_received: a new conversation, or a message in one.
+                // wa_message_received: an order number, a new conversation, or a message in one.
+                var number = "text".equals(e.props().get("type")) ? orderNumber(body(c, message)) : null;
+                if (number != null) {
+                    if (staffActive(c, id, now)) return List.of();
+                    return auto(id, message, orderReply(c, id, number));
+                }
                 if (!CONVERSATION_KINDS.contains(e.props().get("type")) || e.props().get("context_wamid") != null) return List.of();
                 var at = receivedAt(c, message);
                 var skip = at == null ? "not in the inbox" : at.isBefore(now.minus(STALE)) ? "too old"
@@ -155,8 +169,8 @@ public class InboxAutoReply implements EventConsumer {
                   LEFT JOIN LATERAL (SELECT * FROM shipments WHERE order_id = o.id ORDER BY status_at DESC LIMIT 1) s ON true
                  WHERE o.identity_id = ? ORDER BY o.created_at DESC LIMIT 1""", identity); var rs = ps.executeQuery()) {
             if (!rs.next()) {
-                return "We couldn't find an order linked to this number. Please reply with your order number (for example #1042) "
-                        + "and our team will check it for you.";
+                return "Please reply with your order number. It starts with WUM, like WUM1001, and is in your order "
+                        + "confirmation email.";
             }
             var order = rs.getString(1);
             if (rs.getBoolean(2)) return "Your order " + order + " was cancelled. If that's unexpected, reply here and our team will help.";
@@ -178,6 +192,91 @@ public class InboxAutoReply implements EventConsumer {
                 case "cancelled" -> "The shipment for your order " + order + " was cancelled. Reply here and our team will help.";
                 default -> "Your order " + order + " is on its way" + courier + "." + link;
             };
+        }
+    }
+
+    /** The order number in a message, as "WUM1001", or null. */
+    static String orderNumber(String text) {
+        if (text == null) return null;
+        var m = ORDER_NUMBER.matcher(text);
+        return m.find() ? "WUM" + m.group(1) : null;
+    }
+
+    /** "#WUM1001" and "WUM1001" are the same order. */
+    static boolean sameOrder(String shopifyName, String number) {
+        return shopifyName != null && shopifyName.replace("#", "").strip().equalsIgnoreCase(number);
+    }
+
+    /** The order's status for its owner; for anyone else, or when Shopify cannot say, a hand-over to staff. */
+    String orderReply(Connection c, UUID id, String number) throws SQLException {
+        OrderLookup.ShopOrder order;
+        try {
+            order = orders.byName(number).orElse(null);
+        } catch (in.brand.engage.worker.shopify.ShopifyAdmin.Failure e) {
+            LOG.warn("inbox: order {} could not be looked up in Shopify: {}", number, e.getMessage());
+            return "Thanks! Our team will check order " + number + " and reply here shortly.";
+        }
+        if (order == null) {
+            LOG.info("inbox: order {} asked by {} not found in Shopify", number, id);
+            return "We couldn't find order " + number + ". Please check the number in your order confirmation email and "
+                    + "send it again, or our team will help you here.";
+        }
+        if (!owns(c, id, order)) {
+            LOG.info("inbox: order {} asked by {} belongs to another phone/email; left to staff", number, id);
+            return "Thanks! For your privacy we only share order details with the phone number or email used on the order. "
+                    + "Our team will check " + number + " and reply here shortly.";
+        }
+        LOG.info("inbox: order {} status sent to {}", number, id);
+        return shopStatus(order);
+    }
+
+    /** The order's phone (any of them) or email is one of this customer's. */
+    private static boolean owns(Connection c, UUID id, OrderLookup.ShopOrder order) throws SQLException {
+        var mine = new java.util.HashSet<String>();
+        try (var ps = Sql.prepare(c, "SELECT kind, value FROM identity_keys WHERE identity_id = ? AND kind IN ('phone', 'wa_id', 'email')", id);
+             var rs = ps.executeQuery()) {
+            while (rs.next()) {
+                mine.add("email".equals(rs.getString(1)) ? "e:" + rs.getString(2).strip().toLowerCase(Locale.ROOT) : "p:" + last10(rs.getString(2)));
+            }
+        }
+        if (order.email() != null && mine.contains("e:" + order.email().strip().toLowerCase(Locale.ROOT))) return true;
+        for (var p : order.phones()) {
+            var ten = last10(p);
+            if (ten.length() == 10 && mine.contains("p:" + ten)) return true;
+        }
+        return false;
+    }
+
+    private static String last10(String phone) {
+        var d = phone == null ? "" : phone.replaceAll("\\D", "");
+        return d.length() > 10 ? d.substring(d.length() - 10) : d;
+    }
+
+    /** Shopify's view of an order, in the customer's words. */
+    static String shopStatus(OrderLookup.ShopOrder o) {
+        var name = o.name().startsWith("#") ? o.name() : "#" + o.name();
+        if (o.cancelled()) return "Your order " + name + " was cancelled. If that's unexpected, reply here and our team will help.";
+        var f = o.fulfillments().isEmpty() ? null : o.fulfillments().getLast();
+        if (f == null) {
+            return "Your order " + name + " is being packed. Orders are dispatched within 1–2 business days, and you'll get "
+                    + "the tracking link as soon as it ships.";
+        }
+        var courier = f.company() == null ? "" : " with " + f.company() + (f.number() == null ? "" : " (AWB " + f.number() + ")");
+        var link = f.url() == null ? "" : " Track it here: " + f.url();
+        return switch (f.status()) {
+            case "DELIVERED" -> "Your order " + name + " was delivered" + (f.deliveredAt() == null ? "" : " on " + DAY.format(f.deliveredAt()))
+                    + ". Something not right? Reply here with a photo within 7 days of delivery and we'll make it right.";
+            case "OUT_FOR_DELIVERY" -> "Your order " + name + " is out for delivery today" + courier + "." + link;
+            case "ATTEMPTED_DELIVERY", "FAILURE", "NOT_DELIVERED" -> "The courier couldn't deliver your order " + name + courier
+                    + ". Reply here with a good time or an updated address and we'll arrange redelivery." + link;
+            case "CANCELED" -> "The shipment for your order " + name + " was cancelled. Reply here and our team will help.";
+            default -> "Your order " + name + " is on its way" + courier + "." + link;
+        };
+    }
+
+    private static String body(Connection c, String wamid) throws SQLException {
+        try (var ps = Sql.prepare(c, "SELECT body FROM wa_messages WHERE wamid = ?", wamid); var rs = ps.executeQuery()) {
+            return rs.next() ? rs.getString(1) : null;
         }
     }
 
