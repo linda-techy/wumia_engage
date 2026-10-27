@@ -1,5 +1,7 @@
 package in.brand.engage.worker.shopify;
 
+import in.brand.engage.persistence.Db;
+import in.brand.engage.persistence.ShopifyTokens;
 import io.micronaut.context.annotation.Value;
 import io.micronaut.core.type.Argument;
 import io.micronaut.json.JsonMapper;
@@ -20,9 +22,10 @@ import java.util.Map;
 
 /**
  * The Shopify Admin GraphQL API for the worker (discount codes, order look-ups
- * from the WhatsApp inbox). Token: the client-credentials grant, the app's
- * client id and secret for a 24 h Admin token, cached and renewed, as
- * ingest-api's {@code ShopifyAdminClient} does; or {@code SHOPIFY_ADMIN_TOKEN} when set.
+ * from the WhatsApp inbox). Token, the first that exists, as ingest-api's
+ * {@code ShopifyAdminClient}: {@code SHOPIFY_ADMIN_TOKEN}; the store's offline
+ * token from the owner's approval (V51); the client-credentials grant (only for
+ * a store in the app's own organization, so the dev store, not the live one).
  */
 @Singleton
 public class ShopifyAdmin {
@@ -48,16 +51,31 @@ public class ShopifyAdmin {
     private final String fixedToken;
     private final String apiVersion;
     private final Clock clock;
+    private final ShopifyTokens.Cached stored;
     private volatile Token token;
 
     @Inject
-    public ShopifyAdmin(JsonMapper json,
+    public ShopifyAdmin(JsonMapper json, Db db,
                         @Value("${SHOPIFY_SHOP_DOMAIN:}") String shopDomain,
                         @Value("${SHOPIFY_CLIENT_ID:}") String clientId,
                         @Value("${SHOPIFY_API_SECRET:}") String clientSecret,
                         @Value("${SHOPIFY_ADMIN_TOKEN:}") String fixedToken,
                         @Value("${SHOPIFY_ADMIN_API_VERSION:2026-07}") String apiVersion,
                         Clock clock) {
+        this(json, shopDomain, clientId, clientSecret, fixedToken, apiVersion, clock,
+                new ShopifyTokens.Cached(db, shopDomain, clientSecret));
+    }
+
+    /** Without the stored token (the discount smoke test). */
+    public ShopifyAdmin(JsonMapper json,
+                        String shopDomain, String clientId, String clientSecret, String fixedToken, String apiVersion,
+                        Clock clock) {
+        this(json, shopDomain, clientId, clientSecret, fixedToken, apiVersion, clock, null);
+    }
+
+    private ShopifyAdmin(JsonMapper json, String shopDomain, String clientId, String clientSecret, String fixedToken,
+                         String apiVersion, Clock clock, ShopifyTokens.Cached stored) {
+        this.stored = stored;
         this.json = json;
         this.baseUrl = "https://" + shopDomain;
         this.clientId = clientId;
@@ -82,7 +100,8 @@ public class ShopifyAdmin {
                 .build());
         if (res.statusCode() == 401) {
             token = null;
-            throw new Failure("Shopify Admin API 401: access token rejected");
+            if (stored != null) stored.invalidate();
+            throw new Failure("Shopify Admin API 401: access token rejected (approve Engage again at /shopify/oauth/start if it was revoked)");
         }
         if (res.statusCode() != 200) throw new Failure("Shopify Admin API " + res.statusCode());
         var root = read(res.body());
@@ -95,6 +114,8 @@ public class ShopifyAdmin {
 
     private String accessToken() throws Failure {
         if (fixedToken != null && !fixedToken.isBlank()) return fixedToken;
+        var approved = stored == null ? null : stored.get(clock.instant());
+        if (approved != null) return approved;
         var t = token;
         if (t != null && clock.instant().isBefore(t.expiresAt().minus(RENEW_BEFORE))) return t.value();
         synchronized (this) {
@@ -110,7 +131,11 @@ public class ShopifyAdmin {
                     .header("Content-Type", "application/x-www-form-urlencoded")
                     .POST(HttpRequest.BodyPublishers.ofString(form))
                     .build());
-            if (res.statusCode() != 200) throw new Failure("Shopify token request " + res.statusCode());
+            if (res.statusCode() != 200) {
+                // 400 shop_not_permitted: the store is outside the app's organization, and nobody has approved Engage yet.
+                throw new Failure("Shopify token request " + res.statusCode() + (res.statusCode() == 400
+                        ? ": the store has not approved Engage yet (open https://engage.wumika.com/shopify/oauth/start)" : ""));
+            }
             var node = read(res.body());
             if (!(node.get("access_token") instanceof String value)) throw new Failure("Shopify token response has no access_token");
             long seconds = node.get("expires_in") instanceof Number n ? n.longValue() : 86_399;

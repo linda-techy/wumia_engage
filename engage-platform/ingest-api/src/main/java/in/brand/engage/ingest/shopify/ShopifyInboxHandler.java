@@ -373,11 +373,13 @@ public class ShopifyInboxHandler implements InboxHandler {
 
     /**
      * app/uninstalled: nothing more will arrive from this shop. Logged at ERROR
-     * (alert on it) and recorded as an event; there is no data to change.
+     * (alert on it) and recorded as an event; the stored Admin token (V51) is
+     * dead with the install, so it is deleted.
      */
     private void uninstalled(Connection c, InboxRepository.Item item) throws SQLException {
         LOG.error("Shopify app uninstalled (delivery {}): no more webhooks will arrive until it is reinstalled",
                 item.deliveryId());
+        Sql.update(c, "DELETE FROM shopify_tokens");
         events.write(c, null, "app_uninstalled", "shopify", "shopify:" + item.deliveryId(), Map.of());
     }
 

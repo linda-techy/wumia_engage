@@ -1,5 +1,7 @@
 package in.brand.engage.ingest.shopify;
 
+import in.brand.engage.persistence.Db;
+import in.brand.engage.persistence.ShopifyTokens;
 import io.micronaut.context.annotation.Value;
 import io.micronaut.json.JsonMapper;
 import io.micronaut.json.tree.JsonNode;
@@ -24,12 +26,16 @@ import java.util.Optional;
  * {@code inventory_state}, so a restock storm after a warehouse sync costs one
  * lookup per item, not per update.
  *
- * <p><b>Token.</b> The app and the dev store belong to the same Dev Dashboard
- * organization, so the app exchanges its own client ID and secret (already
- * configured for webhook signatures) for a 24-hour Admin token: the client
- * credentials grant. The token is cached and renewed shortly before it
- * expires, or after a 401. Nothing is copied by hand. {@code SHOPIFY_ADMIN_TOKEN},
- * if set, is used instead (a store outside the organization).
+ * <p><b>Token</b>, the first that exists:
+ * <ol>
+ * <li>{@code SHOPIFY_ADMIN_TOKEN}, if set;</li>
+ * <li>the store's offline token from Shopify's authorization step (V51,
+ *     /shopify/oauth/start), for a store outside the app's organization (the live store);</li>
+ * <li>the client credentials grant: the app's client ID and secret for a
+ *     24-hour token, which Shopify allows only for a store in the app's own
+ *     Dev Dashboard organization (the dev store). Cached, renewed before it
+ *     expires or after a 401.</li>
+ * </ol>
  */
 @Singleton
 public class ShopifyAdminClient implements ShopifyAdmin {
@@ -49,20 +55,28 @@ public class ShopifyAdminClient implements ShopifyAdmin {
     private final String fixedToken;
     private final String apiVersion;
     private final Clock clock;
+    private final ShopifyTokens.Cached stored;
     private volatile Token token;
 
     @Inject
-    public ShopifyAdminClient(JsonMapper json,
+    public ShopifyAdminClient(JsonMapper json, Db db,
                               @Value("${engage.shopify.shop-domain:}") String shopDomain,
                               @Value("${engage.shopify.client-id:}") String clientId,
                               @Value("${engage.shopify.api-secret:}") String clientSecret,
                               @Value("${SHOPIFY_ADMIN_TOKEN:}") String fixedToken,
                               @Value("${SHOPIFY_ADMIN_API_VERSION:2026-07}") String apiVersion) {
-        this(json, "https://" + shopDomain, clientId, clientSecret, fixedToken, apiVersion, Clock.systemUTC());
+        this(json, "https://" + shopDomain, clientId, clientSecret, fixedToken, apiVersion, Clock.systemUTC(),
+                new ShopifyTokens.Cached(db, shopDomain, clientSecret));
     }
 
     ShopifyAdminClient(JsonMapper json, String baseUrl, String clientId, String clientSecret, String fixedToken,
                        String apiVersion, Clock clock) {
+        this(json, baseUrl, clientId, clientSecret, fixedToken, apiVersion, clock, null);
+    }
+
+    ShopifyAdminClient(JsonMapper json, String baseUrl, String clientId, String clientSecret, String fixedToken,
+                       String apiVersion, Clock clock, ShopifyTokens.Cached stored) {
+        this.stored = stored;
         this.json = json;
         this.baseUrl = baseUrl;
         this.clientId = clientId;
@@ -84,7 +98,9 @@ public class ShopifyAdminClient implements ShopifyAdmin {
                 .build());
         if (response.statusCode() == 401) {
             token = null;                     // revoked or rotated: the retry fetches a fresh one
-            throw new IllegalStateException("Shopify Admin API 401: access token rejected");
+            if (stored != null) stored.invalidate();
+            throw new IllegalStateException("Shopify Admin API 401: access token rejected (if Engage's approval was revoked, "
+                    + "approve it again at /shopify/oauth/start)");
         }
         if (response.statusCode() != 200) {
             throw new IllegalStateException("Shopify Admin API " + response.statusCode() + ": "
@@ -93,9 +109,11 @@ public class ShopifyAdminClient implements ShopifyAdmin {
         return parse(read(response.body()));
     }
 
-    /** The current Admin token: the configured one, or a cached client-credentials token. */
+    /** The current Admin token: the configured one, the owner-approved one, or a cached client-credentials token. */
     String accessToken() {
         if (fixedToken != null && !fixedToken.isBlank()) return fixedToken;
+        var approved = stored == null ? null : stored.get(clock.instant());
+        if (approved != null) return approved;
         var t = token;
         if (t != null && clock.instant().isBefore(t.expiresAt().minus(RENEW_BEFORE))) return t.value();
         synchronized (this) {
@@ -119,8 +137,9 @@ public class ShopifyAdminClient implements ShopifyAdmin {
                 .build());
         var bodyText = new String(response.body(), StandardCharsets.UTF_8);
         if (response.statusCode() != 200) {
-            // shop_not_permitted: the store is not in the app's Dev Dashboard organization.
-            throw new IllegalStateException("Shopify token request " + response.statusCode() + ": " + bodyText);
+            // shop_not_permitted: the store is not in the app's Dev Dashboard organization; approve Engage instead.
+            throw new IllegalStateException("Shopify token request " + response.statusCode()
+                    + (bodyText.contains("shop_not_permitted") ? ": shop_not_permitted (approve Engage at /shopify/oauth/start)" : ": " + bodyText));
         }
         var node = read(response.body());
         var value = node.get("access_token");

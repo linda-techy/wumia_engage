@@ -20,7 +20,7 @@ scopes = "read_orders,read_customers,read_inventory,read_products,write_pixels,r
 use_legacy_install_flow = false
 
 [auth]
-redirect_urls = [ ]
+redirect_urls = [ "https://engage.wumika.com/shopify/oauth/callback" ]
 
 # Storefront calls (push sign-up, notify-me, links): wumika.com/apps/push/* -> ingest-api.
 [app_proxy]
