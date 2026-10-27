@@ -1,4 +1,5 @@
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
+import { restartRetryInterceptor } from './core/api/restart-retry.interceptor';
 import {
   ApplicationConfig,
   inject,
@@ -15,7 +16,7 @@ export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideZonelessChangeDetection(),
-    provideHttpClient(withInterceptors([authInterceptor])),
+    provideHttpClient(withInterceptors([authInterceptor, restartRetryInterceptor])),
     provideRouter(routes, withComponentInputBinding()),
     // One silent refresh on page load: the session survives a reload without
     // the access token ever touching storage.
