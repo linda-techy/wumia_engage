@@ -86,6 +86,10 @@ engage:
     # true = push subscriptions from every visitor are kept (push released),
     # while WhatsApp, SMS and order data stay behind the allowlist above.
     push-open-to-all: ${PUSH_OPEN_TO_ALL:false}
+    # true = WhatsApp messages from every customer are kept (the support number
+    # +91 73… is in Engage and staff answer in the console inbox). Shopify order
+    # data, and so the automated journeys, still follow the allowlist.
+    wa-inbox-open-to-all: ${WA_INBOX_OPEN_TO_ALL:false}
 
 endpoints:
   prometheus:

@@ -98,6 +98,16 @@ public class SendRepository {
     }
 
     /** Step 3 after an accepted send: mark sent, book spend (not WhatsApp), prune dead tokens. */
+    /** An automated WhatsApp message in the inbox thread (V49), so staff see what Engage told the customer. */
+    public void logToInbox(java.util.UUID identityId, long sendId, String wamid, String body, String templateKey, boolean template) {
+        if (wamid == null || identityId == null) return;
+        db.inTx(c -> {
+            in.brand.engage.persistence.WaInboxLog.outbound(c, identityId, wamid, template ? "template" : "text", body,
+                    templateKey, sendId, null, clock.instant());
+            return null;
+        });
+    }
+
     public void markSent(long sendId, Channel channel, Category category, long unitCostPaise, DispatchResult result) {
         db.inTx(c -> {
             // Also corrects a row the sweeper wrongly gave up on while the provider call was slow.

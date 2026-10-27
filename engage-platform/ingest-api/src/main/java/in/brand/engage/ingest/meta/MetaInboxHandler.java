@@ -241,6 +241,9 @@ public class MetaInboxHandler implements InboxHandler {
             }
         }
         for (var s : list) {
+            // The inbox's ticks, for every message on the number (staff replies have no sends row).
+            in.brand.engage.persistence.WaInboxLog.status(c, s.wamid(), s.status(),
+                    "failed".equals(s.status()) ? (s.code() == null ? "wa_failed" : "wa_" + s.code()) : null);
             var send = send(c, s.wamid());
             if (send == null) {
                 LOG.debug("status {} for an unknown message {}", s.status(), s.wamid());
@@ -352,7 +355,9 @@ public class MetaInboxHandler implements InboxHandler {
     /* ------------------------------ inbound ------------------------------ */
 
     private void inbound(Connection c, String deliveryId) throws SQLException {
-        record Msg(String id, String from, Instant at, String type, String text, String payload, String buttonText, String context) {}
+        record Msg(String id, String from, Instant at, String type, String text, String payload, String buttonText, String context,
+                   String caption, String mediaId, String mediaMime, String mediaName, String location, String reaction,
+                   String waName) {}
         var list = new ArrayList<Msg>();
         try (var ps = Sql.prepare(c, """
                 SELECT m.v->>'id' AS id, m.v->>'from' AS sender, (m.v->>'timestamp')::bigint AS ts, m.v->>'type' AS type,
@@ -360,7 +365,17 @@ public class MetaInboxHandler implements InboxHandler {
                        COALESCE(m.v#>>'{button,payload}', m.v#>>'{interactive,button_reply,id}',
                                 m.v#>>'{interactive,list_reply,id}') AS payload,
                        COALESCE(m.v#>>'{button,text}', m.v#>>'{interactive,button_reply,title}') AS button_text,
-                       m.v#>>'{context,id}' AS context
+                       m.v#>>'{context,id}' AS context,
+                       COALESCE(m.v#>>'{image,caption}', m.v#>>'{video,caption}', m.v#>>'{document,caption}') AS caption,
+                       COALESCE(m.v#>>'{image,id}', m.v#>>'{video,id}', m.v#>>'{audio,id}', m.v#>>'{document,id}',
+                                m.v#>>'{sticker,id}') AS media_id,
+                       COALESCE(m.v#>>'{image,mime_type}', m.v#>>'{video,mime_type}', m.v#>>'{audio,mime_type}',
+                                m.v#>>'{document,mime_type}', m.v#>>'{sticker,mime_type}') AS media_mime,
+                       m.v#>>'{document,filename}' AS media_name,
+                       CASE WHEN m.v->'location' IS NOT NULL THEN concat_ws(' ', m.v#>>'{location,name}', m.v#>>'{location,address}',
+                            '(' || (m.v#>>'{location,latitude}') || ', ' || (m.v#>>'{location,longitude}') || ')') END AS location,
+                       m.v#>>'{reaction,emoji}' AS reaction,
+                       jsonb_path_query_first(i.payload, '$.entry[*].changes[*].value.contacts[*].profile.name') #>> '{}' AS wa_name
                   FROM webhook_inbox i
                  CROSS JOIN LATERAL jsonb_path_query(i.payload, '$.entry[*].changes[*].value.messages[*]') AS m(v)
                  WHERE i.source = 'meta' AND i.delivery_id = ?""", deliveryId);
@@ -368,7 +383,8 @@ public class MetaInboxHandler implements InboxHandler {
             while (rs.next()) {
                 list.add(new Msg(rs.getString("id"), rs.getString("sender"), Instant.ofEpochSecond(rs.getLong("ts")),
                         rs.getString("type"), rs.getString("body"), rs.getString("payload"), rs.getString("button_text"),
-                        rs.getString("context")));
+                        rs.getString("context"), rs.getString("caption"), rs.getString("media_id"), rs.getString("media_mime"),
+                        rs.getString("media_name"), rs.getString("location"), rs.getString("reaction"), rs.getString("wa_name")));
             }
         }
         for (var m : list) {
@@ -385,12 +401,26 @@ public class MetaInboxHandler implements InboxHandler {
                     ON CONFLICT (message_id) DO NOTHING""", m.id(), identity, kind, action, utc(m.at()));
             if (fresh == 0) continue;                                       // a replay: everything below happened
 
+            // The inbox (V49): what the customer wrote or sent, for staff to read and answer.
+            var shown = m.text() != null ? m.text() : m.caption() != null ? m.caption() : m.buttonText() != null ? m.buttonText()
+                    : m.location() != null ? "📍 " + m.location() : m.reaction() != null ? "Reacted " + m.reaction() : null;
+            var inboxKind = m.type() == null ? "other" : Set.of("text", "image", "video", "audio", "document", "sticker",
+                    "location", "button", "interactive", "reaction").contains(m.type()) ? m.type() : "other";
+            in.brand.engage.persistence.WaInboxLog.inbound(c, identity, m.id(), inboxKind,
+                    shown == null && "other".equals(inboxKind) ? "[" + m.type() + " message: open WhatsApp to see it]" : shown,
+                    m.mediaId(), m.mediaMime(), m.mediaName(), m.context(), m.at());
+
             Sql.update(c, """
                     INSERT INTO profiles (identity_id, wa_window_until) VALUES (?, ?)
                     ON CONFLICT (identity_id) DO UPDATE
                        SET wa_window_until = GREATEST(profiles.wa_window_until, EXCLUDED.wa_window_until), updated_at = now()""",
                     identity, utc(m.at().plusSeconds(24 * 3600)));
             capability.markCapable(c, identity, Channel.WHATSAPP, m.at());
+            if (m.waName() != null && !m.waName().isBlank()) {
+                // The name on their WhatsApp profile: the inbox shows it for people who never ordered.
+                Sql.update(c, "UPDATE profiles SET attrs = attrs || jsonb_build_object('wa_name', ?::text), updated_at = now() WHERE identity_id = ?",
+                        m.waName().strip(), identity);
+            }
 
             var ref = "wa:" + m.id();
             switch (action == null ? "" : action) {

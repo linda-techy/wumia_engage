@@ -159,6 +159,31 @@ class MetaInboxTest {
     }
 
     @Test
+    void inbound_messages_land_in_the_staff_inbox_once_and_status_ticks_never_go_back() throws Exception {
+        var msg = text("wamid.IN.BOX", "Is the jhumka in stock?", T0);
+        send(msg);
+        send(msg.replace("\"P\"}", "\"P\" }"));                          // Meta retries
+        assertEquals("in|text|Is the jhumka in stock?", q("SELECT direction || '|' || kind || '|' || body FROM wa_messages WHERE wamid = 'wamid.IN.BOX'"));
+        assertEquals("1|open|Is the jhumka in stock?", q("SELECT unread || '|' || status || '|' || last_preview FROM wa_threads WHERE identity_id = '" + identity + "'"));
+        assertEquals("Priya", q("SELECT attrs->>'wa_name' FROM profiles WHERE identity_id = '" + identity + "'"));
+
+        send("""
+                {"object":"whatsapp_business_account","entry":[{"id":"W","changes":[{"field":"messages","value":{
+                 "messaging_product":"whatsapp","metadata":{"phone_number_id":"P"},
+                 "messages":[{"from":"%s","id":"wamid.IN.PIC","timestamp":"%d","type":"image",
+                              "image":{"id":"media-9","mime_type":"image/jpeg","caption":"this one"}}]}}]}]}"""
+                .formatted(PHONE, T0 + 5));
+        assertEquals("image|this one|media-9|image/jpeg", q("SELECT kind || '|' || body || '|' || media_id || '|' || media_mime FROM wa_messages WHERE wamid = 'wamid.IN.PIC'"));
+        assertEquals("2", q("SELECT unread FROM wa_threads WHERE identity_id = '" + identity + "'"));
+
+        exec("INSERT INTO wa_messages (identity_id, direction, wamid, kind, body, status, at) VALUES ('" + identity
+                + "', 'out', 'wamid.OUT.1', 'text', 'Yes!', 'sent', now())");
+        send(status("wamid.OUT.1", "read", T0 + 20, ""));
+        send(status("wamid.OUT.1", "delivered", T0 + 10, ""));
+        assertEquals("read", q("SELECT status FROM wa_messages WHERE wamid = 'wamid.OUT.1'"));
+    }
+
+    @Test
     void start_after_stop_grants_whatsapp_again() throws Exception {
         send(text("wamid.IN.STOP2", "stop", T0));
         send(text("wamid.IN.START", "shuru karo", T0 + 60));

@@ -25,6 +25,16 @@ public class InboxRepository {
     private final Db db;
     private final CustomerAllowlist allowlist;
 
+    /** WA_INBOX_OPEN_TO_ALL: every customer's WhatsApp webhooks are kept (the support number is in Engage). */
+    private boolean waInboxOpen;
+
+    @jakarta.inject.Inject
+    public InboxRepository(Db db, CustomerAllowlist allowlist,
+                           @io.micronaut.context.annotation.Value("${engage.privacy.wa-inbox-open-to-all:false}") boolean waInboxOpen) {
+        this(db, allowlist);
+        this.waInboxOpen = waInboxOpen;
+    }
+
     public InboxRepository(Db db, CustomerAllowlist allowlist) {
         this.db = db;
         this.allowlist = allowlist;
@@ -97,7 +107,8 @@ public class InboxRepository {
      * {@code recipient_id}), never emails, so the allowlist applies through
      * identities: every number in the payload must already be a phone key of
      * an identity that also holds an allowlisted email (or the allowlist is
-     * {@code *}). A payload with no customer numbers at all (template status,
+     * {@code *}), or WA_INBOX_OPEN_TO_ALL is on: the support number lives in
+     * Engage and staff must see every customer's chat. A payload with no customer numbers at all (template status,
      * number quality) is stored. The topic is the first change's
      * {@code field}: messages, message_template_status_update, ...
      */
@@ -129,7 +140,7 @@ public class InboxRepository {
                       RETURNING 1)
                     SELECT (SELECT allowed FROM ok), (SELECT count(*) FROM ins)""")) {
                 ps.setString(1, json);
-                ps.setBoolean(2, allowlist.allowAll());
+                ps.setBoolean(2, allowlist.allowAll() || waInboxOpen);
                 ps.setArray(3, c.createArrayOf("text", allowlist.emails().toArray()));
                 ps.setString(4, deliveryId);
                 try (var rs = ps.executeQuery()) {

@@ -231,6 +231,14 @@ public class MessageRouter {
         try {
             var result = adapter.send(message, allow.addresses());
             sends.markSent(sendId, cmd.channel(), allow.effectiveCategory(), allow.unitCostPaise(), result);
+            if (cmd.channel() == Channel.WHATSAPP) {
+                try {
+                    sends.logToInbox(cmd.identityId(), sendId, result.providerId(), message.body(), message.templateKey(),
+                            message.whatsapp() != null);
+                } catch (RuntimeException e) {
+                    LOG.warn("send {}: sent, but not recorded in the inbox: {}", sendId, e.toString());   // never fails a send
+                }
+            }
             return new SendResult.Sent(sendId, result.delivered());
         } catch (ChannelException.Permanent e) {
             sends.markFailed(sendId, cmd.identityId(), cmd.channel(), e.code(), e.suppress(), e.prunes());

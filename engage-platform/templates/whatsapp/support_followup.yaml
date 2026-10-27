@@ -1,0 +1,10 @@
+# WhatsApp inbox (V49): what staff send when a customer's 24-hour reply window
+# has closed and the team still owes them an answer. Customer care, no offer:
+# utility. Its text is repeated in InboxController (what the thread shows).
+key: support_followup_v1
+channel: whatsapp
+category: utility
+locales:
+  en: { body: "Hi {{name}}, this is WUMIKA customer care following up on your message. Reply here and we will help you." }
+vars: [name]
+samples: { name: "Priya" }
