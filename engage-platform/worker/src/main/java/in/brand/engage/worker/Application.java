@@ -15,6 +15,10 @@ public final class Application {
             WaCommands.run(args);
             return;
         }
+        if (ShopifyCheck.handles(args)) {          // one-off, read-only: the Admin token and the order number format
+            ShopifyCheck.run(args);
+            return;
+        }
         if (ProductImport.handles(args)) {         // one-off: products and photos from the storefront catalogue
             ProductImport.run(args);
             return;
