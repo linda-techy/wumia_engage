@@ -60,6 +60,8 @@ public class Msg91DlrController {
             doc = null;
         }
         if (doc == null) {
+            LOG.warn("rejected MSG91 delivery report: unreadable ({} bytes, {})", body == null ? 0 : body.length,
+                    request.getContentType().map(MediaType::toString).orElse("no content type"));
             metrics.received("msg91", "dlr", Result.BAD_REQUEST);
             return HttpResponse.badRequest();
         }

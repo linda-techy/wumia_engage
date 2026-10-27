@@ -82,6 +82,7 @@ public class StaffAlerts {
                 var u = URI.create(t.endpoint());
                 status = push.post(t.endpoint(), plan.keys().authorization(u.getScheme() + "://" + u.getHost(), SUBJECT, now), TTL_SECONDS, "inbox");
             } catch (IOException | RuntimeException e) {
+                LOG.warn("staff alert to subscription {} failed: {}", t.id(), e.toString());
                 status = -1;
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -99,8 +100,11 @@ public class StaffAlerts {
                 Sql.update(c, "UPDATE staff_push_subscriptions SET failures = failures + 1 WHERE id = ?", t.id());
                 return Sql.update(c, "DELETE FROM staff_push_subscriptions WHERE id = ? AND failures >= ?", t.id(), MAX_FAILURES);
             });
-            if (s / 100 != 2) LOG.warn("staff alert to subscription {} answered HTTP {}", t.id(), s);
+            if (s / 100 != 2 && s != -1) {
+                LOG.warn("staff alert to subscription {} answered HTTP {}{}", t.id(), s, s == 404 || s == 410 ? " (removed: the browser unsubscribed)" : "");
+            }
         }
+        LOG.info("staff alert: {} of {} devices notified", ok, plan.targets().size());
         return ok;
     }
 

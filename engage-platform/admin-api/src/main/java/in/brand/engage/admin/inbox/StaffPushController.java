@@ -31,6 +31,8 @@ import java.util.Map;
 @ExecuteOn(TaskExecutors.BLOCKING)
 public class StaffPushController {
 
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(StaffPushController.class);
+
     /** Chrome/Edge/Android (FCM), Firefox, Safari/iOS, Windows. */
     static final List<String> PUSH_HOSTS = List.of("fcm.googleapis.com", "updates.push.services.mozilla.com",
             ".push.services.mozilla.com", "web.push.apple.com", ".push.apple.com", ".notify.windows.com");
@@ -77,6 +79,7 @@ public class StaffPushController {
                 INSERT INTO staff_push_subscriptions (operator_id, endpoint, user_agent) VALUES (?, ?, ?)
                 ON CONFLICT (endpoint) DO UPDATE SET operator_id = EXCLUDED.operator_id, user_agent = EXCLUDED.user_agent, failures = 0""",
                 actor, endpoint, ua));
+        LOG.info("staff alerts on for operator {} via {}", actor, URI.create(endpoint).getHost());
         return HttpResponse.noContent();
     }
 
@@ -86,7 +89,8 @@ public class StaffPushController {
         var endpoint = body == null ? null : body.endpoint();
         var actor = current.id();
         if (endpoint != null) {
-            db.inTx(c -> Sql.update(c, "DELETE FROM staff_push_subscriptions WHERE endpoint = ? AND operator_id = ?", endpoint, actor));
+            int n = db.inTx(c -> Sql.update(c, "DELETE FROM staff_push_subscriptions WHERE endpoint = ? AND operator_id = ?", endpoint, actor));
+            if (n > 0) LOG.info("staff alerts off for operator {}", actor);
         }
         return HttpResponse.noContent();
     }

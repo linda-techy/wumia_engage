@@ -52,6 +52,8 @@ import java.util.UUID;
 @ExecuteOn(TaskExecutors.BLOCKING)
 public class InboxController {
 
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(InboxController.class);
+
     /** Templates staff may send when the window has closed: utility customer-care follow-ups only. */
     static final Set<String> FOLLOW_UPS = Set.of("support_followup_v1");
     static final int TEXT_MAX = 4096;
@@ -176,7 +178,8 @@ public class InboxController {
             try {
                 wa.markRead(latest);
             } catch (WhatsAppGraph.GraphException e) {
-                // ticks are a courtesy; the inbox works without them
+                // Ticks are a courtesy; the inbox works without them.
+                LOG.warn("inbox: read receipt for {} not accepted by WhatsApp (code {}): {}", id, e.code, e.getMessage());
             }
         }
         return HttpResponse.noContent();
@@ -255,6 +258,7 @@ public class InboxController {
         try {
             m = wa.media(mediaId);
         } catch (WhatsAppGraph.GraphException e) {
+            LOG.warn("inbox: media of message {} unavailable (code {}): {}", messageId, e.code, e.getMessage());
             throw Problems.conflict("media-unavailable", "WhatsApp no longer has this file (Meta keeps media for about 30 days)");
         }
         return HttpResponse.ok(m.bytes()).contentType(m.mime())

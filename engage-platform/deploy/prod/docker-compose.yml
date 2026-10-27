@@ -12,6 +12,15 @@ name: wumika
 x-jvm: &jvm
   JAVA_OPTS: "-XX:MaxRAMPercentage=60 -XX:+ExitOnOutOfMemoryError"
 
+# Container logs go to the host's systemd journal (persistent, 1 GB / 7 days in
+# /etc/systemd/journald.conf), so a deploy that recreates a container keeps its
+# history. `docker compose logs <svc>` still works; older lines:
+#   journalctl CONTAINER_NAME=wumika-worker-1 --since "2026-10-27 18:00"
+x-logging: &journal
+  driver: journald
+  options:
+    tag: "{{.Name}}"
+
 services:
   db:
     image: postgres:16-alpine
@@ -31,6 +40,7 @@ services:
 
   # Flyway as a job: every service waits for it; a failed migration stops the deploy.
   migrate:
+    logging: *journal
     image: wumika/ingest-api:prod
     command: ["migrate"]
     restart: "no"
@@ -45,6 +55,7 @@ services:
         condition: service_healthy
 
   ingest:
+    logging: *journal
     image: wumika/ingest-api:prod
     restart: unless-stopped
     env_file: .env
@@ -65,6 +76,7 @@ services:
         condition: service_completed_successfully
 
   admin:
+    logging: *journal
     image: wumika/admin-api:prod
     restart: unless-stopped
     env_file: .env
@@ -86,6 +98,7 @@ services:
         condition: service_completed_successfully
 
   worker:
+    logging: *journal
     image: wumika/worker:prod
     restart: unless-stopped
     env_file: .env
@@ -106,6 +119,7 @@ services:
 
   # The admin console: the Angular build served by nginx, /api proxied to admin-api.
   console:
+    logging: *journal
     image: wumika/console:prod
     restart: unless-stopped
     mem_limit: 64m

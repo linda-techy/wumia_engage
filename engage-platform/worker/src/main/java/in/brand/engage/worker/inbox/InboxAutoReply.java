@@ -40,6 +40,8 @@ import java.util.UUID;
 @Singleton
 public class InboxAutoReply implements EventConsumer {
 
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(InboxAutoReply.class);
+
     public static final String GREETING = "inbox_greeting";
     public static final String AWAY = "inbox_away";
     public static final String AUTO = "inbox_auto_reply";
@@ -98,6 +100,7 @@ public class InboxAutoReply implements EventConsumer {
         var hours = settings.hours(c);
         var name = firstName(c, id);
 
+        if (!"wa_message_received".equals(e.name())) LOG.info("inbox: {} tapped by {}, answering", e.name(), id);
         switch (e.name()) {
             case "inbox_track" -> {
                 return auto(id, message, track(c, id));
@@ -114,13 +117,20 @@ public class InboxAutoReply implements EventConsumer {
                 // wa_message_received: a new conversation, or a message in one.
                 if (!CONVERSATION_KINDS.contains(e.props().get("type")) || e.props().get("context_wamid") != null) return List.of();
                 var at = receivedAt(c, message);
-                if (at == null || at.isBefore(now.minus(STALE)) || staffActive(c, id, now) || recentAuto(c, id, now)) return List.of();
+                var skip = at == null ? "not in the inbox" : at.isBefore(now.minus(STALE)) ? "too old"
+                        : staffActive(c, id, now) ? "staff in the chat" : recentAuto(c, id, now) ? "auto-reply sent in the last 12 h" : null;
+                if (skip != null) {
+                    LOG.debug("inbox: no auto-reply to {} ({})", message, skip);
+                    return List.of();
+                }
                 // One per person per 12 h block even if two messages race through before the first reply is logged.
                 var block = now.getEpochSecond() / AUTO_GAP.toSeconds();
                 if (hours.open(now)) {
                     if (ongoing(c, id, message, at)) return List.of();
+                    LOG.info("inbox: greeting for {}", id);
                     return List.of(new MessageIntent(id, GREETING, "greet:" + id + ":" + block, Map.of("name", name), null));
                 }
+                LOG.info("inbox: away message for {} (support hours {} to {})", id, hours.opens(), hours.closes());
                 return List.of(new MessageIntent(id, AWAY, "away:" + id + ":" + block,
                         Map.of("name", name, "opens", hours.opens(), "closes", hours.closes()), null));
             }
