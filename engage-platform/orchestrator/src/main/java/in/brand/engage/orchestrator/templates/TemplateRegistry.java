@@ -103,15 +103,19 @@ public class TemplateRegistry implements TemplateCooldowns, ApplicationEventList
             int n = 0;
             for (var t : byKey.values()) {
                 n += Sql.update(c, """
-                        INSERT INTO templates (key, channel, category, vars, header_image)
-                        VALUES (?, CAST(? AS channel), CAST(? AS msg_category), ?, ?)
+                        INSERT INTO templates (key, channel, category, vars, header_image, title, body)
+                        VALUES (?, CAST(? AS channel), CAST(? AS msg_category), ?, ?, ?, ?)
                         ON CONFLICT (key) DO UPDATE
                            SET channel = EXCLUDED.channel, category = EXCLUDED.category, vars = EXCLUDED.vars,
-                               header_image = EXCLUDED.header_image, updated_at = now()
-                         WHERE (templates.channel, templates.category, templates.vars, templates.header_image)
-                               IS DISTINCT FROM (EXCLUDED.channel, EXCLUDED.category, EXCLUDED.vars, EXCLUDED.header_image)""",
+                               header_image = EXCLUDED.header_image, title = EXCLUDED.title, body = EXCLUDED.body,
+                               updated_at = now()
+                         WHERE (templates.channel, templates.category, templates.vars, templates.header_image,
+                                templates.title, templates.body)
+                               IS DISTINCT FROM (EXCLUDED.channel, EXCLUDED.category, EXCLUDED.vars, EXCLUDED.header_image,
+                                EXCLUDED.title, EXCLUDED.body)""",
                         t.key(), t.channel().dbName(), t.category().dbName(), t.vars().toArray(String[]::new),
-                        t.headerImage() != null);
+                        t.headerImage() != null, copy(t) == null ? null : blankToNull(copy(t).title()),
+                        copy(t) == null ? null : copy(t).body());
             }
             return n;
         });
@@ -240,5 +244,15 @@ public class TemplateRegistry implements TemplateCooldowns, ApplicationEventList
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    /** The English copy (the console's Message log shows it), or the first locale. */
+    private static MessageTemplate.Copy copy(MessageTemplate t) {
+        var en = t.locales().get(MessageTemplate.FALLBACK_LOCALE);
+        return en != null ? en : t.locales().values().stream().findFirst().orElse(null);
+    }
+
+    private static String blankToNull(String s) {
+        return s == null || s.isBlank() ? null : s;
     }
 }

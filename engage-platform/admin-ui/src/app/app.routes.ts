@@ -29,6 +29,7 @@ export const routes: Routes = [
       { path: 'customers/:id', loadComponent: () => import('./features/customers/customer-view') },
       { path: 'payments', loadComponent: () => import('./features/payments/payment-failures') },
       { path: 'support', loadComponent: () => import('./features/support/support-requests') },
+      { path: 'messages', loadComponent: () => import('./features/messages/message-log') },
       { path: 'inbox', loadComponent: () => import('./features/inbox/inbox') },
       { path: 'inbox/:id', loadComponent: () => import('./features/inbox/inbox') },
       { path: 'privacy', loadComponent: () => import('./features/privacy/privacy-requests') },

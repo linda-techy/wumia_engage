@@ -40,6 +40,7 @@ const NAV: NavItem[] = [
   { path: '/reports', label: 'Reports', role: 'VIEWER' },
   { path: '/campaigns', label: 'Campaigns', role: 'VIEWER' },
   { path: '/segments', label: 'Segments', role: 'VIEWER' },
+  { path: '/messages', label: 'Message log', role: 'VIEWER' },
   { path: '/inspector', label: 'Journey inspector', role: 'ANALYST' },
   { path: '/inbox', label: 'WhatsApp inbox', role: 'ANALYST' },
   { path: '/customers', label: 'Customers', role: 'VIEWER' },
