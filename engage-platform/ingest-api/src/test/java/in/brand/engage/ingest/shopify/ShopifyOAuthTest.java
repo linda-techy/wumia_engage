@@ -46,7 +46,8 @@ class ShopifyOAuthTest {
     /** Follows /start and returns the state Shopify would hand back. */
     String start() {
         var res = controller.start();
-        assertTrue(res.code() == 302 || res.code() == 303 || res.code() == 301, "a redirect: " + res.code());
+        assertEquals(302, res.code(), "a temporary redirect: a cached 301 would replay a used state");
+        assertEquals("no-store", res.getHeaders().get("Cache-Control"));
         var location = res.getHeaders().get("Location");
         assertTrue(location.startsWith("https://" + SHOP + "/admin/oauth/authorize?client_id=client-123&scope=read_orders%2C"), location);
         assertTrue(location.contains("&redirect_uri=https%3A%2F%2Fengage.wumika.com%2Fshopify%2Foauth%2Fcallback&state="), location);

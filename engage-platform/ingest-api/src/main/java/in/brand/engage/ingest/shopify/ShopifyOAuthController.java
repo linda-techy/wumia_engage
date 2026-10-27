@@ -81,7 +81,9 @@ public class ShopifyOAuthController {
         var state = db.inTx(ShopifyTokens::newState);
         var url = "https://" + shopDomain + "/admin/oauth/authorize?client_id=" + enc(clientId) + "&scope=" + enc(SCOPES)
                 + "&redirect_uri=" + enc(redirectUri()) + "&state=" + enc(state);
-        return HttpResponse.redirect(URI.create(url));
+        // 302 and no-store: a browser must never replay a cached redirect with a used state (Micronaut's redirect() is a 301).
+        return HttpResponse.status(io.micronaut.http.HttpStatus.FOUND).header("Location", URI.create(url).toString())
+                .header("Cache-Control", "no-store");
     }
 
     /** Shopify returns here with ?code, shop, state, timestamp, hmac. */
