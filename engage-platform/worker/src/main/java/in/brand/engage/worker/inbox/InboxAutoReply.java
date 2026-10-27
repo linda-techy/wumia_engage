@@ -218,8 +218,9 @@ public class InboxAutoReply implements EventConsumer {
         }
         if (order == null) {
             LOG.info("inbox: order {} asked by {} not found in Shopify", number, id);
-            return "We couldn't find order " + number + ". Please check the number in your order confirmation email and "
-                    + "send it again, or our team will help you here.";
+            // The app reads the last 60 days of orders (no read_all_orders, owner's choice 2026-10-28).
+            return "We couldn't find order " + number + " from the last 2 months. Please check the number in your order "
+                    + "confirmation email and send it again. If it's an older order, our team will check it and reply here.";
         }
         if (!owns(c, id, order)) {
             LOG.info("inbox: order {} asked by {} belongs to another phone/email; left to staff", number, id);

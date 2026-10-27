@@ -311,7 +311,7 @@ class InboxAutomationTest {
 
         inbound("text", "WUM2002");
         dispatcher.dispatchOnce();
-        assertTrue(last().body().startsWith("We couldn't find order WUM2002."), last().body());
+        assertTrue(last().body().startsWith("We couldn't find order WUM2002 from the last 2 months."), last().body());
 
         shop.down = true;
         inbound("text", "WUM1001");
