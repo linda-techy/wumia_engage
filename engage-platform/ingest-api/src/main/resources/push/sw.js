@@ -51,14 +51,17 @@ if (cfg.apiKey && cfg.projectId && cfg.messagingSenderId && cfg.appId) {
 }
 
 // Buttons under the notification (Chrome on Android and desktop show up to
-// two), as Indian D2C stores send them: a clear call to action, and "View bag"
-// for anyone with something in it. Both open the store and count as a click.
+// two), as Indian D2C stores send them: every notification has a clear call to
+// action, and "View bag" for anyone with something in it. Both open the store
+// and count as a click. (The "Unsubscribe" Chrome on Android adds under every
+// website notification is the browser's own; no site can remove it.)
 function actionsFor(data) {
   const kind = String(data.kind || '');
   if (kind.startsWith('cart_') || kind.startsWith('checkout_')) return [{ action: 'cart', title: 'View bag' }];
   if (kind.startsWith('campaign:')) return [{ action: 'open', title: 'Shop now' }, { action: 'cart', title: 'View bag' }];
   if (kind === 'back_in_stock' || kind === 'price_drop' || kind === 'browse_abandon') return [{ action: 'open', title: 'View the piece' }];
-  return [];
+  if (kind.startsWith('payment')) return [{ action: 'open', title: 'Complete payment' }];
+  return [{ action: 'open', title: 'Shop now' }];   // welcome series, win-back and anything new
 }
 
 self.addEventListener('notificationclick', (event) => {
