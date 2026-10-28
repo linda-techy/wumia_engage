@@ -10,7 +10,7 @@ What Engage does for each item, as of 22 Oct 2026.
 
 | Playbook | Engage |
 |---|---|
-| Push first (free), WhatsApp to non-actors, SMS last | ✅ cart recovery (*new*: push 30 min → WhatsApp +1 h → coupon WhatsApp +24 h); ✅ campaigns: push, then a WhatsApp follow-up to non-clickers; ✅ checkout: WhatsApp first at 30 min (the phone is known, highest intent), push, WhatsApp offer |
+| Push first (free), WhatsApp to non-actors, SMS last | ✅ cart recovery (WhatsApp first since 2026-10-28, as most Indian D2C stores run it: WhatsApp 30 min → push +3 h → coupon WhatsApp 24½ h after the first; push first only for shoppers without WhatsApp consent); ✅ campaigns: push, then a WhatsApp follow-up to non-clickers; ✅ checkout: WhatsApp first at 30 min (the phone is known, highest intent), push, WhatsApp offer |
 | SMS as fallback / final reminder | ◐ order updates and the payment link only. Marketing SMS needs DLT promotional templates 👤; not built |
 
 ## 2. Compliance, cost, opt-ins

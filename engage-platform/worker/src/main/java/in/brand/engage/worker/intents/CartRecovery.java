@@ -22,16 +22,18 @@ import java.util.Map;
 
 /**
  * {@code cart_recovery} (P5-T04): items left in the cart, no checkout started.
- * The owner's playbook (2026-10-22, superseding WhatsApp-first of 2026-10-10):
- * push first because it is free, WhatsApp for those who did not act, then
- * WhatsApp with a coupon a day later. A tap on any of them ends the run.
+ * WhatsApp first, as most Indian D2C stores run it (owner, 2026-10-28,
+ * superseding the push-first playbook of 2026-10-22): WhatsApp is the
+ * channel shoppers open, so it goes while the bag is fresh; push is the free
+ * second nudge; the code a day later. A tap on any of them ends the run.
  *
  * <pre>
- * t+30 min  Push     push_cart_recovery_v1   a live browser subscription
- *           (skipped → the WhatsApp goes at once instead)
- * +1 h      WhatsApp cart_reminder_v2        marketing opt-in, not INCAPABLE, cart ≥ wa_min_cart_paise
- * +24 h     WhatsApp cart_offer_v2           as above (WhatsApp marketing is one a day), and journey.abandon has a discount: the
- *                                            button opens the bag with the code applied
+ * t+30 min  WhatsApp cart_reminder_v2        marketing opt-in, not INCAPABLE, cart ≥ wa_min_cart_paise
+ *           (skipped → the push goes at once instead)
+ * +3 h      Push     push_cart_recovery_v1   a live browser subscription
+ * +21½ h    WhatsApp cart_offer_v2           as above, and journey.abandon has a discount: the button opens
+ *                                            the bag with the code applied. 24½ h after the first WhatsApp,
+ *                                            clear of the one-a-day WhatsApp marketing limit
  * +24 h     Email    email_cart_v1           email marketing consent (skipped until SES is set up)
  * </pre>
  * SMS at 48 h (the playbook's last step) waits for a DLT-registered promotional template.
@@ -67,8 +69,9 @@ public class CartRecovery implements EventConsumer {
         CascadeDefinition cartRecovery() {
             var wa = new Guard[] {Guard.WA_MARKETING, Guard.WA_CAPABLE_OR_UNKNOWN, Guard.hasVar(CheckoutAbandon.WA_OK)};
             return new CascadeDefinition(INTENT, Priority.MID_INTENT, List.of(
-                    Step.push("push_cart_recovery_v1", TTL).require(Guard.HAS_LIVE_DEVICE).waitAfter(Duration.ofHours(1)),
-                    Step.whatsapp("cart_reminder_v2").require(wa).waitAfter(Duration.ofHours(24)),   // WhatsApp marketing: one a day
+                    Step.whatsapp("cart_reminder_v2").require(wa).waitAfter(Duration.ofHours(3)),
+                    // 3 h + 21½ h: the offer lands 24½ h after the reminder, past the one-a-day WhatsApp marketing limit.
+                    Step.push("push_cart_recovery_v1", TTL).require(Guard.HAS_LIVE_DEVICE).waitAfter(Duration.ofMinutes(21 * 60 + 30)),
                     Step.whatsapp("cart_offer_v2").require(wa).require(Guard.hasVar("discount"))
                             .withVarsFrom(JourneyDiscount.NAME).waitAfter(Duration.ofHours(24)),
                     Step.email("email_cart_v1").require(Guard.HAS_EMAIL_MARKETING)));

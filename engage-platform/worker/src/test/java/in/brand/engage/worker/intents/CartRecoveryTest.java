@@ -31,9 +31,12 @@ class CartRecoveryTest {
     @Inject TestClock clock;
     @Inject Db db;
     @Inject WorkerTestBeans.FakePush push;
+    @Inject WorkerTestBeans.FakeWhatsApp wa;
 
     @BeforeEach void reset() {
         clock.setIst("2026-09-28T12:00:00");
+        wa.reset();
+        push.last = null;
         db.inTx(c -> {
             try (var st = c.createStatement(); var rs = st.executeQuery("select current_database()")) {
                 rs.next();
@@ -70,6 +73,34 @@ class CartRecoveryTest {
         assertTrue(push.last.url().contains("/cart?utm_source=engage&utm_medium=push&utm_campaign=cart_recovery"),
                 push.last.url());
         assertEquals(java.time.Duration.ofHours(12), push.last.ttl());
+    }
+
+    /** WhatsApp first, as most Indian D2C stores run it (owner, 2026-10-28): push is the free second nudge. */
+    @Test void a_whatsapp_customer_gets_whatsapp_first_then_a_push_then_the_code_a_day_later() {
+        var id = subscriber(true);
+        whatsappOptIn(id);
+        var cart = cart(id, 2, false);
+        cartUpdated(id, cart, clock.instant().minus(Duration.ofMinutes(31)));
+
+        dispatcher.dispatchOnce();
+        assertEquals(1, wa.all.size(), "WhatsApp at 30 minutes");
+        assertTrue(wa.all.getLast().templateKey().startsWith("cart_reminder"), wa.all.getLast().templateKey());
+        assertNull(push.last, "no push yet");
+
+        clock.setIst("2026-09-28T15:00:00");          // 3 h after the WhatsApp
+        orchestrator.tick(100);
+        assertNotNull(push.last, "the free push 3 h later");
+        assertEquals("sent|push_cart_recovery_v1", lastSend(cart));
+
+        clock.setIst("2026-09-29T11:55:00");          // just under 24 h after the WhatsApp: the one-a-day limit
+        orchestrator.tick(100);
+        assertEquals(1, wa.all.size(), "the offer waits beyond a day");
+
+        clock.setIst("2026-09-29T12:40:00");          // 24½ h after the WhatsApp
+        orchestrator.tick(100);
+        assertEquals(2, wa.all.size(), "the code a day later");
+        assertTrue(wa.all.getLast().templateKey().startsWith("cart_offer"), wa.all.getLast().templateKey());
+        assertTrue(lastSend(cart).startsWith("sent|cart_offer"), "not held by the daily WhatsApp limit: " + lastSend(cart));
     }
 
     @Test void a_click_on_the_push_marks_the_cascade_succeeded() {
@@ -205,6 +236,30 @@ class CartRecoveryTest {
             return null;
         });
         return id;
+    }
+
+    /** A WhatsApp marketing opt-in and number; the reminder and offer approved by Meta; a cart code set. */
+    private void whatsappOptIn(UUID id) {
+        db.inTx(c -> {
+            Sql.update(c, "INSERT INTO identity_keys (identity_id, kind, value, verified) VALUES (?, 'phone', ?, true)",
+                    id, "919" + String.format("%09d", java.util.concurrent.ThreadLocalRandom.current().nextLong(1_000_000_000L)));
+            Sql.update(c, """
+                    INSERT INTO consents (identity_id, channel, purpose, state, source, occurred_at)
+                    VALUES (?, 'whatsapp', 'marketing', 'granted', 'test', now() - interval '30 days')""", id);
+            for (var t : java.util.List.of("cart_reminder_v1", "cart_reminder_v2", "cart_offer_v1", "cart_offer_v2")) {
+                Sql.update(c, """
+                        INSERT INTO wa_templates (key, language, provider_name, requested_category, approved_category, status, quality)
+                        VALUES (?, 'en', ?, 'marketing', 'marketing', 'APPROVED', 'GREEN')
+                        ON CONFLICT (provider_name, language) DO UPDATE SET status = 'APPROVED', quality = 'GREEN'""", t, t);
+            }
+            for (var kv : java.util.List.of(new String[] {"journey.abandon.discount_code", "\"BAG10\""},
+                    new String[] {"journey.abandon.discount_label", "\"10% off\""})) {
+                Sql.update(c, "INSERT INTO config_versions (key, selector, value, changed_by, reason) VALUES (?, '*', CAST(? AS jsonb), ?, 'test')",
+                        kv[0], kv[1], operator(c));
+            }
+            return null;
+        });
+        config.invalidate();
     }
 
     private String cart(UUID identity, int items, boolean converted) {

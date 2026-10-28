@@ -253,19 +253,19 @@ class CheckoutAbandonTest {
         assertEquals("cancelled|checkout_started", run(cart));
     }
 
-    @Test void cart_recovery_pushes_first_then_whatsapps_those_who_did_not_tap() {
-        // The owner's playbook (2026-10-22): push at 30 min (free), WhatsApp 1 h later.
+    @Test void cart_recovery_whatsapps_first_then_pushes_those_who_did_not_tap() {
+        // WhatsApp first, as most Indian D2C stores run it (owner, 2026-10-28): WhatsApp at 30 min, push 3 h later.
         var who = customer(true, true);
         cartRow(who, 1249900);
         event(who, "cart_updated", "{\"cart_token\":\"" + cart + "\",\"item_count\":1}");
         dispatcher.dispatchOnce();
         at("12:31");
-        assertEquals("push_cart_recovery_v1", push.all.getLast().templateKey(), attempts(cart));
-        assertTrue(wa.all.isEmpty(), "WhatsApp waits an hour after the push");
-        at("13:32");
         var call = wa.all.getLast().whatsapp();
         assertEquals("cart_reminder_v1", call.name(), "the photo version is not approved in this test");
         assertEquals(List.of("Priya", "Kundan Jhumka Earrings"), call.bodyParams());
+        assertTrue(push.all.stream().noneMatch(m -> m.templateKey().equals("push_cart_recovery_v1")), "the push waits 3 h");
+        at("15:32");
+        assertEquals("push_cart_recovery_v1", push.all.getLast().templateKey(), attempts(cart));
     }
 
     @Test void a_day_later_the_cart_coupon_opens_the_bag_with_the_code_applied() {
@@ -283,9 +283,9 @@ class CheckoutAbandonTest {
         cartRow(who, 1249900);
         event(who, "cart_updated", "{\"cart_token\":\"" + cart + "\",\"item_count\":1}");
         dispatcher.dispatchOnce();
-        at("12:31");
-        at("13:32");
-        clock.setIst("2026-09-29T13:35:00");
+        at("12:31");                                   // WhatsApp reminder
+        at("15:32");                                   // push
+        clock.setIst("2026-09-29T13:05:00");           // 24½ h after the reminder
         orchestrator.tick(200);
         var call = wa.all.getLast().whatsapp();
         assertEquals("cart_offer_v1", call.name(), attempts(cart));
