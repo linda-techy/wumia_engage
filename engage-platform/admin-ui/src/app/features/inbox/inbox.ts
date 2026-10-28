@@ -5,7 +5,7 @@ import { firstValueFrom } from 'rxjs';
 import { Api } from '../../shared/api';
 import { InrPipe, problemDetail } from '../../shared/format';
 import { ErrorState, LoadingState } from '../../shared/states';
-import { fillName, InboxOrder, InboxThread, InboxThreadRow, orderStatus, QuickReply, refusalText, trackingText, windowState } from './inbox-model';
+import { ChatCandidate, fillName, InboxOrder, InboxThread, InboxThreadRow, orderStatus, QuickReply, refusalText, trackingText, whatsappStatus, windowState } from './inbox-model';
 import { StaffAlerts } from './staff-alerts';
 
 /**
@@ -79,6 +79,33 @@ export class InboxMedia implements OnDestroy {
       <section class="w-full flex-col md:flex md:w-80 md:shrink-0" [class.hidden]="!!id()" [class.flex]="!id()" aria-label="Conversations">
         <h1 class="mb-1 text-xl font-semibold">WhatsApp inbox</h1>
         <app-staff-alerts class="mb-2 block" />
+        <button type="button" class="btn-primary mb-2 py-1 text-sm" (click)="newChat.set(!newChat())" [attr.aria-expanded]="newChat()">
+          {{ newChat() ? 'Close' : '＋ New chat' }}
+        </button>
+        @if (newChat()) {
+          <div class="mb-2 rounded border border-emerald-300 bg-white p-2" aria-label="Start a chat">
+            <input class="input mb-2" placeholder="Search any customer: name, email or phone" [value]="who()" (input)="who.set(val($event))"
+                   aria-label="Search customers" />
+            <div class="max-h-72 overflow-y-auto">
+              @if (candidates.isLoading() && !candidates.hasValue()) { <p class="p-2 text-xs text-slate-500">Searching…</p> }
+              @for (c of candidates.value() ?? []; track c.identityId) {
+                <a [routerLink]="['/inbox', c.identityId]" (click)="newChat.set(false)" class="block border-b border-slate-100 px-2 py-1.5 hover:bg-slate-50">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="truncate text-sm font-medium">{{ c.name || 'Customer' }}</span>
+                    <span class="shrink-0 text-xs text-slate-500">{{ c.orders }} order{{ c.orders === 1 ? '' : 's' }}</span>
+                  </div>
+                  <div class="flex items-center justify-between gap-2 text-xs">
+                    <span class="truncate text-slate-500">{{ c.phone || c.email }}</span>
+                    <span class="shrink-0" [class.text-emerald-700]="waState(c).tone === 'good'" [class.text-sky-700]="waState(c).tone === 'ok'"
+                          [class.text-slate-400]="waState(c).tone === 'off'">{{ waState(c).label }}</span>
+                  </div>
+                </a>
+              } @empty {
+                @if (!candidates.isLoading()) { <p class="p-2 text-xs text-slate-500">No customer matches.</p> }
+              }
+            </div>
+          </div>
+        }
         <div class="mb-2 flex gap-1 text-sm" role="tablist">
           @for (s of statuses; track s[0]) {
             <button type="button" role="tab" class="rounded px-3 py-1" [class.bg-slate-900]="status() === s[0]" [class.text-white]="status() === s[0]"
@@ -175,7 +202,7 @@ export class InboxMedia implements OnDestroy {
                 </div>
               </div>
             } @empty {
-              <p class="text-center text-sm text-slate-500">No messages yet.</p>
+              <p class="text-center text-sm text-slate-500">No WhatsApp messages with this customer yet.</p>
             }
             @for (p of pendingFor(t); track p.at) {
               <div class="flex justify-end">
@@ -239,12 +266,40 @@ export class InboxMedia implements OnDestroy {
               <p class="mt-1 text-xs text-slate-500">Free reply window: {{ win().left }} left (24 h from the customer's last message). Enter sends, Shift+Enter adds a line.</p>
             } @else {
               <div class="rounded border border-amber-300 bg-amber-50 p-3 text-sm">
-                <p>The 24-hour window has closed, so WhatsApp only allows an approved template now. When the customer answers, you can reply freely again.</p>
-                @if (t.followUps.length) {
-                  <button type="button" class="btn-primary mt-2" [disabled]="busy()" (click)="followUp(t.followUps[0].key)">Send the follow-up template</button>
-                  <p class="mt-1 text-xs text-slate-600">"Hi {{ t.name || 'there' }}, this is WUMIKA customer care following up on your message. Reply here and we will help you."</p>
+                @if (!t.waOptIn) {
+                  <p class="font-medium">This customer hasn't agreed to WhatsApp messages.</p>
+                  <p class="mt-1 text-xs text-slate-700">WhatsApp only lets a business message people who opted in (the WhatsApp box at checkout)
+                    or who message it first. Messaging others gets the number reported and blocked. When they write to you, or tick the box on
+                    their next order, you can reach them here.</p>
                 } @else {
-                  <p class="mt-2 text-xs text-slate-600">The follow-up template is waiting for Meta's approval.</p>
+                  <p>{{ t.messages.length ? 'The 24-hour window has closed' : 'They have not written to you' }}, so WhatsApp only allows an approved
+                    message to start the chat. When the customer answers, you can reply freely.</p>
+                  @for (s of t.starters; track s.key) {
+                    <div class="mt-2 rounded border border-amber-200 bg-white p-2">
+                      @if (s.key === 'support_followup_v1') {
+                        <p class="text-xs text-slate-600">"Hi {{ firstName(t.name) }}, this is WUMIKA customer care following up on your message. Reply here and we will help you."</p>
+                        @if (s.approved) {
+                          <button type="button" class="btn-primary mt-1 py-1 text-sm" [disabled]="busy()" (click)="followUp(s.key)">Send the follow-up</button>
+                        } @else { <p class="mt-1 text-xs text-amber-800">Waiting for Meta's approval.</p> }
+                      } @else {
+                        <p class="text-xs text-slate-600">"Hi {{ firstName(t.name) }}, this is WUMIKA customer care about your order
+                          {{ starterOrder() || s.orderNumbers?.[0] }}. Please reply here so we can help you with it."</p>
+                        @if (s.approved) {
+                          <div class="mt-1 flex flex-wrap items-center gap-2">
+                            <select class="input w-auto py-1 text-sm" [value]="starterOrder() || s.orderNumbers?.[0]" (change)="starterOrder.set(val($event))"
+                                    aria-label="Which order">
+                              @for (o of s.orderNumbers ?? []; track o) { <option [value]="o">{{ o }}</option> }
+                            </select>
+                            <button type="button" class="btn-primary py-1 text-sm" [disabled]="busy()"
+                                    (click)="followUp(s.key, starterOrder() || s.orderNumbers?.[0])">Send the order message</button>
+                          </div>
+                        } @else { <p class="mt-1 text-xs text-amber-800">Waiting for Meta's approval.</p> }
+                      }
+                    </div>
+                  } @empty {
+                    <p class="mt-2 text-xs text-slate-600">There is no approved message that fits: they never wrote and have no order. Customers can
+                      start a chat from the WhatsApp button on wumika.com.</p>
+                  }
                 }
               </div>
             }
@@ -273,6 +328,12 @@ export default class InboxPage {
   readonly managing = signal(false);
   readonly editing = signal<{ id: number | null; title: string; body: string; sort: number } | null>(null);
   readonly quick = httpResource<QuickReply[]>(() => '/api/inbox/quick-replies');
+  /** "New chat": any customer, searched as you type. */
+  readonly newChat = signal(false);
+  readonly who = signal('');
+  readonly candidates = httpResource<ChatCandidate[]>(() => (this.newChat()
+    ? `/api/inbox/customers${this.who().trim() ? '?q=' + encodeURIComponent(this.who().trim()) : ''}` : undefined));
+  readonly starterOrder = signal<string | null>(null);
   /** Replies the worker has not sent yet (the API queues them); shown until they appear in the thread. */
   readonly pending = signal<{ id: string; text: string; at: number }[]>([]);
   readonly info = signal<string | null>(null);
@@ -304,6 +365,7 @@ export default class InboxPage {
         this.draft.set('');
         this.error.set(null);
         this.info.set(null);
+        this.starterOrder.set(null);
         this.#lastCount = 0;
         this.#api.post(`/api/inbox/${encodeURIComponent(id)}/read`, {}).then(() => this.threads.reload()).catch(() => {});
       });
@@ -315,6 +377,14 @@ export default class InboxPage {
         queueMicrotask(() => { const el = this.scroller()?.nativeElement; if (el) el.scrollTop = el.scrollHeight; });
       }
     });
+  }
+
+  waState(c: ChatCandidate) {
+    return whatsappStatus(c);
+  }
+
+  firstName(name: string | null): string {
+    return (name ?? '').trim().split(/\s+/)[0] || 'there';
   }
 
   refusal(code: string | null): string {
@@ -408,11 +478,11 @@ export default class InboxPage {
     }, 'The reply was not sent.');
   }
 
-  async followUp(templateKey: string): Promise<void> {
-    if (!confirm('Send the follow-up template to this customer? Meta charges it as a utility message.')) return;
+  async followUp(templateKey: string, orderNumber?: string): Promise<void> {
+    if (!confirm('Send this WhatsApp message to the customer? Meta charges it as a utility message (about 12 paise).')) return;
     await this.#run(async () => {
-      await this.#api.post(`/api/inbox/${encodeURIComponent(this.id()!)}/template`, { templateKey });
-      this.info.set('Follow-up queued. It appears here once WhatsApp accepts it, or with the reason if it cannot be sent.');
+      await this.#api.post(`/api/inbox/${encodeURIComponent(this.id()!)}/template`, { templateKey, orderNumber: orderNumber ?? null });
+      this.info.set('Message queued. It appears here once WhatsApp accepts it, or with the reason if it cannot be sent.');
       this.#soon();
     }, 'The template was not sent.');
   }

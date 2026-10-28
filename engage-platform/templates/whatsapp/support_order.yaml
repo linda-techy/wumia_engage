@@ -1,0 +1,11 @@
+# WhatsApp inbox (V53): what staff send to start a chat about one order with
+# a customer who has not written in the last 24 h (or ever). About a specific
+# order, no offer: utility. Business-initiated, so policy sends it only to a
+# customer who opted in to WhatsApp (CLAUDE.md §1.8).
+key: support_order_v1
+channel: whatsapp
+category: utility
+locales:
+  en: { body: "Hi {{name}}, this is WUMIKA customer care about your order {{order_number}}. Please reply here so we can help you with it." }
+vars: [name, order_number]
+samples: { name: "Priya", order_number: "WUM1183" }

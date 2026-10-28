@@ -62,7 +62,8 @@ class InboxTest {
         mary = UUID.fromString(data.createIdentity("mary@example.com", "918606572870"));
         db.inTx(c -> {
             Sql.update(c, "DELETE FROM wa_templates WHERE key = 'support_followup_v1'");
-            Sql.update(c, "DELETE FROM events WHERE name IN ('inbox_staff_reply', 'inbox_followup')");
+            Sql.update(c, "DELETE FROM events WHERE name IN ('inbox_staff_reply', 'inbox_followup', 'inbox_order_help')");
+            Sql.update(c, "DELETE FROM wa_templates WHERE key = 'support_order_v1'");
             Sql.update(c, "TRUNCATE staff_push_subscriptions");
             WaInboxLog.inbound(c, mary, "wamid.in1", "image", "Is this in stock?", "media-1", "image/jpeg", null, null,
                     Instant.now().minus(1, ChronoUnit.HOURS));
@@ -108,6 +109,61 @@ class InboxTest {
 
         var media = client.toBlocking().exchange(HttpRequest.GET("/api/inbox/media/" + messages.getFirst().get("id")).bearerAuth(analyst), byte[].class);
         assertEquals("image/jpeg", media.getContentType().orElseThrow().toString());
+    }
+
+    @Test void new_chat_lists_every_customer_masked_with_what_whatsapp_allows() {
+        var ravi = UUID.fromString(data.createIdentity("ravi@example.com", "919876543210"));
+        db.inTx(c -> Sql.update(c, """
+                INSERT INTO consents (identity_id, channel, purpose, state, source, occurred_at)
+                VALUES (?, 'whatsapp', 'transactional', 'granted', 'checkout_notice', now() - interval '1 day')""", mary));
+        var analyst = data.loginAsAnalyst(client);
+        var all = client.toBlocking().retrieve(HttpRequest.GET("/api/inbox/customers").bearerAuth(analyst), Argument.listOf(Map.class));
+        assertEquals(2, all.size(), "everyone, opted in or not");
+        assertFalse(String.valueOf(all).contains("8606572870") || String.valueOf(all).contains("ravi@example.com"), "masked");
+        var byPhone = client.toBlocking().retrieve(HttpRequest.GET("/api/inbox/customers?q=98765").bearerAuth(analyst), Argument.listOf(Map.class));
+        assertEquals(1, byPhone.size());
+        assertEquals(Boolean.FALSE, byPhone.getFirst().get("waOptIn"));
+        assertEquals(Boolean.FALSE, byPhone.getFirst().get("hasChat"));
+        var maryRow = client.toBlocking().retrieve(HttpRequest.GET("/api/inbox/customers?q=mary@example").bearerAuth(analyst), Argument.listOf(Map.class)).getFirst();
+        assertEquals(Boolean.TRUE, maryRow.get("waOptIn"));
+
+        // Opening a customer who never wrote: an empty chat, logged as a lookup (it shows their number).
+        var thread = client.toBlocking().retrieve(HttpRequest.GET("/api/inbox/" + ravi).bearerAuth(analyst), Map.class);
+        assertEquals(List.of(), thread.get("messages"));
+        assertEquals(Boolean.FALSE, thread.get("waOptIn"));
+        assertEquals("1", q("SELECT count(*) FROM pii_unmask_log WHERE field = 'whatsapp_start'"));
+    }
+
+    @Test void the_order_message_needs_a_whatsapp_opt_in_and_one_of_their_orders() {
+        var ravi = UUID.fromString(data.createIdentity("ravi@example.com", "919876543210"));
+        db.inTx(c -> {
+            Sql.update(c, "INSERT INTO orders (id, order_number, identity_id, total_paise, created_at) VALUES ('o-r1', 'WUM1183', ?, 99900, now())", ravi);
+            return Sql.update(c, """
+                    INSERT INTO wa_templates (key, language, provider_name, requested_category, status, quality)
+                    VALUES ('support_order_v1', 'en', 'support_order_v1', 'utility', 'APPROVED', 'GREEN')
+                    ON CONFLICT (provider_name, language) DO UPDATE SET status = 'APPROVED'""");
+        });
+        var analyst = data.loginAsAnalyst(client);
+        var thread = client.toBlocking().retrieve(HttpRequest.GET("/api/inbox/" + ravi).bearerAuth(analyst), Map.class);
+        var starters = (List<Map<String, Object>>) thread.get("starters");
+        assertEquals(1, starters.size(), "no follow-up for someone who never wrote");
+        assertEquals("support_order_v1", starters.getFirst().get("key"));
+        assertEquals(List.of("WUM1183"), starters.getFirst().get("orderNumbers"));
+
+        var noOptIn = assertThrows(HttpClientResponseException.class, () -> client.toBlocking().retrieve(HttpRequest.POST(
+                "/api/inbox/" + ravi + "/template", Map.of("templateKey", "support_order_v1", "orderNumber", "WUM1183")).bearerAuth(analyst), Map.class));
+        assertEquals(409, noOptIn.getStatus().getCode(), "WhatsApp needs an opt-in for a business-initiated message");
+
+        db.inTx(c -> Sql.update(c, """
+                INSERT INTO consents (identity_id, channel, purpose, state, source, occurred_at)
+                VALUES (?, 'whatsapp', 'transactional', 'granted', 'checkout_notice', now() - interval '1 day')""", ravi));
+        var notTheirs = assertThrows(HttpClientResponseException.class, () -> client.toBlocking().retrieve(HttpRequest.POST(
+                "/api/inbox/" + ravi + "/template", Map.of("templateKey", "support_order_v1", "orderNumber", "WUM9999")).bearerAuth(analyst), Map.class));
+        assertEquals(400, notTheirs.getStatus().getCode());
+        var res = client.toBlocking().exchange(HttpRequest.POST("/api/inbox/" + ravi + "/template",
+                Map.of("templateKey", "support_order_v1", "orderNumber", "WUM1183")).bearerAuth(analyst), Map.class);
+        assertEquals(202, res.code());
+        assertEquals("WUM1183", q("SELECT props->>'order_number' FROM events WHERE name = 'inbox_order_help'"));
     }
 
     @Test void a_chat_refreshing_all_day_is_logged_once_and_never_uses_up_the_lookup_limit() {
@@ -176,9 +232,14 @@ class InboxTest {
                 HttpRequest.POST("/api/inbox/" + mary + "/template", Map.of("templateKey", "campaign_diwali_v1")).bearerAuth(analyst), Map.class));
         assertEquals(400, other.getStatus().getCode(), "marketing templates are not sent from the inbox");
 
-        db.inTx(c -> Sql.update(c, """
-                INSERT INTO wa_templates (key, language, provider_name, requested_category, status, quality)
-                VALUES ('support_followup_v1', 'en', 'support_followup_v1', 'utility', 'APPROVED', 'GREEN')"""));
+        db.inTx(c -> {
+            Sql.update(c, """
+                    INSERT INTO consents (identity_id, channel, purpose, state, source, occurred_at)
+                    VALUES (?, 'whatsapp', 'transactional', 'granted', 'checkout_notice', now() - interval '1 day')""", mary);
+            return Sql.update(c, """
+                    INSERT INTO wa_templates (key, language, provider_name, requested_category, status, quality)
+                    VALUES ('support_followup_v1', 'en', 'support_followup_v1', 'utility', 'APPROVED', 'GREEN')""");
+        });
         var res = client.toBlocking().exchange(HttpRequest.POST("/api/inbox/" + mary + "/template",
                 Map.of("templateKey", "support_followup_v1")).bearerAuth(analyst), Map.class);
         assertEquals(202, res.code());

@@ -1,4 +1,4 @@
-import { fillName, InboxOrder, orderStatus, refusalText, timeLeft, trackingText, windowState } from './inbox-model';
+import { fillName, InboxOrder, orderStatus, refusalText, timeLeft, trackingText, whatsappStatus, windowState } from './inbox-model';
 import { keyBytes } from './staff-alerts';
 
 const NOW = Date.parse('2026-10-27T12:00:00Z');
@@ -43,6 +43,15 @@ describe('inbox orders and saved answers', () => {
   it('explains a refused message in plain words', () => {
     expect(refusalText('NO_WHATSAPP_OPT_IN')).toContain("hasn't opted in");
     expect(refusalText('SOMETHING_NEW')).toBe('something new');
+  });
+});
+
+describe('new chat', () => {
+  it('says what WhatsApp allows with each customer', () => {
+    expect(whatsappStatus({ phone: '+91 98•••43210', waOptIn: false, windowOpen: true }).tone).toBe('good');
+    expect(whatsappStatus({ phone: '+91 98•••43210', waOptIn: true, windowOpen: false }).label).toBe('WhatsApp opted in');
+    expect(whatsappStatus({ phone: '+91 98•••43210', waOptIn: false, windowOpen: null }).label).toBe('Not opted in to WhatsApp');
+    expect(whatsappStatus({ phone: null, waOptIn: true, windowOpen: null }).label).toBe('No phone number');
   });
 });
 

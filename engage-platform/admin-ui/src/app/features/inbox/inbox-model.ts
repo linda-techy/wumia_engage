@@ -37,6 +37,36 @@ export interface InboxThread extends InboxThreadRow {
   messages: InboxMessage[];
   windowOpen: boolean;
   followUps: { key: string }[];
+  /** The customer agreed to WhatsApp messages (checkout tick box, START, or the in-chat opt-in). */
+  waOptIn: boolean;
+  /** Templates that may open the chat after the window (V53), and whether Meta approved them. */
+  starters: Starter[];
+}
+
+export interface Starter {
+  key: 'support_followup_v1' | 'support_order_v1';
+  approved: boolean;
+  orderNumbers?: string[];
+}
+
+/** A customer for "New chat" (GET /api/inbox/customers): masked, with what WhatsApp allows. */
+export interface ChatCandidate {
+  identityId: string;
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+  waOptIn: boolean;
+  windowOpen: boolean | null;
+  hasChat: boolean;
+  orders: number;
+}
+
+/** "Can reply now", "Opted in", "Not opted in": what staff may do on WhatsApp with this customer. */
+export function whatsappStatus(c: Pick<ChatCandidate, 'waOptIn' | 'windowOpen' | 'phone'>): { label: string; tone: 'good' | 'ok' | 'off' } {
+  if (!c.phone) return { label: 'No phone number', tone: 'off' };
+  if (c.windowOpen) return { label: 'Wrote in the last 24 h: reply freely', tone: 'good' };
+  if (c.waOptIn) return { label: 'WhatsApp opted in', tone: 'ok' };
+  return { label: 'Not opted in to WhatsApp', tone: 'off' };
 }
 
 export interface InboxOrder {

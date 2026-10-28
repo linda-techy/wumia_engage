@@ -54,15 +54,21 @@ public class InboxController {
 
     private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(InboxController.class);
 
-    /** Templates staff may send when the window has closed: utility customer-care follow-ups only. */
-    static final Set<String> FOLLOW_UPS = Set.of("support_followup_v1");
+    /**
+     * Utility templates staff may send outside the 24 h window (business-initiated,
+     * so only to customers with a WhatsApp opt-in): the follow-up to someone who
+     * wrote before, and a chat about one of the customer's orders (V53).
+     */
+    static final String FOLLOW_UP = "support_followup_v1";
+    static final String ORDER_HELP = "support_order_v1";
+    static final Set<String> FOLLOW_UPS = Set.of(FOLLOW_UP, ORDER_HELP);
     static final int TEXT_MAX = 4096;
 
     @Serdeable
     public record ReplyBody(String text) {}
 
     @Serdeable
-    public record TemplateBody(String templateKey) {}
+    public record TemplateBody(String templateKey, @Nullable String orderNumber) {}
 
     @Serdeable
     public record StatusBody(String status) {}
@@ -125,7 +131,55 @@ public class InboxController {
         });
     }
 
-    /** One conversation: the customer, the reply window, and the last 300 messages oldest first. */
+    /**
+     * Every customer with a phone or email, for "New chat" (V53): a name, phone
+     * or email fragment, or the most recent customers. Masked: opening one shows
+     * the number and is logged. With each, whether WhatsApp may be used at all.
+     */
+    @RequiresRole(Role.ANALYST)
+    @Get("/customers")
+    public List<Map<String, Object>> customers(@Nullable @QueryValue String q) {
+        var text = q == null ? "" : q.strip().toLowerCase(java.util.Locale.ROOT);
+        var like = text.isEmpty() ? null : "%" + text + "%";
+        var digits = text.replaceAll("\\D", "");
+        var phoneLike = digits.length() >= 4 ? "%" + digits + "%" : null;
+        return db.inTx(c -> {
+            var rows = Rows.list(c, """
+                    SELECT i.id AS identity_id,
+                           COALESCE(NULLIF(p.attrs->>'first_name', ''), NULLIF(p.attrs->>'wa_name', '')) AS name,
+                           (SELECT k.value FROM identity_keys k WHERE k.identity_id = i.id AND k.kind = 'phone' LIMIT 1) AS phone,
+                           (SELECT k.value FROM identity_keys k WHERE k.identity_id = i.id AND k.kind = 'email' LIMIT 1) AS email,
+                           EXISTS (SELECT 1 FROM consent_current cc WHERE cc.identity_id = i.id AND cc.channel = 'whatsapp'
+                                      AND cc.state = 'granted') AS wa_opt_in,
+                           p.wa_window_until > now() AS window_open,
+                           t.identity_id IS NOT NULL AS has_chat,
+                           (SELECT count(*) FROM orders o WHERE o.identity_id = i.id) AS orders,
+                           GREATEST(i.created_at, (SELECT max(o.created_at) FROM orders o WHERE o.identity_id = i.id), t.last_message_at) AS active_at
+                      FROM identities i
+                      LEFT JOIN profiles p ON p.identity_id = i.id
+                      LEFT JOIN wa_threads t ON t.identity_id = i.id
+                     WHERE i.merged_into IS NULL
+                       AND EXISTS (SELECT 1 FROM identity_keys k WHERE k.identity_id = i.id AND k.kind IN ('phone', 'email'))
+                       AND (CAST(? AS text) IS NULL
+                            OR lower(COALESCE(p.attrs->>'first_name', '') || ' ' || COALESCE(p.attrs->>'last_name', '') || ' '
+                                     || COALESCE(p.attrs->>'wa_name', '')) LIKE ?
+                            OR EXISTS (SELECT 1 FROM identity_keys k WHERE k.identity_id = i.id AND k.kind = 'email' AND lower(k.value) LIKE ?)
+                            OR (CAST(? AS text) IS NOT NULL AND EXISTS (SELECT 1 FROM identity_keys k
+                                     WHERE k.identity_id = i.id AND k.kind = 'phone' AND k.value LIKE ?)))
+                     ORDER BY active_at DESC NULLS LAST LIMIT 30""", like, like, like, phoneLike, phoneLike);
+            for (var r : rows) {
+                r.put("phone", r.get("phone") == null ? null : in.brand.engage.core.identity.Msisdn.mask((String) r.get("phone")));
+                r.put("email", r.get("email") == null ? null : in.brand.engage.core.privacy.Masks.email((String) r.get("email")));
+            }
+            return rows;
+        });
+    }
+
+    /**
+     * One conversation: the customer, the reply window, and the last 300 messages
+     * oldest first. Any customer opens (V53), even one who never wrote: that is a
+     * lookup (whatsapp_start, within the daily limit); a chat they started is not.
+     */
     @RequiresRole(Role.ANALYST)
     @Get("/{identityId}")
     public Map<String, Object> thread(@PathVariable String identityId) {
@@ -133,8 +187,19 @@ public class InboxController {
         var actor = current.id();
         return db.inTx(c -> {
             var head = Rows.list(c, THREAD_COLUMNS + " WHERE t.identity_id = ?", id);
-            if (head.isEmpty()) throw Problems.notFound("no WhatsApp conversation with this customer");
-            pii.record(c, actor, id, "whatsapp_inbox", "WhatsApp inbox");
+            boolean wrote = exists(c, "SELECT 1 FROM wa_messages WHERE identity_id = ? AND direction = 'in'", id);
+            if (head.isEmpty()) {
+                head = Rows.list(c, """
+                        SELECT i.id AS identity_id, NULL::timestamptz AS last_message_at, NULL::timestamptz AS last_inbound_at,
+                               NULL::text AS last_preview, 0 AS unread, 'open' AS status,
+                               COALESCE(NULLIF(p.attrs->>'first_name', ''), NULLIF(p.attrs->>'wa_name', '')) AS name,
+                               (SELECT k.value FROM identity_keys k WHERE k.identity_id = i.id AND k.kind = 'phone' LIMIT 1) AS phone,
+                               p.wa_window_until AS window_until
+                          FROM identities i LEFT JOIN profiles p ON p.identity_id = i.id
+                         WHERE i.id = ? AND i.merged_into IS NULL""", id);
+                if (head.isEmpty()) throw Problems.notFound("no such customer");
+            }
+            pii.record(c, actor, id, wrote ? "whatsapp_inbox" : "whatsapp_start", "WhatsApp inbox");
             var out = new LinkedHashMap<String, Object>(head.getFirst());
             out.put("email", one(c, "SELECT value FROM identity_keys WHERE identity_id = ? AND kind = 'email' LIMIT 1", id));
             out.put("orders", Rows.list(c, """
@@ -151,9 +216,24 @@ public class InboxController {
                         FROM wa_messages m LEFT JOIN operators o ON o.id = m.sent_by
                        WHERE m.identity_id = ? ORDER BY m.at DESC LIMIT 300) x ORDER BY at""", id));
             out.put("windowOpen", windowOpen(c, id));
-            out.put("followUps", Rows.list(c, """
-                    SELECT DISTINCT w.key FROM wa_templates w JOIN templates t ON t.key = w.key
-                     WHERE w.key = ANY(?) AND w.status = 'APPROVED' AND w.language = 'en'""", (Object) FOLLOW_UPS.toArray(String[]::new)));
+            boolean optIn = exists(c, """
+                    SELECT 1 FROM consent_current WHERE identity_id = ? AND channel = 'whatsapp' AND state = 'granted'""", id);
+            out.put("waOptIn", optIn);
+            // What may open the conversation after the window: the follow-up only to someone who wrote before,
+            // the order chat only to someone with an order; each once Meta approved it.
+            var starters = new java.util.ArrayList<Map<String, Object>>();
+            if (wrote) starters.add(Map.of("key", FOLLOW_UP, "approved", approved(c, FOLLOW_UP)));
+            var orderNumbers = new java.util.ArrayList<String>();
+            try (var ps = Sql.prepare(c, "SELECT order_number FROM orders WHERE identity_id = ? ORDER BY created_at DESC LIMIT 5", id);
+                 var rs = ps.executeQuery()) {
+                while (rs.next()) orderNumbers.add(rs.getString(1));
+            }
+            if (!orderNumbers.isEmpty()) {
+                starters.add(Map.of("key", ORDER_HELP, "approved", approved(c, ORDER_HELP), "orderNumbers", orderNumbers));
+            }
+            out.put("starters", starters);
+            out.put("followUps", starters.stream().filter(m -> Boolean.TRUE.equals(m.get("approved")) && FOLLOW_UP.equals(m.get("key")))
+                    .map(m -> Map.of("key", m.get("key"))).toList());
             return out;
         });
     }
@@ -234,14 +314,26 @@ public class InboxController {
         if (key == null || !FOLLOW_UPS.contains(key)) throw Problems.badRequest("templateKey is one of " + FOLLOW_UPS);
         var actor = current.id();
         db.inTx(c -> {
-            try (var ps = Sql.prepare(c, """
-                    SELECT 1 FROM wa_templates WHERE key = ? AND language = 'en' AND status = 'APPROVED' AND quality <> 'RED'""", key);
-                 var rs = ps.executeQuery()) {
-                if (!rs.next()) throw Problems.conflict("template-not-approved", key + " is not approved by Meta yet");
-            }
+            if (!approved(c, key)) throw Problems.conflict("template-not-approved", key + " is not approved by Meta yet");
             recipient(c, id);
-            events.write(c, id, "inbox_followup", "admin", "inbox_followup:" + UUID.randomUUID(),
-                    Map.of("operator_id", actor.toString()));
+            if (!exists(c, "SELECT 1 FROM consent_current WHERE identity_id = ? AND channel = 'whatsapp' AND state = 'granted'", id)) {
+                throw Problems.conflict("no-whatsapp-opt-in", "this customer has not agreed to WhatsApp messages, so WhatsApp does not "
+                        + "allow us to message them first; they can opt in at checkout or message you on WhatsApp");
+            }
+            if (ORDER_HELP.equals(key)) {
+                var order = body.orderNumber();
+                if (order == null || !exists(c, "SELECT 1 FROM orders WHERE identity_id = ? AND order_number = ?", id, order)) {
+                    throw Problems.badRequest("choose one of this customer's orders");
+                }
+                events.write(c, id, "inbox_order_help", "admin", "inbox_order_help:" + UUID.randomUUID(),
+                        Map.of("operator_id", actor.toString(), "order_number", order));
+            } else {
+                if (!exists(c, "SELECT 1 FROM wa_messages WHERE identity_id = ? AND direction = 'in'", id)) {
+                    throw Problems.badRequest("the follow-up is for customers who wrote before; send the order message instead");
+                }
+                events.write(c, id, "inbox_followup", "admin", "inbox_followup:" + UUID.randomUUID(),
+                        Map.of("operator_id", actor.toString()));
+            }
             audit.record(c, actor, "inbox.template", "identity", id.toString(), null, "{\"template\":\"" + key + "\"}");
             return null;
         });
@@ -268,6 +360,16 @@ public class InboxController {
     }
 
     /* ------------------------------------------------------------------ */
+
+    private static boolean approved(Connection c, String key) throws SQLException {
+        return exists(c, "SELECT 1 FROM wa_templates WHERE key = ? AND language = 'en' AND status = 'APPROVED' AND quality <> 'RED'", key);
+    }
+
+    private static boolean exists(Connection c, String sql, Object... params) throws SQLException {
+        try (var ps = Sql.prepare(c, sql, params); var rs = ps.executeQuery()) {
+            return rs.next();
+        }
+    }
 
     private boolean windowOpen(Connection c, UUID id) throws SQLException {
         try (var ps = Sql.prepare(c, "SELECT wa_window_until > ? FROM profiles WHERE identity_id = ?",

@@ -26,7 +26,8 @@ class TokenLifecycleTest {
     @Inject Db db;
 
     @BeforeEach void reset() {
-        clock.setIst("2026-09-28T02:30:00");
+        // Today, not a fixed date: device_health (V11) ages devices against the database's now().
+        clock.setIst(java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")) + "T02:30:00");
         db.inTx(c -> {
             try (var st = c.createStatement(); var rs = st.executeQuery("select current_database()")) {
                 rs.next();

@@ -102,7 +102,7 @@ public class SendRepository {
     /** Step 3 after an accepted send: mark sent, book spend (not WhatsApp), prune dead tokens. */
     /** An automated WhatsApp message in the inbox thread (V49), so staff see what Engage told the customer. */
     /** Intents a staff member started in the inbox; {@code vars.operator_id} names them. */
-    static final java.util.Set<String> STAFF_INTENTS = java.util.Set.of("inbox_staff_reply", "inbox_followup");
+    static final java.util.Set<String> STAFF_INTENTS = java.util.Set.of("inbox_staff_reply", "inbox_followup", "inbox_order_help");
 
     /** A WhatsApp message that went out, in the inbox thread (V49); a staff member's carries their id. */
     public void logToInbox(SendCommand cmd, long sendId, String wamid, in.brand.engage.channels.RenderedMessage m) {

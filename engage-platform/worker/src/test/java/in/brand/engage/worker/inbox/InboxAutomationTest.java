@@ -362,6 +362,24 @@ class InboxAutomationTest {
         assertEquals("template|" + operator, q("SELECT kind || '|' || sent_by FROM wa_messages WHERE direction = 'out' AND status = 'sent'"));
     }
 
+    @Test void the_order_message_names_the_order() {
+        db.inTx(c -> {
+            Sql.update(c, "UPDATE profiles SET wa_window_until = NULL WHERE identity_id = ?", mary);
+            Sql.update(c, """
+                    INSERT INTO consents (identity_id, channel, purpose, state, source, occurred_at)
+                    VALUES (?, 'whatsapp', 'transactional', 'granted', 'checkout_notice', now() - interval '1 day')""", mary);
+            return Sql.update(c, """
+                    INSERT INTO wa_templates (key, language, provider_name, requested_category, approved_category, status, quality)
+                    VALUES ('support_order_v1', 'en', 'support_order_v1', 'utility', 'utility', 'APPROVED', 'GREEN')
+                    ON CONFLICT (provider_name, language) DO UPDATE SET status = 'APPROVED', quality = 'GREEN'""");
+        });
+        staffEvent("inbox_order_help", "{\"operator_id\":\"" + operator + "\",\"order_number\":\"WUM1183\"}");
+        dispatcher.dispatchOnce();
+        assertEquals("support_order_v1", last().whatsapp().name());
+        assertEquals(List.of("Mary", "WUM1183"), last().whatsapp().bodyParams());
+        assertEquals("template|" + operator, q("SELECT kind || '|' || sent_by FROM wa_messages WHERE direction = 'out' AND status = 'sent'"));
+    }
+
     /* ---------------------------- staff alerts ---------------------------- */
 
     void subscribe(String endpoint) {
