@@ -110,6 +110,22 @@ class InboxTest {
         assertEquals("image/jpeg", media.getContentType().orElseThrow().toString());
     }
 
+    @Test void a_chat_refreshing_all_day_is_logged_once_and_never_uses_up_the_lookup_limit() {
+        var analyst = data.loginAsAnalyst(client);
+        for (int i = 0; i < 60; i++) {   // the open chat polls every 5 s: 60 polls are five minutes
+            client.toBlocking().retrieve(HttpRequest.GET("/api/inbox/" + mary).bearerAuth(analyst), Map.class);
+        }
+        assertEquals("1", q("SELECT count(*) FROM pii_unmask_log WHERE field = 'whatsapp_inbox'"), "one audit row a day");
+
+        // Even 50 conversations in a day (other customers) leave lookups their full allowance.
+        db.inTx(c -> Sql.update(c, """
+                INSERT INTO pii_unmask_log (operator_id, identity_id, field, reason)
+                SELECT o.id, NULL, 'whatsapp_inbox', 'WhatsApp inbox' FROM operators o, generate_series(1, 50)
+                 WHERE o.email = 'analyst@example.com'"""));
+        var again = client.toBlocking().exchange(HttpRequest.GET("/api/inbox/" + mary).bearerAuth(analyst), Map.class);
+        assertEquals(200, again.code(), "conversations are not lookups");
+    }
+
     @Test void opening_an_unread_chat_clears_the_badge_and_shows_the_customer_blue_ticks_once() {
         var analyst = data.loginAsAnalyst(client);
         client.toBlocking().exchange(HttpRequest.POST("/api/inbox/" + mary + "/read", Map.of()).bearerAuth(analyst));
