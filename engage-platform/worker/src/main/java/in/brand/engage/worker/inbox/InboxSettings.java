@@ -74,6 +74,25 @@ public class InboxSettings {
         }
     }
 
+    /** The first-order code the storefront's WhatsApp popup promises (the welcome series' code), or null. */
+    public String welcomeCode(Connection c) throws SQLException {
+        return string(value(c, "journey.welcome.discount_code"));
+    }
+
+    /** "10% off", or null. */
+    public String welcomeLabel(Connection c) throws SQLException {
+        return string(value(c, "journey.welcome.discount_label"));
+    }
+
+    private String string(String raw) {
+        try {
+            var s = raw == null ? null : json.readValue(raw, String.class);
+            return s == null || s.isBlank() ? null : s.strip();
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
     /** The global value as JSON text, or the key's default. */
     private static String value(Connection c, String key) throws SQLException {
         try (var ps = Sql.prepare(c, """

@@ -58,7 +58,8 @@ public class InboxAutoReply implements EventConsumer {
     /** A message older than this when its event is handled (worker down) gets no greeting: too late to help. */
     static final Duration STALE = Duration.ofMinutes(10);
 
-    private static final Set<String> EVENTS = Set.of("wa_message_received", "inbox_track", "inbox_shop", "inbox_talk");
+    private static final Set<String> EVENTS = Set.of("wa_message_received", "inbox_track", "inbox_shop", "inbox_talk",
+            "wa_offer_requested");
     private static final Set<String> CONVERSATION_KINDS = Set.of("text", "image", "video", "audio", "document", "location");
 
     @Factory
@@ -111,6 +112,10 @@ public class InboxAutoReply implements EventConsumer {
 
         if (!"wa_message_received".equals(e.name())) LOG.info("inbox: {} tapped by {}, answering", e.name(), id);
         switch (e.name()) {
+            case "wa_offer_requested" -> {
+                // The storefront's "Get my code on WhatsApp" (V54): the code they asked for, at once.
+                return auto(id, message, welcome(name, settings.welcomeCode(c), settings.welcomeLabel(c)));
+            }
             case "inbox_track" -> {
                 return auto(id, message, track(c, id));
             }
@@ -153,6 +158,18 @@ public class InboxAutoReply implements EventConsumer {
 
     private static List<MessageIntent> auto(UUID id, String message, String text) {
         return List.of(new MessageIntent(id, AUTO, "auto:" + message, Map.of("text", text), null));
+    }
+
+    /** The answer to "please send my code": the code and a link that applies it, or a plain welcome. */
+    static String welcome(String name, String code, String label) {
+        if (code == null || label == null) {
+            return "Welcome to WUMIKA, " + name + "! ✨ You'll get your order updates, new drops and offers here. Reply STOP anytime.";
+        }
+        var redirect = java.net.URLEncoder.encode("/collections/all?sort_by=best-selling&utm_source=whatsapp&utm_medium=popup"
+                + "&utm_campaign=wa_offer", java.nio.charset.StandardCharsets.UTF_8);
+        return "Welcome to WUMIKA, " + name + "! ✨ Here's your " + label + " code: *" + code + "*\n\n"
+                + "Tap to shop with it applied: https://www.wumika.com/discount/" + code + "?redirect=" + redirect + "\n\n"
+                + "We'll also send your order updates and new drops here. Reply STOP anytime.";
     }
 
     static String utm(String url) {

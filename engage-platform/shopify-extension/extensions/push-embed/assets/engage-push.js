@@ -131,7 +131,7 @@ async function mintToken() {
  */
 export async function ask(surface, { userInitiated = false } = {}) {
   if (!pushCapable) {
-    if (isIOS || isInApp) { track(surface, 'ios_redirected_to_whatsapp'); showWhatsAppOptIn(surface); }
+    if (isIOS || isInApp) { track(surface, 'ios_redirected_to_whatsapp'); waOfferAsk(surface); }
     return null;
   }
   if (Notification.permission === 'denied') return null;
@@ -301,7 +301,7 @@ function earlyAsk() {
     clearTimeout(timer);
     if (session.get('early')) return;
     session.set('early', '1');
-    ask('browse');
+    waOfferAsk('browse').then((shown) => { if (!shown) ask('browse'); });
   };
   if (views > 0 && count >= views) { timer = setTimeout(fire, 1500); return; }   // let the page settle
   if (seconds > 0) timer = setTimeout(fire, seconds * 1000);
@@ -331,7 +331,7 @@ function exitIntent() {
   const onOut = (e) => {
     if (e.relatedTarget || e.clientY > 0) return;
     document.removeEventListener('mouseout', onOut);
-    if (!session.get('asked')) ask('exit_intent');
+    if (!session.get('asked')) waOfferAsk('exit_intent').then((shown) => { if (!shown) ask('exit_intent'); });
   };
   document.addEventListener('mouseout', onOut);
 }
@@ -464,22 +464,86 @@ function showToast(data = {}) {
   setTimeout(() => toast.remove(), 8000);
 }
 
-// iOS / in-app fallback: a wa.me link opens a user-initiated WhatsApp thread,
-// which is the compliant opt-in path there (phase-2 §6.3).
+/* ------------------- surface: WhatsApp offer (V54) ---------------------- */
+// The number capture Indian D2C stores run before checkout, as a click-to-
+// WhatsApp opt-in: "Unlock 10% off: get your code on WhatsApp". One tap opens
+// WhatsApp with the message ready; the shopper sends it, Engage answers with
+// the code at once. Their own message is the opt-in (registered wording
+// wa_offer_v1, shown under the button) and proves the number; the ref in it
+// ties the number to this browser, so a cart they abandon later can be
+// recovered on WhatsApp even if they never type a number at checkout.
+// Engage supplies the number and wording; at most once a week after "No thanks".
+let waLinkP;
+function waLink() {
+  waLinkP ??= (async () => {
+    const res = await post('/wa-link', { cartToken: await cartToken().catch(() => null) });
+    return res.status === 200 ? res.json() : null;
+  })().catch(() => null);
+  return waLinkP;
+}
+
+function waOfferEligible() {
+  if (PROMPT.waOffer === false || store.get('wa-captured')) return false;
+  if (/^\/(cart|checkouts?|account|orders)/.test(location.pathname)) return false;
+  const dismissedAt = Number(store.get('wa-offer-dismissed') || 0);
+  return Date.now() - dismissedAt >= Number(PROMPT.waOfferReaskDays ?? 7) * DAY;
+}
+
+/** @returns whether the offer was shown (so the caller does not stack a push ask on it) */
+export async function waOfferAsk(surface = 'browse') {
+  if (!waOfferEligible() || document.querySelector('.engage-ask:not(.engage-ask--out)')) return false;
+  const link = await waLink();
+  if (!link || !link.number || !waOfferEligible() || document.querySelector('.engage-ask:not(.engage-ask--out)')) return false;
+  session.set('asked', '1');
+  track('wa_offer', 'soft_shown', surface);
+  const modal = PROMPT.backdrop !== false;
+  const done = (accepted) => {
+    document.removeEventListener('keydown', onKey);
+    card.classList.remove('engage-ask--in');
+    card.classList.add('engage-ask--out');
+    backdrop?.classList.remove('engage-backdrop--in');
+    setTimeout(() => { card.remove(); backdrop?.remove(); }, 200);
+    if (accepted) { store.set('wa-captured', '1'); track('wa_offer', 'soft_accepted', surface); }
+    else { store.set('wa-offer-dismissed', String(Date.now())); track('wa_offer', 'soft_dismissed', surface); }
+  };
+  const onKey = (e) => { if (e.key === 'Escape') done(false); };
+  const title = link.offer ? `Unlock ${link.offer} on your first order` : 'Get order updates on WhatsApp';
+  const go = el('a', { class: 'engage-btn engage-btn--primary engage-btn--wa', target: '_blank', rel: 'noopener',
+    href: `https://wa.me/${link.number}?text=${encodeURIComponent(link.message)}`, onclick: () => done(true) },
+    whatsappIcon(), link.offer ? 'Get my code on WhatsApp' : 'Chat on WhatsApp');
+  const no = el('button', { class: 'engage-btn engage-btn--quiet', type: 'button', onclick: () => done(false) }, 'No thanks');
+  const benefits = (link.offer ? ['Your code, instantly on WhatsApp'] : []).concat(['Order and delivery updates', 'New drops before anyone else']);
+  const card = el('div', { class: 'engage-ask engage-ask--wa' + (modal ? ' engage-ask--modal' : ''), role: 'dialog',
+                           'aria-modal': modal ? 'true' : 'false', 'aria-label': title },
+    el('div', { class: 'engage-ask__head' },
+      PROMPT.logo ? el('img', { class: 'engage-ask__logo', src: PROMPT.logo, alt: '' }) : '',
+      el('strong', { class: 'engage-ask__title' }, title)),
+    el('ul', { class: 'engage-ask__benefits' }, ...benefits.map((b) => el('li', {}, b))),
+    el('div', { class: 'engage-ask__actions' }, go, no),
+    // The registered consent wording (wa_offer_v1), word for word.
+    el('p', { class: 'engage-ask__text' }, link.copy || ''));
+  const backdrop = modal ? el('div', { class: 'engage-backdrop', onclick: () => done(false) }) : null;
+  document.addEventListener('keydown', onKey);
+  if (backdrop) document.body.append(backdrop);
+  document.body.append(card);
+  setTimeout(() => { card.classList.add('engage-ask--in'); backdrop?.classList.add('engage-backdrop--in'); }, 30);
+  return true;
+}
+
+function whatsappIcon() {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('width', '20'); svg.setAttribute('height', '20');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('fill', 'currentColor');
+  path.setAttribute('d', 'M12.04 2a9.9 9.9 0 0 0-8.5 15l-1.4 5 5.2-1.36A9.9 9.9 0 1 0 12.04 2Zm0 18.06a8.2 8.2 0 0 1-4.18-1.15l-.3-.18-3.09.81.83-3.01-.2-.31a8.22 8.22 0 1 1 6.94 3.84Zm4.5-6.15c-.25-.12-1.46-.72-1.69-.8-.23-.08-.39-.12-.56.12-.16.25-.64.8-.79.97-.14.16-.29.18-.54.06a6.7 6.7 0 0 1-3.34-2.92c-.25-.43.25-.4.72-1.34.08-.16.04-.31-.02-.43-.06-.12-.56-1.34-.76-1.83-.2-.48-.4-.42-.56-.42h-.48a.92.92 0 0 0-.66.31 2.78 2.78 0 0 0-.87 2.07 4.83 4.83 0 0 0 1.01 2.56 11.05 11.05 0 0 0 4.23 3.74c1.58.68 2.2.74 2.99.62a2.55 2.55 0 0 0 1.68-1.18 2.08 2.08 0 0 0 .14-1.18c-.06-.1-.22-.16-.47-.29Z');
+  svg.append(path);
+  return svg;
+}
+
+// Kept for theme code that calls it: the WhatsApp offer replaced the old bar.
 function showWhatsAppOptIn(surface) {
-  const num = (CFG.waNumber || '').replace(/[^0-9]/g, '');
-  if (!num) return;
-  if (store.get('wa-dismissed')) return;
-  // wa_inthread_v1 (V14): the shopper sends this themselves, which is the opt-in.
-  const msg = encodeURIComponent('Yes, send me order updates, size-back-in-stock alerts and offers on WhatsApp.');
-  const link = el('a', { class: 'engage-btn engage-btn--primary', href: `https://wa.me/${num}?text=${msg}`,
-    target: '_blank', rel: 'noopener', onclick: () => { track(surface, 'soft_accepted'); bar.remove(); } },
-    'Get updates on WhatsApp');
-  const close = el('button', { class: 'engage-bar__close', 'aria-label': 'Dismiss',
-    onclick: () => { store.set('wa-dismissed', '1'); bar.remove(); } }, '×');
-  const bar = el('div', { class: 'engage-bar' },
-    el('span', {}, CFG.copy.whatsapp || 'Get order and delivery updates on WhatsApp'), link, close);
-  document.body.append(bar);
+  return waOfferAsk(surface);
 }
 
 /* ---------------------------------- boot --------------------------------- */
@@ -492,4 +556,4 @@ if (store.get('dismissed')) showBell();
 
 // Public surface for theme code: onclick="EngagePush.ask('add_to_cart')",
 // and a WhatsApp cart checkbox can call EngagePush.setWhatsAppOptIn(checked).
-window.EngagePush = { ask, setWhatsAppOptIn, showWhatsAppOptIn };
+window.EngagePush = { ask, setWhatsAppOptIn, showWhatsAppOptIn, waOfferAsk };

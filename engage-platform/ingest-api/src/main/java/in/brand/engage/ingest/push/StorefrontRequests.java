@@ -16,7 +16,7 @@ public final class StorefrontRequests {
     static final Set<String> PERMISSION_SURFACES = Set.of("add_to_cart", "notify_me", "thank_you", "settings", "browse",
             "product", "exit_intent", "bell");
     static final Set<String> PROMPT_SURFACES = Set.of("add_to_cart", "notify_me", "thank_you", "cart", "browse",
-            "product", "exit_intent", "bell");
+            "product", "exit_intent", "bell", "wa_offer");
     static final Set<String> PROMPT_STEPS = Set.of(
             "soft_shown", "soft_accepted", "soft_dismissed",
             "native_granted", "native_denied", "native_dismissed",
@@ -69,6 +69,14 @@ public final class StorefrontRequests {
     public record Cart(String anonId, String cartToken) {
         public Cart validate() {
             return new Cart(anon(anonId), required(cartToken, "cartToken", 256));
+        }
+    }
+
+    /** "Get my code on WhatsApp" (V54): a one-time ref for this browser. */
+    @Serdeable
+    public record WaLink(String anonId, String cartToken) {
+        public WaLink validate() {
+            return new WaLink(anon(anonId), optional(cartToken, "cartToken", 256));
         }
     }
 

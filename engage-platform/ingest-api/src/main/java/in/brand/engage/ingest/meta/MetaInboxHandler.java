@@ -87,9 +87,12 @@ public class MetaInboxHandler implements InboxHandler {
     private final CapabilityService capability;
     private final EventWriter events;
     private final IngestMetrics metrics;
+    private final in.brand.engage.ingest.wa.WaOffers offers;
 
     public MetaInboxHandler(IdentityResolver identities, ConsentWriter consents, CapabilityService capability,
-                            EventWriter events, IngestMetrics metrics, DeliveryReplies deliveryReplies) {
+                            EventWriter events, IngestMetrics metrics, DeliveryReplies deliveryReplies,
+                            in.brand.engage.ingest.wa.WaOffers offers) {
+        this.offers = offers;
         this.deliveryReplies = deliveryReplies;
         this.identities = identities;
         this.consents = consents;
@@ -445,6 +448,14 @@ public class MetaInboxHandler implements InboxHandler {
                         List.<String[]>of(new String[] {"whatsapp", "marketing"}));
                 case "optin" -> optIn(c, identity, ref, m.at());
                 default -> {
+                    // "Get my code on WhatsApp" (V54): their opt-in, and the link to their browsing session.
+                    var requester = "text".equals(m.type())
+                            ? offers.claim(c, identity, msisdn, m.from(), m.text(), m.id(), m.at()) : null;
+                    if (requester != null) {
+                        events.write(c, requester, "wa_offer_requested", "meta", "wa_msg:" + m.id(),
+                                Map.<String, Object>of("message_id", m.id()));
+                        continue;
+                    }
                     var name = m.payload() != null && QUICK_REPLIES.contains(m.payload()) ? m.payload() : "wa_message_received";
                     var props = new HashMap<String, Object>();
                     props.put("message_id", m.id());

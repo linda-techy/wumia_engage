@@ -380,6 +380,18 @@ class InboxAutomationTest {
         assertEquals("template|" + operator, q("SELECT kind || '|' || sent_by FROM wa_messages WHERE direction = 'out' AND status = 'sent'"));
     }
 
+    @Test void a_code_request_from_the_storefront_gets_the_code_with_a_link_that_applies_it() {
+        setting("journey.welcome.discount_code", "*", "\"WELCOME10\"");
+        setting("journey.welcome.discount_label", "*", "\"10% off\"");
+        inbound("text", "Hi WUMIKA! Please send my 10% off code. (ref K7Q2MX)", "wa_offer_requested", null, java.time.Duration.ZERO);
+        dispatcher.dispatchOnce();
+        assertEquals(1, wa.all.size(), "the code, not a greeting as well");
+        var body = last().body();
+        assertTrue(body.startsWith("Welcome to WUMIKA, Mary! ✨ Here's your 10% off code: *WELCOME10*"), body);
+        assertTrue(body.contains("https://www.wumika.com/discount/WELCOME10?redirect=%2Fcollections%2Fall"), body);
+        assertTrue(InboxAutoReply.welcome("Mary", null, null).contains("order updates, new drops and offers"));
+    }
+
     /* ---------------------------- staff alerts ---------------------------- */
 
     void subscribe(String endpoint) {

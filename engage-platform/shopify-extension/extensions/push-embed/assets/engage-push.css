@@ -142,3 +142,9 @@ div.engage-backdrop:empty, .engage-backdrop { display: block; }
   .engage-toast, .engage-ask, .engage-backdrop, .engage-guide { transition: none; }
   .engage-guide__arrow { animation: none; }
 }
+
+/* The WhatsApp offer (V54): WhatsApp's own green, so the shopper knows where the tap goes. */
+.engage-btn--wa { display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  background: #25d366 !important; border-color: #25d366 !important; color: #fff !important; text-decoration: none; }
+.engage-btn--wa:hover { background: #1ebe5b !important; }
+.engage-ask--wa .engage-ask__actions .engage-btn--wa { flex: 1 1 auto; }

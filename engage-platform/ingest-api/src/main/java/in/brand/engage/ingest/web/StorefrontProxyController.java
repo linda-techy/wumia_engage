@@ -13,6 +13,7 @@ import in.brand.engage.ingest.push.StorefrontRequests.PromptEvent;
 import in.brand.engage.ingest.push.StorefrontRequests.Refresh;
 import in.brand.engage.ingest.push.StorefrontRequests.Register;
 import in.brand.engage.ingest.push.StorefrontRequests.Unregister;
+import in.brand.engage.ingest.push.StorefrontRequests.WaLink;
 import in.brand.engage.ingest.push.SubscriberService;
 import in.brand.engage.ingest.push.SubscriberService.Outcome;
 import io.micronaut.http.HttpHeaders;
@@ -60,11 +61,16 @@ public class StorefrontProxyController {
     private final SubscriberService subscribers;
     private final RateLimiter limiter;
     private final PushEngagement engagement;
+    private final in.brand.engage.ingest.wa.WaOffers waOffers;
+    private final in.brand.engage.persistence.Db db;
     private final String serviceWorker;
     private final String serviceWorkerVersion;
 
     public StorefrontProxyController(AppProxyVerifier verifier, SubscriberService subscribers, RateLimiter limiter,
-                                     PushEngagement engagement) {
+                                     PushEngagement engagement, in.brand.engage.ingest.wa.WaOffers waOffers,
+                                     in.brand.engage.persistence.Db db) {
+        this.waOffers = waOffers;
+        this.db = db;
         this.verifier = verifier;
         this.subscribers = subscribers;
         this.limiter = limiter;
@@ -139,6 +145,22 @@ public class StorefrontProxyController {
         var r = body.validate();
         limit("cart", r.anonId(), 60, Duration.ofHours(1));
         return status(subscribers.cart(ctx, r));
+    }
+
+    /**
+     * "Get my code on WhatsApp" (V54): a one-time ref and the message the
+     * shopper will send; 204 when no WhatsApp number is set. Nothing about a
+     * customer is stored until their own WhatsApp message arrives.
+     */
+    @Post("/wa-link")
+    @ExecuteOn(TaskExecutors.BLOCKING)
+    public HttpResponse<?> waLink(HttpRequest<?> request, @Body WaLink body) {
+        verify(request);
+        var r = body.validate();
+        limit("wa-link", r.anonId(), 20, Duration.ofHours(1));
+        var cart = r.cartToken() == null ? null : in.brand.engage.core.shopify.CartTokens.normalise(r.cartToken());
+        var link = db.inTx(c -> waOffers.link(c, r.anonId(), cart));
+        return link.<HttpResponse<?>>map(HttpResponse::ok).orElseGet(HttpResponse::noContent);
     }
 
     @Post("/notify-me")
