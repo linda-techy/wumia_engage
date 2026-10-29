@@ -91,6 +91,7 @@ class MetaInboxTest {
 
         assertEquals("delivered", q("SELECT status FROM sends WHERE provider_id = '" + WAMID + "'"));
         assertEquals("CAPABLE", q("SELECT state FROM channel_capability WHERE identity_id = '" + identity + "'"));
+        assertEquals("1", q("SELECT count(*) FROM events WHERE name = 'wa_delivered'"), "once, though Meta sent it twice: ends an order update");
         assertEquals("1|12", q("SELECT messages || '|' || paise FROM spend_ledger WHERE channel = 'whatsapp' AND category = 'utility'"),
                 "booked once, at the V8 utility rate");
     }

@@ -36,6 +36,7 @@ class OrderTrackingTest {
     @Inject TrackRef refs;
     @Inject WorkerTestBeans.FakeWhatsApp wa;
     @Inject WorkerTestBeans.FakeSms sms;
+    @Inject WorkerTestBeans.FakePush push;
 
     UUID identity;
     String orderId;
@@ -83,7 +84,7 @@ class OrderTrackingTest {
         var call = wa.all.getLast().whatsapp();
         assertEquals("order_confirmed_v1", call.name());
         assertEquals(List.of("Priya", "#1042", "₹12,499"), call.bodyParams());
-        assertEquals("exhausted|sent", run(OrderTracking.CONFIRMED, "order:" + orderId));
+        assertEquals("waiting|", run(OrderTracking.CONFIRMED, "order:" + orderId), "the push fallback waits 2 h for delivery");
     }
 
     @Test void the_confirmation_shows_the_piece_once_meta_approves_the_photo_version() {
@@ -190,14 +191,56 @@ class OrderTrackingTest {
         assertTrue(sms.all.isEmpty());
     }
 
-    @Test void a_131026_moves_to_sms_at_once() {
+    @Test void a_131026_moves_on_at_once_to_push_then_sms() {
         wa.fail = new ChannelException.Permanent("wa_131026", "undeliverable", false, true, List.of());
         event("order_shipped", shipmentProps());
         dispatcher.dispatchOnce();
 
         assertEquals(1, wa.all.size());
-        assertEquals("1", text("SELECT max(a.step_index)::text FROM cascade_attempts a JOIN cascade_runs r ON r.id = a.run_id "
-                + "WHERE r.intent_key = 'order_shipped' AND r.subject_key = 'shipment:" + shipmentId + "'"), "no 2 h wait");
+        assertEquals("2", text("SELECT max(a.step_index)::text FROM cascade_attempts a JOIN cascade_runs r ON r.id = a.run_id "
+                + "WHERE r.intent_key = 'order_shipped' AND r.subject_key = 'shipment:" + shipmentId + "'"),
+                "no 2 h wait: push (no device here, skipped) and SMS at once");
+    }
+
+    /** SMS on hold (owner, 2026-10-29): a customer without WhatsApp who allowed notifications gets the update as a push. */
+    @Test void without_whatsapp_but_with_push_the_shipping_update_comes_as_a_push_at_once() {
+        var other = customer(false);
+        pushOn(other);
+        db.inTx(c -> Sql.update(c, "UPDATE orders SET identity_id = ? WHERE id = ?", other, orderId));
+        push.last = null;
+        eventFor(other, "order_shipped", shipmentProps(), clock.instant());
+        dispatcher.dispatchOnce();
+
+        assertTrue(wa.all.isEmpty());
+        assertNotNull(push.last, attemptsOf(OrderTracking.SHIPPED));
+        assertEquals("push_order_shipped_v1", push.last.templateKey());
+        assertTrue(push.last.url().contains("/apps/push/t/"), push.last.url());
+    }
+
+    @Test void a_delivered_whatsapp_ends_the_update_so_no_push_follows() {
+        pushOn(identity);
+        push.last = null;
+        event("order_shipped", shipmentProps());
+        dispatcher.dispatchOnce();
+        long sendId = wa.all.getLast().sendId();
+        event("wa_delivered", "{\"send_id\":" + sendId + "}");
+        dispatcher.dispatchOnce();
+        assertEquals("succeeded|delivered", run(OrderTracking.SHIPPED, "shipment:" + shipmentId));
+        clock.setIst("2026-09-28T14:30:00");
+        orchestrator.tick(200);
+        assertNull(push.last, "delivered on WhatsApp: no push as well");
+    }
+
+    @Test void an_undelivered_whatsapp_gets_the_push_after_its_wait() {
+        pushOn(identity);
+        push.last = null;
+        event("order_shipped", shipmentProps());
+        dispatcher.dispatchOnce();
+        assertNull(push.last, "WhatsApp first");
+        clock.setIst("2026-09-28T14:01:00");
+        orchestrator.tick(200);
+        assertNotNull(push.last, attemptsOf(OrderTracking.SHIPPED));
+        assertEquals("push_order_shipped_v1", push.last.templateKey());
     }
 
     @Test void customers_without_a_whatsapp_opt_in_keep_shopifys_notifications() {
@@ -254,6 +297,26 @@ class OrderTrackingTest {
             return null;
         });
         return id;
+    }
+
+    /** A live browser subscription with the soft-ask grant. */
+    private void pushOn(UUID who) {
+        db.inTx(c -> {
+            Sql.update(c, """
+                    INSERT INTO devices (identity_id, fcm_token, platform, origin, permission_source, consent_copy_ver)
+                    VALUES (?, ?, 'WEB', 'https://test.example', 'browse', 'push_v1')""", who, "tok-" + UUID.randomUUID());
+            for (var purpose : List.of("marketing", "transactional")) {
+                Sql.update(c, """
+                        INSERT INTO consents (identity_id, channel, purpose, state, source, occurred_at)
+                        VALUES (?, 'push', CAST(? AS purpose), 'granted', 'test', now() - interval '1 day')""", who, purpose);
+            }
+            return null;
+        });
+    }
+
+    private String attemptsOf(String intent) {
+        return text("SELECT string_agg(a.step_index || ':' || a.channel || ':' || a.result || ':' || COALESCE(a.reason,''), '; ' ORDER BY a.id) "
+                + "FROM cascade_attempts a JOIN cascade_runs r ON r.id = a.run_id WHERE r.intent_key = '" + intent + "'");
     }
 
     private void event(String name, String props) {

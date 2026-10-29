@@ -162,10 +162,19 @@ export async function ask(surface, { userInitiated = false } = {}) {
   // Point at the browser's own prompt while it is open: most "Block"s are
   // people who did not see where to tap. Gone as soon as they answer.
   const hideGuide = showGuide();
+  const askedAt = performance.now();
   const result = await Notification.requestPermission().finally(hideGuide);   // still within the click gesture
+  // An answer within a moment came from a setting (notifications off for the browser or phone, a
+  // private window), not from the shopper: "auto". A slower one is their own tap: "user".
+  const how = result === 'granted' ? undefined : (performance.now() - askedAt < 700 ? 'auto' : 'user');
   track(surface, result === 'granted' ? 'native_granted'
-               : result === 'denied' ? 'native_denied' : 'native_dismissed');
-  if (result !== 'granted') { if (result === 'default') showBell(); return null; }
+               : result === 'denied' ? 'native_denied' : 'native_dismissed', how);
+  if (result !== 'granted') {
+    // They said yes on our card and the browser said no: they want updates, so offer WhatsApp at once.
+    // A closed prompt (not a block) leaves the bell for another try when WhatsApp is not offered.
+    waOfferAsk(surface).then((shown) => { if (!shown && result === 'default') showBell(); });
+    return null;
+  }
   const token = await subscribe(surface);
   if (token) showWelcome();
   return token;

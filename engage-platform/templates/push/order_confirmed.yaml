@@ -1,0 +1,11 @@
+# Order updates by push (owner, 2026-10-29): for customers who allowed
+# notifications but have no WhatsApp opt-in, or whose WhatsApp was not
+# delivered within the wait. SMS is on hold. Utility: about their own order.
+# Sent on order_placed.
+key: push_order_confirmed_v1
+channel: push
+category: utility
+locales:
+  en: { title: "Order {{order_no}} confirmed ✨", body: "Thank you, {{name}}! We'll pack it within 1–2 business days." }
+vars: [name, order_no, url]
+samples: { name: "Priya", order_no: "#WUM1183" }

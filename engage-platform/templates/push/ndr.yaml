@@ -1,0 +1,11 @@
+# Order updates by push (owner, 2026-10-29): for customers who allowed
+# notifications but have no WhatsApp opt-in, or whose WhatsApp was not
+# delivered within the wait. SMS is on hold. Utility: about their own order.
+# Sent on delivery_failed.
+key: push_ndr_v1
+channel: push
+category: utility
+locales:
+  en: { title: "We missed you today", body: "The courier couldn't deliver order {{order_no}}. Tap to tell us on WhatsApp when to come." }
+vars: [order_no, url]
+samples: { order_no: "#WUM1183" }

@@ -1,0 +1,11 @@
+# Order updates by push (owner, 2026-10-29): for customers who allowed
+# notifications but have no WhatsApp opt-in, or whose WhatsApp was not
+# delivered within the wait. SMS is on hold. Utility: about their own order.
+# Sent on refund_initiated.
+key: push_refund_v1
+channel: push
+category: utility
+locales:
+  en: { title: "Refund started for {{order_no}}", body: "{{amount}} is on its way back to you in {{days}}." }
+vars: [amount, days, order_no, url]
+samples: { amount: "₹1,499", days: "5-7 working days", order_no: "#WUM1183" }

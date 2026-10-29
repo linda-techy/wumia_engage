@@ -165,8 +165,8 @@ public class SubscriberService {
     /** Pseudonymous funnel metric: never resolves or creates an identity. */
     public void promptEvent(PromptEvent e) {
         db.inTx(c -> Sql.update(c, """
-                INSERT INTO push_prompt_events (anon_id, surface, step, browser, platform)
-                VALUES (?, ?, ?, ?, ?)""", e.anonId(), e.surface(), e.step(), e.browser(), e.platform()));
+                INSERT INTO push_prompt_events (anon_id, surface, step, browser, platform, reason)
+                VALUES (?, ?, ?, ?, ?, ?)""", e.anonId(), e.surface(), e.step(), e.browser(), e.platform(), e.reason()));
     }
 
     public Outcome cart(ProxyContext ctx, Cart r) {

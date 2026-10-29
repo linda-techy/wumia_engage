@@ -42,7 +42,8 @@ public class WhatsAppSignals implements EventConsumer {
 
     @Override
     public boolean accepts(String eventName) {
-        return eventName.equals("wa_read") || eventName.equals("wa_failed") || REPLIES.contains(eventName);
+        return eventName.equals("wa_read") || eventName.equals("wa_delivered") || eventName.equals("wa_failed")
+                || REPLIES.contains(eventName);
     }
 
     @Override
@@ -51,6 +52,11 @@ public class WhatsAppSignals implements EventConsumer {
             case "wa_read" -> {
                 var sendId = e.props().get("send_id");
                 if (sendId != null) orchestrator.onSendSignal(c, Long.parseLong(sendId), "read");
+            }
+            case "wa_delivered" -> {
+                // Only intents that succeed on delivery (order updates) take it; promotions ignore it.
+                var sendId = e.props().get("send_id");
+                if (sendId != null) orchestrator.onSendSignal(c, Long.parseLong(sendId), "delivered");
             }
             case "wa_failed" -> {
                 var sendId = e.props().get("send_id");

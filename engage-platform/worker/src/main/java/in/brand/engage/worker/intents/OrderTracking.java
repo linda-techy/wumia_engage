@@ -82,20 +82,32 @@ public class OrderTracking implements EventConsumer {
             return Step.whatsapp(template).require(Guard.WA_CAPABLE_OR_UNKNOWN);
         }
 
+        /**
+         * The push after the WhatsApp (owner, 2026-10-29, SMS on hold): at once when WhatsApp is not
+         * possible (no opt-in, a number without it), otherwise only if the WhatsApp is not delivered
+         * within its wait. Order news, so quiet hours do not hold it.
+         */
+        private static Step push(String template) {
+            return Step.push(template, Duration.ofHours(24)).require(Guard.HAS_LIVE_DEVICE).urgent();
+        }
+
         @Bean @Singleton CascadeDefinition orderConfirmed() {
-            return new CascadeDefinition(CONFIRMED, Priority.TRANSACTIONAL, List.of(wa("order_confirmed_v2")))
-                    .succeedsOn("read");
+            return new CascadeDefinition(CONFIRMED, Priority.TRANSACTIONAL, List.of(
+                    wa("order_confirmed_v2").waitAfter(Duration.ofHours(2)),
+                    push("push_order_confirmed_v1"))).succeedsOn("read", "delivered");
         }
 
         @Bean @Singleton CascadeDefinition orderShipped() {
             return new CascadeDefinition(SHIPPED, Priority.TRANSACTIONAL, List.of(
                     wa("order_shipped_v1").waitAfter(Duration.ofHours(2)),
+                    push("push_order_shipped_v1"),
                     Step.sms("sms_order_shipped"))).succeedsOn("read", "delivered");
         }
 
         @Bean @Singleton CascadeDefinition outForDelivery() {
             return new CascadeDefinition(OUT_FOR_DELIVERY, Priority.TRANSACTIONAL, List.of(
                     wa("out_for_delivery_v1").waitAfter(Duration.ofMinutes(30)),
+                    push("push_out_for_delivery_v1"),
                     Step.sms("sms_out_for_delivery"))).succeedsOn("read", "delivered");
         }
 
@@ -103,12 +115,14 @@ public class OrderTracking implements EventConsumer {
         @Bean @Singleton CascadeDefinition ndrRaised() {
             return new CascadeDefinition(NDR, Priority.TRANSACTIONAL, List.of(
                     wa("ndr_raised_v1").waitAfter(Duration.ofHours(1)),
-                    Step.sms("sms_ndr"))).succeedsOn("replied");
+                    push("push_ndr_v1").waitAfter(Duration.ofHours(1)),
+                    Step.sms("sms_ndr"))).succeedsOn("replied", "clicked");
         }
 
         @Bean @Singleton CascadeDefinition refundInitiated() {
-            return new CascadeDefinition(REFUND, Priority.TRANSACTIONAL, List.of(wa("refund_initiated_v1")))
-                    .succeedsOn("read");
+            return new CascadeDefinition(REFUND, Priority.TRANSACTIONAL, List.of(
+                    wa("refund_initiated_v1").waitAfter(Duration.ofHours(2)),
+                    push("push_refund_v1"))).succeedsOn("read", "delivered");
         }
     }
 
@@ -153,12 +167,14 @@ public class OrderTracking implements EventConsumer {
 
         if (e.identityId() == null || e.occurredAt().isBefore(clock.instant().minus(STALE))) return List.of();
         var order = order(c, orderId, e.identityId());
-        if (order == null || order.cancelled() || !order.waOptedIn()) return List.of();
+        // WhatsApp opt-in, or a push subscription (SMS on hold, 2026-10-29); otherwise Shopify's own notifications.
+        if (order == null || order.cancelled() || !(order.waOptedIn() || order.pushReachable())) return List.of();
 
         var vars = new HashMap<String, String>();
         vars.put("order_no", order.number());
         vars.put("name", order.firstName() == null ? "there" : order.firstName());
         vars.put("amount", rupees(order.totalPaise()));
+        vars.put("url", "https://www.wumika.com/account");          // the push's tap: their orders
         return switch (e.name()) {
             case "order_placed" -> {
                 // The confirmation's header photo: the most expensive piece in the order.
@@ -177,18 +193,33 @@ public class OrderTracking implements EventConsumer {
                 vars.put("courier", courier(e.props().get("carrier")));
                 vars.put("awb", e.props().getOrDefault("awb", ""));
                 vars.put("track_ref", refs.of(Long.parseLong(shipmentId)));
+                vars.put("url", "https://www.wumika.com/apps/push/t/" + vars.get("track_ref"));   // the push opens tracking
                 yield switch (e.name()) {
                     case "order_shipped" -> List.of(intent(e.identityId(), SHIPPED, shipment, vars));
                     case "out_for_delivery" -> List.of(intent(e.identityId(), OUT_FOR_DELIVERY, shipment, vars));
                     case "delivery_failed" -> {
                         var reason = e.props().get("ndr_reason");
                         vars.put("reason", reason == null || reason.isBlank() ? "the courier could not complete it" : reason);
+                        // The push's tap opens a WhatsApp chat about this order, ready to say when to come.
+                        var chat = whatsappChat(c, "Hi WUMIKA, about the delivery of my order " + order.number() + ": please deliver ");
+                        if (chat != null) vars.put("url", chat);
                         yield List.of(intent(e.identityId(), NDR, shipment + ":ndr", vars));
                     }
                     default -> List.of();
                 };
             }
         };
+    }
+
+    /** wa.me to the number shoppers message (Settings: whatsapp.display_number), with the text ready; null without one. */
+    static String whatsappChat(Connection c, String text) throws SQLException {
+        try (var ps = Sql.prepare(c, """
+                SELECT COALESCE((SELECT value #>> '{}' FROM config_current WHERE key = 'whatsapp.display_number' AND selector = '*' LIMIT 1),
+                                (SELECT default_value #>> '{}' FROM config_keys WHERE key = 'whatsapp.display_number'))"""); var rs = ps.executeQuery()) {
+            var number = rs.next() && rs.getString(1) != null ? rs.getString(1).replaceAll("\\D", "") : "";
+            return number.length() < 10 ? null
+                    : "https://wa.me/" + number + "?text=" + java.net.URLEncoder.encode(text, java.nio.charset.StandardCharsets.UTF_8);
+        }
     }
 
     private static String topProduct(Connection c, String orderId) throws SQLException {
@@ -210,20 +241,23 @@ public class OrderTracking implements EventConsumer {
         orchestrator.cancel(c, NDR, shipment + ":ndr", reason);
     }
 
-    record Order(String number, String firstName, long totalPaise, boolean cancelled, boolean waOptedIn) {}
+    record Order(String number, String firstName, long totalPaise, boolean cancelled, boolean waOptedIn, boolean pushReachable) {}
 
     private static Order order(Connection c, String orderId, UUID identity) throws SQLException {
         try (var ps = Sql.prepare(c, """
                 SELECT o.order_number, o.total_paise, o.cancelled_at IS NOT NULL AS cancelled,
                        p.attrs->>'first_name' AS first_name,
                        EXISTS (SELECT 1 FROM consent_current k WHERE k.identity_id = ? AND k.channel = 'whatsapp'
-                                  AND k.state = 'granted') AS wa
+                                  AND k.state = 'granted') AS wa,
+                       EXISTS (SELECT 1 FROM devices d WHERE d.identity_id = ? AND d.active)
+                         AND EXISTS (SELECT 1 FROM consent_current k WHERE k.identity_id = ? AND k.channel = 'push'
+                                        AND k.state = 'granted') AS push
                   FROM orders o LEFT JOIN profiles p ON p.identity_id = o.identity_id
-                 WHERE o.id = ?""", identity, orderId);
+                 WHERE o.id = ?""", identity, identity, identity, orderId);
              var rs = ps.executeQuery()) {
             if (!rs.next()) return null;
             return new Order(rs.getString("order_number"), rs.getString("first_name"), rs.getLong("total_paise"),
-                    rs.getBoolean("cancelled"), rs.getBoolean("wa"));
+                    rs.getBoolean("cancelled"), rs.getBoolean("wa"), rs.getBoolean("push"));
         }
     }
 

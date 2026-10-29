@@ -261,6 +261,8 @@ public class MetaInboxHandler implements InboxHandler {
                                    status = CASE WHEN status IN ('queued', 'sent') THEN 'delivered'::send_status ELSE status END
                              WHERE id = ?""", utc(s.at()), send.id());
                     capability.observe(c, send.identityId(), Channel.WHATSAPP, DeliveryOutcome.of(DeliveryOutcome.Type.DELIVERED, s.at()));
+                    // Ends an order update that succeeds on delivery, before its push or SMS fallback.
+                    events.write(c, send.identityId(), "wa_delivered", "meta", "wa_delivered:" + s.wamid(), signal(send));
                 }
                 case "read" -> {
                     Sql.update(c, """

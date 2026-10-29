@@ -279,10 +279,16 @@ class StorefrontSubscriberTest {
         assertEquals(400, post(signedUri("/prompt-event", null),
                 Map.of("anonId", anon(), "surface", "add_to_cart", "step", "made_up_step")));
 
-        // A failure reason is accepted (and only logged).
+        // A failure reason is kept (V55), cleaned of anything but plain characters.
         assertEquals(204, post(signedUri("/prompt-event", null), Map.of("anonId", anon(), "surface", "add_to_cart",
                 "step", "token_failed", "reason", "messaging/token-subscribe-failed <script>")));
         assertEquals(1, count("SELECT count(*) FROM push_prompt_events WHERE step = 'token_failed'"));
+        assertEquals("messaging/token-subscribe-failed ?script?", one("SELECT reason FROM push_prompt_events WHERE step = 'token_failed'"));
+
+        // A browser that blocks before the shopper could answer: a setting, not their choice.
+        assertEquals(204, post(signedUri("/prompt-event", null), Map.of("anonId", anon(), "surface", "browse",
+                "step", "native_denied", "reason", "auto")));
+        assertEquals("auto", one("SELECT reason FROM push_prompt_events WHERE step = 'native_denied'"));
     }
 
     @Test
