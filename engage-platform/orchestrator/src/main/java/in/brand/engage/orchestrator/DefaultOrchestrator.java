@@ -225,6 +225,15 @@ public class DefaultOrchestrator implements MessageOrchestrator {
                 continue;
             }
 
+            // Too soon after this run's last message on the channel (the step before was skipped):
+            // wait for the gap, before a single-use code is made. Not a deferral: nothing was refused.
+            if (step.spacing() != null) {
+                var lastSent = lastSent(current.id(), step.channel());
+                if (lastSent != null && lastSent.plus(step.spacing()).isAfter(clock.instant())) {
+                    return holdUntil(current, lastSent.plus(step.spacing()));
+                }
+            }
+
             var vars = vars(current.id());
             if (step.varsFrom() != null) {
                 // Values only the send moment can give (a single-use code); skipped like a guard when unavailable.
@@ -330,10 +339,31 @@ public class DefaultOrchestrator implements MessageOrchestrator {
     }
 
     private void attempt(CascadeRun run, CascadeDefinition.Step step, Long sendId, String result, String reason) {
+        // Stamped with the orchestrator's clock: step spacing is measured from it.
         db.inTx(c -> Sql.update(c, """
-                INSERT INTO cascade_attempts (run_id, step_index, channel, send_id, result, reason)
-                VALUES (?, ?, CAST(? AS channel), ?, ?, ?)""",
-                run.id(), run.stepIndex(), step.channel().dbName(), sendId, result, reason));
+                INSERT INTO cascade_attempts (run_id, step_index, channel, send_id, result, reason, created_at)
+                VALUES (?, ?, CAST(? AS channel), ?, ?, ?, ?)""",
+                run.id(), run.stepIndex(), step.channel().dbName(), sendId, result, reason, utc(clock.instant())));
+    }
+
+    /** When this run last sent on the channel, or null. */
+    private java.time.Instant lastSent(long runId, in.brand.engage.core.messaging.Channel channel) {
+        return db.inTx(c -> {
+            try (var ps = Sql.prepare(c, """
+                    SELECT max(created_at) FROM cascade_attempts WHERE run_id = ? AND channel = CAST(? AS channel) AND result = 'sent'""",
+                    runId, channel.dbName()); var rs = ps.executeQuery()) {
+                rs.next();
+                var at = rs.getObject(1, OffsetDateTime.class);
+                return at == null ? null : at.toInstant();
+            }
+        });
+    }
+
+    /** The same step again at {@code until}; deferrals untouched. */
+    private CascadeRun holdUntil(CascadeRun run, java.time.Instant until) {
+        return update(run.id(), """
+                UPDATE cascade_runs SET status = 'waiting', next_step_at = ?, updated_at = now()
+                 WHERE id = ? AND status IN ('active','waiting') RETURNING *""", utc(until), run.id());
     }
 
     private CascadeRun finish(CascadeRun run, String status, String outcome) {

@@ -56,14 +56,21 @@ public record CascadeDefinition(String intentKey, Priority priority, List<Step> 
      *                           (the STOP confirmation): policy lets it through without an opt-in
      * @param guards             all must pass, or the step is skipped at once (no wait consumed)
      * @param varsFrom           a {@link StepVars} provider asked for values at send time, or null
+     * @param spacing            at least this long after the run's last sent message on the same channel, or null:
+     *                           a step reached early (because the one before it was skipped) waits for it
      */
     public record Step(Channel channel, String templateKey, Duration ttl, boolean highUrgency,
                        boolean allowStaleDevices, Duration waitAfter, List<String> alternateTemplates, boolean reply,
-                       List<Guard> guards, String varsFrom) {
+                       List<Guard> guards, String varsFrom, Duration spacing) {
+
+        public Step(Channel channel, String templateKey, Duration ttl, boolean highUrgency, boolean allowStaleDevices,
+                    Duration waitAfter, List<String> alternateTemplates, boolean reply, List<Guard> guards, String varsFrom) {
+            this(channel, templateKey, ttl, highUrgency, allowStaleDevices, waitAfter, alternateTemplates, reply, guards, varsFrom, null);
+        }
 
         public Step(Channel channel, String templateKey, Duration ttl, boolean highUrgency, boolean allowStaleDevices,
                     Duration waitAfter, List<String> alternateTemplates, boolean reply, List<Guard> guards) {
-            this(channel, templateKey, ttl, highUrgency, allowStaleDevices, waitAfter, alternateTemplates, reply, guards, null);
+            this(channel, templateKey, ttl, highUrgency, allowStaleDevices, waitAfter, alternateTemplates, reply, guards, null, null);
         }
 
         public Step {
@@ -104,33 +111,44 @@ public record CascadeDefinition(String intentKey, Priority priority, List<Step> 
         }
 
         public Step urgent() {
-            return new Step(channel, templateKey, ttl, true, allowStaleDevices, waitAfter, alternateTemplates, reply, guards, varsFrom);
+            return new Step(channel, templateKey, ttl, true, allowStaleDevices, waitAfter, alternateTemplates, reply, guards, varsFrom, spacing);
         }
 
         public Step staleDevicesAllowed() {
-            return new Step(channel, templateKey, ttl, highUrgency, true, waitAfter, alternateTemplates, reply, guards, varsFrom);
+            return new Step(channel, templateKey, ttl, highUrgency, true, waitAfter, alternateTemplates, reply, guards, varsFrom, spacing);
         }
 
         public Step waitAfter(Duration wait) {
-            return new Step(channel, templateKey, ttl, highUrgency, allowStaleDevices, wait, alternateTemplates, reply, guards, varsFrom);
+            return new Step(channel, templateKey, ttl, highUrgency, allowStaleDevices, wait, alternateTemplates, reply, guards, varsFrom, spacing);
         }
 
         public Step require(Guard... more) {
             var all = new ArrayList<>(guards);
             all.addAll(List.of(more));
-            return new Step(channel, templateKey, ttl, highUrgency, allowStaleDevices, waitAfter, alternateTemplates, reply, all, varsFrom);
+            return new Step(channel, templateKey, ttl, highUrgency, allowStaleDevices, waitAfter, alternateTemplates, reply, all, varsFrom, spacing);
         }
 
         public Step orTemplate(String alternate) {
             var all = new ArrayList<>(alternateTemplates);
             all.add(alternate);
-            return new Step(channel, templateKey, ttl, highUrgency, allowStaleDevices, waitAfter, all, reply, guards, varsFrom);
+            return new Step(channel, templateKey, ttl, highUrgency, allowStaleDevices, waitAfter, all, reply, guards, varsFrom, spacing);
         }
 
         /** Ask the named {@link StepVars} provider for values just before this step sends. */
         public Step withVarsFrom(String provider) {
             return new Step(channel, templateKey, ttl, highUrgency, allowStaleDevices, waitAfter, alternateTemplates, reply,
-                    guards, provider);
+                    guards, provider, spacing);
+        }
+
+        /**
+         * Never sooner than {@code gap} after this run's last sent message on the
+         * same channel. A skipped step moves the run on at once, so without this a
+         * WhatsApp offer after a skipped push would follow the WhatsApp reminder within
+         * hours and meet the one-a-day marketing limit (2026-10-29).
+         */
+        public Step spacedFromLastSent(Duration gap) {
+            return new Step(channel, templateKey, ttl, highUrgency, allowStaleDevices, waitAfter, alternateTemplates, reply,
+                    guards, varsFrom, gap);
         }
 
         /** The first guard that fails for this person, or null when every guard passes. */

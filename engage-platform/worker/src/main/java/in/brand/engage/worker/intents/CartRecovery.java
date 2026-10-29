@@ -32,8 +32,9 @@ import java.util.Map;
  *           (skipped → the push goes at once instead)
  * +3 h      Push     push_cart_recovery_v1   a live browser subscription
  * +21½ h    WhatsApp cart_offer_v2           as above, and journey.abandon has a discount: the button opens
- *                                            the bag with the code applied. 24½ h after the first WhatsApp,
- *                                            clear of the one-a-day WhatsApp marketing limit
+ *                                            the bag with the code applied. Never sooner than 24 h 5 min after
+ *                                            the reminder (spacedFromLastSent), even when the push was skipped,
+ *                                            so it clears the one-a-day WhatsApp marketing limit
  * +24 h     Email    email_cart_v1           email marketing consent (skipped until SES is set up)
  * </pre>
  * SMS at 48 h (the playbook's last step) waits for a DLT-registered promotional template.
@@ -51,6 +52,11 @@ public class CartRecovery implements EventConsumer {
 
     public static final String INTENT = "cart_recovery";
     static final Duration TTL = Duration.ofHours(12);
+    /**
+     * The code comes at least this long after the reminder, even when the push between them is
+     * skipped: just past the one-a-day WhatsApp marketing limit (cap.whatsapp.marketing.1d).
+     */
+    static final Duration OFFER_SPACING = Duration.ofHours(24).plusMinutes(5);
 
     private final DefaultOrchestrator orchestrator;
     private final ConfigResolver config;
@@ -73,7 +79,7 @@ public class CartRecovery implements EventConsumer {
                     // 3 h + 21½ h: the offer lands 24½ h after the reminder, past the one-a-day WhatsApp marketing limit.
                     Step.push("push_cart_recovery_v1", TTL).require(Guard.HAS_LIVE_DEVICE).waitAfter(Duration.ofMinutes(21 * 60 + 30)),
                     Step.whatsapp("cart_offer_v2").require(wa).require(Guard.hasVar("discount"))
-                            .withVarsFrom(JourneyDiscount.NAME).waitAfter(Duration.ofHours(24)),
+                            .withVarsFrom(JourneyDiscount.NAME).spacedFromLastSent(OFFER_SPACING).waitAfter(Duration.ofHours(24)),
                     Step.email("email_cart_v1").require(Guard.HAS_EMAIL_MARKETING)));
         }
     }

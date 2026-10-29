@@ -117,6 +117,55 @@ class CheckoutAbandonTest {
         assertEquals("waiting|", run(checkout), "the email step follows in 12 h");
     }
 
+    /** No push (ambili, 2026-10-29): the skipped push must not pull the code forward into the one-a-day limit. */
+    @Test void without_push_the_code_still_waits_a_day_after_the_first_whatsapp_and_goes() {
+        db.inTx(c -> {
+            setConfig(c, "journey.abandon.discount_code", "\"WUMIKA10\"");
+            setConfig(c, "journey.abandon.discount_label", "\"10% off\"");
+            return null;
+        });
+        config.invalidate();
+        var who = customer(true, false);
+        abandon(who, 1249900);
+        at("12:31");
+        assertEquals(1, wa.all.size(), "the reminder at 30 min");
+        at("16:32");                                   // the push step: no push consent, skipped
+        assertEquals(1, wa.all.size(), "the code waits: " + attempts(checkout));
+        assertFalse(attempts(checkout).contains("FREQUENCY_CAP"), attempts(checkout));
+        clock.setIst("2026-09-29T12:20:00");           // 23¾ h after the reminder
+        orchestrator.tick(200);
+        assertEquals(1, wa.all.size(), "still under a day");
+        clock.setIst("2026-09-29T12:40:00");           // just past a day after the reminder
+        orchestrator.tick(200);
+        assertEquals(2, wa.all.size(), attempts(checkout));
+        assertEquals("checkout_offer_v1", wa.all.getLast().whatsapp().name());
+    }
+
+    @Test void without_push_the_cart_code_waits_a_day_after_the_reminder_and_goes() {
+        db.inTx(c -> {
+            setConfig(c, "journey.abandon.discount_code", "\"WUMIKA10\"");
+            setConfig(c, "journey.abandon.discount_label", "\"10% off\"");
+            Sql.update(c, """
+                    INSERT INTO wa_templates (key, language, provider_name, requested_category, approved_category, status, quality)
+                    VALUES ('cart_offer_v1', 'en', 'cart_offer_v1', 'marketing', 'marketing', 'APPROVED', 'GREEN')
+                    ON CONFLICT (provider_name, language) DO UPDATE SET status = 'APPROVED', quality = 'GREEN'""");
+            return null;
+        });
+        config.invalidate();
+        var who = customer(true, false);
+        cartRow(who, 1249900);
+        event(who, "cart_updated", "{\"cart_token\":\"" + cart + "\",\"item_count\":1}");
+        dispatcher.dispatchOnce();
+        at("12:31");
+        assertEquals("cart_reminder_v1", wa.all.getLast().whatsapp().name());
+        at("15:32");                                   // the push step: no push consent, skipped
+        assertEquals(1, wa.all.size(), "the code waits: " + attempts(cart));
+        clock.setIst("2026-09-29T13:05:00");
+        orchestrator.tick(200);
+        assertEquals("cart_offer_v1", wa.all.getLast().whatsapp().name(), attempts(cart));
+        assertFalse(attempts(cart).contains("FREQUENCY_CAP"), attempts(cart));
+    }
+
     @Test void unique_mode_makes_a_single_use_code_when_the_discount_message_goes() {
         uniqueCodes();
         var who = customer(true, true);
