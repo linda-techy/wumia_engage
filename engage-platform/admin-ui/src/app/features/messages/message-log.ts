@@ -1,6 +1,6 @@
 import { HttpClient, httpResource, HttpParams } from '@angular/common/http';
 import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { IstPipe, problemDetail } from '../../shared/format';
 import { ErrorState, LoadingState } from '../../shared/states';
@@ -115,9 +115,11 @@ function istDay(daysAgo = 0): string {
 export default class MessageLogPage {
   readonly #http = inject(HttpClient);
 
-  readonly channel = signal('');
-  readonly outcome = signal('');
-  readonly journey = signal('');
+  /** Filters can come in the link (the dashboard's rows: ?channel=, ?outcome=, ?journey=). */
+  readonly #query = inject(ActivatedRoute).snapshot.queryParamMap;
+  readonly channel = signal(this.#query.get('channel') ?? '');
+  readonly outcome = signal(this.#query.get('outcome') ?? '');
+  readonly journey = signal(this.#query.get('journey') ?? '');
   readonly from = signal(istDay(6));
   readonly to = signal(istDay(0));
   readonly q = signal('');
