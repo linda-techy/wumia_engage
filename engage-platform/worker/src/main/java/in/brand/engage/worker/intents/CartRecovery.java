@@ -139,6 +139,7 @@ public class CartRecovery implements EventConsumer {
             ProductImages.put(vars, ProductImages.byProductId(c, rs.getString("product_id")));
             vars.put("name", CheckoutAbandon.firstName(rs.getString("first_name")));
             vars.put("cart_value_paise", Long.toString(total));
+            vars.put("shipping_note", shippingNote(total, snapshot.longValue("journey.cart_recovery.free_shipping_paise", "*")));
             if (total >= snapshot.longValue("journey.cart_recovery.wa_min_cart_paise", "*")) vars.put(CheckoutAbandon.WA_OK, "1");
             // The day-later coupon uses the abandoned-checkout offer (journey.abandon.*): the same code rules.
             if (CheckoutAbandon.offerAllowed(c, identityId, e.occurredAt(), snapshot)) {
@@ -159,5 +160,13 @@ public class CartRecovery implements EventConsumer {
             var delay = Duration.ofMinutes(snapshot.longValue("journey.cart_recovery.start_delay_minutes", "*"));
             return List.of(new MessageIntent(identityId, INTENT, cartToken, Map.copyOf(vars), e.occurredAt().plus(delay)));
         }
+    }
+
+    /** The push's second line: how far a small bag is from free shipping, else the plain nudge. */
+    static String shippingNote(long totalPaise, long freeFromPaise) {
+        if (freeFromPaise > 0 && totalPaise > 0 && totalPaise < freeFromPaise) {
+            return "Add " + OrderTracking.rupees(freeFromPaise - totalPaise) + " more for FREE shipping.";
+        }
+        return "Complete your order when you're ready.";
     }
 }

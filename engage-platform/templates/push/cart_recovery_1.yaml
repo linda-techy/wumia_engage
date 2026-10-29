@@ -9,6 +9,6 @@ channel: push
 category: marketing
 cooldown: PT12H
 locales:
-  en:      { title: "Still in your bag: {{product}}", body: "It's saved for you. Complete your order when you're ready." }
-vars: [product, url, image]
-samples: { product: "Floral Anarkali Kurta" }
+  en:      { title: "Still in your bag: {{product}}", body: "It's saved for you. {{shipping_note}}" }
+vars: [product, shipping_note, url, image]
+samples: { product: "Floral Anarkali Kurta", shipping_note: "Add ₹150 more for FREE shipping." }

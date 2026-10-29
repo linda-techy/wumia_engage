@@ -103,6 +103,22 @@ class CartRecoveryTest {
         assertTrue(lastSend(cart).startsWith("sent|cart_offer"), "not held by the daily WhatsApp limit: " + lastSend(cart));
     }
 
+    /** Free shipping from ₹600 (the theme's FREE_SHIPPING_THRESHOLD): the push says how far a small bag is from it. */
+    @Test void a_bag_under_600_hears_how_much_more_gets_free_shipping() {
+        var id = subscriber(true);
+        var small = cart(id, 1, false);
+        db.inTx(c -> Sql.update(c, "UPDATE carts SET total_paise = 45000 WHERE cart_token = ?", small));
+        cartUpdated(id, small, clock.instant().minus(Duration.ofMinutes(50)));
+        dispatcher.dispatchOnce();
+        assertEquals("It's saved for you. Add ₹150 more for FREE shipping.", push.last.body());
+
+        var id2 = subscriber(true);
+        var big = cart(id2, 2, false);
+        cartUpdated(id2, big, clock.instant().minus(Duration.ofMinutes(50)));
+        dispatcher.dispatchOnce();
+        assertEquals("It's saved for you. Complete your order when you're ready.", push.last.body(), "₹2,499: already free");
+    }
+
     @Test void a_click_on_the_push_marks_the_cascade_succeeded() {
         var id = subscriber(true);
         var cart = cart(id, 1, false);
