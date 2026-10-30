@@ -100,7 +100,9 @@ public class InboxController {
             SELECT t.identity_id, t.last_message_at, t.last_inbound_at, t.last_preview, t.unread, t.status,
                    COALESCE(NULLIF(p.attrs->>'first_name', ''), NULLIF(p.attrs->>'wa_name', '')) AS name,
                    (SELECT k.value FROM identity_keys k WHERE k.identity_id = t.identity_id AND k.kind = 'phone' LIMIT 1) AS phone,
-                   p.wa_window_until AS window_until
+                   p.wa_window_until AS window_until,
+                   (SELECT m.referral->>'body' FROM wa_messages m
+                     WHERE m.identity_id = t.identity_id AND m.referral IS NOT NULL ORDER BY m.at DESC LIMIT 1) AS ad_body
               FROM wa_threads t LEFT JOIN profiles p ON p.identity_id = t.identity_id""";
 
     /** Conversations, newest first: open (default), done or all; {@code q} matches a name or number. */
@@ -194,7 +196,7 @@ public class InboxController {
                                NULL::text AS last_preview, 0 AS unread, 'open' AS status,
                                COALESCE(NULLIF(p.attrs->>'first_name', ''), NULLIF(p.attrs->>'wa_name', '')) AS name,
                                (SELECT k.value FROM identity_keys k WHERE k.identity_id = i.id AND k.kind = 'phone' LIMIT 1) AS phone,
-                               p.wa_window_until AS window_until
+                               p.wa_window_until AS window_until, NULL::text AS ad_body
                           FROM identities i LEFT JOIN profiles p ON p.identity_id = i.id
                          WHERE i.id = ? AND i.merged_into IS NULL""", id);
                 if (head.isEmpty()) throw Problems.notFound("no such customer");
@@ -212,7 +214,10 @@ public class InboxController {
             out.put("messages", Rows.list(c, """
                     SELECT * FROM (
                       SELECT m.id, m.direction, m.wamid, m.kind, m.body, m.media_id IS NOT NULL AS has_media, m.media_mime, m.media_name,
-                             m.template_key, (m.direction = 'out' AND m.sent_by IS NULL) AS automated, o.email AS sent_by, m.status, m.failed_reason, m.at
+                             m.template_key, (m.direction = 'out' AND m.sent_by IS NULL) AS automated, o.email AS sent_by, m.status, m.failed_reason, m.at,
+                             m.referral->>'source_type' AS ad_type, m.referral->>'source_id' AS ad_id, m.referral->>'source_url' AS ad_url,
+                             m.referral->>'headline' AS ad_headline, m.referral->>'body' AS ad_body, m.referral->>'media_type' AS ad_media,
+                             COALESCE(m.referral->>'thumbnail_url', m.referral->>'image_url') AS ad_image
                         FROM wa_messages m LEFT JOIN operators o ON o.id = m.sent_by
                        WHERE m.identity_id = ? ORDER BY m.at DESC LIMIT 300) x ORDER BY at""", id));
             out.put("windowOpen", windowOpen(c, id));

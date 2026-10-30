@@ -194,6 +194,26 @@ class MetaInboxTest {
         assertEquals("1", q("SELECT count(*) FROM events WHERE name = 'inbox_track' AND props->>'message_id' = 'wamid.IN.TAP'"));
     }
 
+    /** "Size?" from the WhatsApp button of an Instagram ad: staff see which ad (V57). */
+    @Test
+    void a_message_from_a_click_to_whatsapp_ad_keeps_the_ad() throws Exception {
+        send("""
+                {"object":"whatsapp_business_account","entry":[{"id":"W","changes":[{"field":"messages","value":{
+                 "messaging_product":"whatsapp","metadata":{"phone_number_id":"P"},
+                 "contacts":[{"profile":{"name":"Annie"},"wa_id":"%s"}],
+                 "messages":[{"from":"%s","id":"wamid.IN.AD","timestamp":"%d","type":"text","text":{"body":"Size?"},
+                              "referral":{"source_url":"https://www.instagram.com/p/Der_JFZASNh/","source_id":"120210000000001",
+                                          "source_type":"ad","headline":"Wumika","body":"Pathaswaram anklet",
+                                          "media_type":"video","video_url":"https://video.example/v.mp4",
+                                          "thumbnail_url":"https://scontent.example/t.jpg","ctwa_clid":"ARAkLkA8rmlFeiCktEJQ"}}]}}]}]}"""
+                .formatted(PHONE, PHONE, T0));
+        assertEquals("Size?|ad|120210000000001|Pathaswaram anklet|ARAkLkA8rmlFeiCktEJQ",
+                q("SELECT body || '|' || (referral->>'source_type') || '|' || (referral->>'source_id') || '|' || (referral->>'body') "
+                        + "|| '|' || (referral->>'ctwa_clid') FROM wa_messages WHERE wamid = 'wamid.IN.AD'"));
+        send(text("wamid.IN.AD2", "Price?", T0 + 5));
+        assertNull(q("SELECT referral FROM wa_messages WHERE wamid = 'wamid.IN.AD2'"), "only the message from the ad carries it");
+    }
+
     @Test
     void start_after_stop_grants_whatsapp_again() throws Exception {
         send(text("wamid.IN.STOP2", "stop", T0));

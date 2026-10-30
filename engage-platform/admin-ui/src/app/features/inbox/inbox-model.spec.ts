@@ -1,4 +1,4 @@
-import { fillName, InboxOrder, orderStatus, refusalText, timeLeft, trackingText, whatsappStatus, windowState } from './inbox-model';
+import { adTitle, fillName, InboxOrder, orderStatus, refusalText, timeLeft, trackingText, whatsappStatus, windowState } from './inbox-model';
 import { keyBytes } from './staff-alerts';
 
 const NOW = Date.parse('2026-10-27T12:00:00Z');
@@ -59,5 +59,11 @@ describe('staff alerts', () => {
   it('decodes the base64url public key to the 65-byte point', () => {
     const bytes = keyBytes('BAAB_-8');
     expect(Array.from(bytes)).toEqual([4, 0, 1, 255, 239]);
+  });
+
+  it('names the ad a chat came from by its first line of text', () => {
+    expect(adTitle({ adBody: '\nPathaswaram ✨\n\nFollow and comment for link', adHeadline: 'Wumika' })).toBe('Pathaswaram ✨');
+    expect(adTitle({ adBody: null, adHeadline: 'Wumika' })).toBe('Wumika');
+    expect(adTitle({})).toBe('an ad');
   });
 });

@@ -363,7 +363,7 @@ public class MetaInboxHandler implements InboxHandler {
     private void inbound(Connection c, String deliveryId) throws SQLException {
         record Msg(String id, String from, Instant at, String type, String text, String payload, String buttonText, String context,
                    String caption, String mediaId, String mediaMime, String mediaName, String location, String reaction,
-                   String waName) {}
+                   String waName, String referral) {}
         var list = new ArrayList<Msg>();
         try (var ps = Sql.prepare(c, """
                 SELECT m.v->>'id' AS id, m.v->>'from' AS sender, (m.v->>'timestamp')::bigint AS ts, m.v->>'type' AS type,
@@ -381,7 +381,8 @@ public class MetaInboxHandler implements InboxHandler {
                        CASE WHEN m.v->'location' IS NOT NULL THEN concat_ws(' ', m.v#>>'{location,name}', m.v#>>'{location,address}',
                             '(' || (m.v#>>'{location,latitude}') || ', ' || (m.v#>>'{location,longitude}') || ')') END AS location,
                        m.v#>>'{reaction,emoji}' AS reaction,
-                       jsonb_path_query_first(i.payload, '$.entry[*].changes[*].value.contacts[*].profile.name') #>> '{}' AS wa_name
+                       jsonb_path_query_first(i.payload, '$.entry[*].changes[*].value.contacts[*].profile.name') #>> '{}' AS wa_name,
+                       (m.v->'referral')::text AS referral
                   FROM webhook_inbox i
                  CROSS JOIN LATERAL jsonb_path_query(i.payload, '$.entry[*].changes[*].value.messages[*]') AS m(v)
                  WHERE i.source = 'meta' AND i.delivery_id = ?""", deliveryId);
@@ -390,7 +391,8 @@ public class MetaInboxHandler implements InboxHandler {
                 list.add(new Msg(rs.getString("id"), rs.getString("sender"), Instant.ofEpochSecond(rs.getLong("ts")),
                         rs.getString("type"), rs.getString("body"), rs.getString("payload"), rs.getString("button_text"),
                         rs.getString("context"), rs.getString("caption"), rs.getString("media_id"), rs.getString("media_mime"),
-                        rs.getString("media_name"), rs.getString("location"), rs.getString("reaction"), rs.getString("wa_name")));
+                        rs.getString("media_name"), rs.getString("location"), rs.getString("reaction"), rs.getString("wa_name"),
+                        rs.getString("referral")));
             }
         }
         for (var m : list) {
@@ -414,7 +416,7 @@ public class MetaInboxHandler implements InboxHandler {
                     "location", "button", "interactive", "reaction").contains(m.type()) ? m.type() : "other";
             in.brand.engage.persistence.WaInboxLog.inbound(c, identity, m.id(), inboxKind,
                     shown == null && "other".equals(inboxKind) ? "[" + m.type() + " message: WhatsApp does not share this type with Engage]" : shown,
-                    m.mediaId(), m.mediaMime(), m.mediaName(), m.context(), m.at());
+                    m.mediaId(), m.mediaMime(), m.mediaName(), m.context(), m.referral(), m.at());
 
             Sql.update(c, """
                     INSERT INTO profiles (identity_id, wa_window_until) VALUES (?, ?)

@@ -23,10 +23,22 @@ public final class WaInboxLog {
     /** A message from a customer. @return false when it was already recorded */
     public static boolean inbound(Connection c, UUID identity, String wamid, String kind, String body, String mediaId,
                                   String mediaMime, String mediaName, String contextWamid, Instant at) throws SQLException {
+        return inbound(c, identity, wamid, kind, body, mediaId, mediaMime, mediaName, contextWamid, null, at);
+    }
+
+    /**
+     * As above, with Meta's {@code referral} (JSON, or null): the Facebook or Instagram
+     * ad whose WhatsApp button started the chat (V57).
+     */
+    public static boolean inbound(Connection c, UUID identity, String wamid, String kind, String body, String mediaId,
+                                  String mediaMime, String mediaName, String contextWamid, String referral, Instant at)
+            throws SQLException {
         int fresh = Sql.update(c, """
-                INSERT INTO wa_messages (identity_id, direction, wamid, kind, body, media_id, media_mime, media_name, context_wamid, at)
-                VALUES (?, 'in', ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT (wamid) DO NOTHING""", identity, wamid, kind, body, mediaId, mediaMime, mediaName, contextWamid, utc(at));
+                INSERT INTO wa_messages (identity_id, direction, wamid, kind, body, media_id, media_mime, media_name, context_wamid,
+                                         referral, at)
+                VALUES (?, 'in', ?, ?, ?, ?, ?, ?, ?, CAST(? AS jsonb), ?)
+                ON CONFLICT (wamid) DO NOTHING""", identity, wamid, kind, body, mediaId, mediaMime, mediaName, contextWamid,
+                referral, utc(at));
         if (fresh == 0) return false;
         Sql.update(c, """
                 INSERT INTO wa_threads (identity_id, last_message_at, last_inbound_at, last_preview, unread, status)

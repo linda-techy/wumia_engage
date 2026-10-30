@@ -111,6 +111,26 @@ class InboxTest {
         assertEquals("image/jpeg", media.getContentType().orElseThrow().toString());
     }
 
+    /** A chat started from an ad's WhatsApp button shows the ad, in the list and above the message (V57). */
+    @Test void a_chat_from_an_ad_shows_which_ad() {
+        db.inTx(c -> WaInboxLog.inbound(c, mary, "wamid.ad1", "text", "Size?", null, null, null, null, """
+                {"source_type":"ad","source_id":"120210000000001","source_url":"https://fb.me/7zkaGpVkk","headline":"Wumika",
+                 "body":"Pathaswaram anklet","media_type":"video","thumbnail_url":"https://scontent.example/t.jpg","ctwa_clid":"ARAk"}""",
+                Instant.now()));
+        var analyst = data.loginAsAnalyst(client);
+        var list = client.toBlocking().retrieve(HttpRequest.GET("/api/inbox").bearerAuth(analyst), Argument.listOf(Map.class));
+        assertEquals("Pathaswaram anklet", list.getFirst().get("adBody"));
+
+        var thread = client.toBlocking().retrieve(HttpRequest.GET("/api/inbox/" + mary).bearerAuth(analyst), Map.class);
+        var fromAd = ((List<Map<String, Object>>) thread.get("messages")).getLast();
+        assertEquals("Size?", fromAd.get("body"));
+        assertEquals("ad", fromAd.get("adType"));
+        assertEquals("https://fb.me/7zkaGpVkk", fromAd.get("adUrl"));
+        assertEquals("https://scontent.example/t.jpg", fromAd.get("adImage"));
+        assertEquals("120210000000001", fromAd.get("adId"));
+        assertNull(((List<Map<String, Object>>) thread.get("messages")).getFirst().get("adType"), "other messages carry no ad");
+    }
+
     @Test void new_chat_lists_every_customer_masked_with_what_whatsapp_allows() {
         var ravi = UUID.fromString(data.createIdentity("ravi@example.com", "919876543210"));
         db.inTx(c -> Sql.update(c, """

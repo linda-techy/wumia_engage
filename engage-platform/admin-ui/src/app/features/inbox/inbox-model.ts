@@ -9,6 +9,8 @@ export interface InboxThreadRow {
   unread: number;
   status: 'open' | 'done';
   windowUntil: string | null;
+  /** The text of the Facebook or Instagram ad the chat came from (V57), or null. */
+  adBody: string | null;
 }
 
 export interface InboxMessage {
@@ -28,6 +30,20 @@ export interface InboxMessage {
   /** Null for a staff message that never went out (status failed, with the reason). */
   wamid: string | null;
   at: string;
+  /** Sent from the WhatsApp button of a Facebook or Instagram ad ("ad", or "post"): Meta's details of it. */
+  adType?: string | null;
+  adId?: string | null;
+  adUrl?: string | null;
+  adHeadline?: string | null;
+  adBody?: string | null;
+  adMedia?: string | null;
+  adImage?: string | null;
+}
+
+/** "Pathaswaram ✨": the ad's first line of text, else its headline. */
+export function adTitle(m: { adBody?: string | null; adHeadline?: string | null }): string {
+  const first = (m.adBody ?? '').split('\n').map((l) => l.trim()).find((l) => l.length > 0);
+  return first ?? m.adHeadline ?? 'an ad';
 }
 
 /** One conversation (GET /api/inbox/{identityId}). */

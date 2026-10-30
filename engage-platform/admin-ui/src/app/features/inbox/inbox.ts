@@ -5,7 +5,7 @@ import { firstValueFrom } from 'rxjs';
 import { Api } from '../../shared/api';
 import { InrPipe, problemDetail } from '../../shared/format';
 import { ErrorState, LoadingState } from '../../shared/states';
-import { ChatCandidate, fillName, InboxOrder, InboxThread, InboxThreadRow, orderStatus, QuickReply, refusalText, trackingText, whatsappStatus, windowState } from './inbox-model';
+import { adTitle, ChatCandidate, fillName, InboxOrder, InboxThread, InboxThreadRow, orderStatus, QuickReply, refusalText, trackingText, whatsappStatus, windowState } from './inbox-model';
 import { StaffAlerts } from './staff-alerts';
 
 /**
@@ -130,6 +130,7 @@ export class InboxMedia implements OnDestroy {
                   <span class="truncate text-sm text-slate-600">{{ t.lastPreview }}</span>
                   @if (t.unread > 0) { <span class="shrink-0 rounded-full bg-emerald-600 px-2 text-xs font-semibold text-white">{{ t.unread }}</span> }
                 </div>
+                @if (t.adBody) { <span class="block truncate text-[11px] font-medium text-indigo-700">From ad: {{ adTitle({ adBody: t.adBody }) }}</span> }
                 @if (windowOf(t).open) { <span class="text-[11px] text-emerald-700">Free reply · {{ windowOf(t).left }} left</span> }
               </a>
             } @empty {
@@ -186,6 +187,19 @@ export class InboxMedia implements OnDestroy {
                   @if (m.status === 'failed' && !m.wamid) { <p class="mb-1 text-[11px] font-medium text-red-700">Not sent: {{ refusal(m.failedReason) }}</p> }
                   @if (m.automated) { <p class="mb-1 text-[11px] font-medium text-slate-500">Automated · {{ m.templateKey }}</p> }
                   @else if (m.direction === 'out' && m.templateKey) { <p class="mb-1 text-[11px] font-medium text-slate-500">Template · {{ m.templateKey }}</p> }
+                  @if (m.adType) {
+                    <a class="mb-2 flex gap-2 rounded border border-indigo-200 bg-indigo-50 p-2 text-xs text-indigo-950 no-underline hover:bg-indigo-100"
+                       [href]="m.adUrl" target="_blank" rel="noopener noreferrer" [title]="'Ad id ' + (m.adId ?? '')">
+                      @if (m.adImage && !brokenAd().has(m.id)) {
+                        <img [src]="m.adImage" alt="" class="h-14 w-14 shrink-0 rounded object-cover" referrerpolicy="no-referrer" (error)="adImageFailed(m.id)" />
+                      }
+                      <span class="min-w-0">
+                        <span class="block font-semibold">From {{ m.adType === 'ad' ? 'ad' : 'post' }}: {{ adTitle(m) }}</span>
+                        @if (m.adBody) { <span class="line-clamp-2 block whitespace-pre-line text-indigo-900/80">{{ m.adBody }}</span> }
+                        <span class="block text-indigo-700 underline">Open the {{ m.adType === 'ad' ? 'ad' : 'post' }}{{ m.adMedia ? ' (' + m.adMedia + ')' : '' }}</span>
+                      </span>
+                    </a>
+                  }
                   @if (m.hasMedia) { <app-inbox-media [messageId]="m.id" [mime]="m.mediaMime" [name]="m.mediaName" /> }
                   @if (m.body) { <p class="whitespace-pre-wrap break-words">{{ m.body }}</p> }
                   <p class="mt-1 text-right text-[11px] text-slate-500">
@@ -311,6 +325,9 @@ export class InboxMedia implements OnDestroy {
 })
 export default class InboxPage {
   readonly #api = inject(Api);
+  readonly adTitle = adTitle;
+  /** Ad thumbnails Meta no longer serves (its links expire): the card shows without the picture. */
+  readonly brokenAd = signal(new Set<number>());
   readonly #router = inject(Router);
 
   /** Route parameter: the open conversation. */
@@ -511,5 +528,9 @@ export default class InboxPage {
     } finally {
       this.busy.set(false);
     }
+  }
+
+  adImageFailed(id: number): void {
+    this.brokenAd.update((s) => new Set(s).add(id));
   }
 }
