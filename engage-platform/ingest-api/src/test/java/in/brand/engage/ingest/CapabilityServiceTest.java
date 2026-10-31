@@ -115,6 +115,14 @@ class CapabilityServiceTest {
                 "24 h after the 131049");
     }
 
+    /** Meta's marketing experiment (Anila, 2026-10-31): no marketing WhatsApp for 30 days; the number is fine. */
+    @Test void error_130472_backs_off_marketing_for_30_days_without_a_strike() {
+        observe(DeliveryOutcome.failed(130472, Category.MARKETING, MSISDN, DAY1));
+        assertEquals("UNKNOWN|{}", row("state || '|' || strike_days::text"), "no strike, no state change");
+        assertEquals("2026-10-31 12:00", row("to_char(backoff_until AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD HH24:MI')"),
+                "30 days after the 130472");
+    }
+
     @Test void two_concurrent_131026_for_the_same_person_on_the_same_day_are_one_strike() throws Exception {
         var pool = Executors.newFixedThreadPool(2);
         var start = new CountDownLatch(1);

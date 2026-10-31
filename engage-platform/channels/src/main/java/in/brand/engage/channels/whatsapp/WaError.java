@@ -19,6 +19,11 @@ public final class WaError {
     public static final int UNDELIVERABLE = 131026;
     /** Meta's per-user marketing limit: back off, try the next channel at once. */
     public static final int MARKETING_LIMIT = 131049;
+    /**
+     * The number is in Meta's marketing message experiment: no business's marketing
+     * templates reach it for now. Back off marketing, try the next channel at once.
+     */
+    public static final int MARKETING_EXPERIMENT = 130472;
     /** Re-engagement needed: free-form outside the 24 h window. Our window logic is wrong. */
     public static final int OUTSIDE_WINDOW = 131047;
     /** The user stopped marketing messages in WhatsApp. */
@@ -37,7 +42,7 @@ public final class WaError {
                     : new ChannelException.Permanent("wa_http_" + httpStatus, message, false, List.of());
         }
         var c = "wa_" + code;
-        if (code == UNDELIVERABLE || code == MARKETING_LIMIT) {
+        if (code == UNDELIVERABLE || code == MARKETING_LIMIT || code == MARKETING_EXPERIMENT) {
             return new ChannelException.Permanent(c, message, false, true, List.of());
         }
         if (code == RATE_LIMITED || code == PAIR_RATE_LIMITED || httpStatus >= 500) {

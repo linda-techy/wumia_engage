@@ -22,14 +22,14 @@ import java.util.Set;
  * <li>{@code wa_message_received} replying to one of our messages
  *     ({@code context_wamid}), or a quick-reply button tap: {@code replied}.
  *     For NDR and address confirmation that is the only success.</li>
- * <li>{@code wa_failed} with 131026 or 131049: the run's next step (SMS, push)
+ * <li>{@code wa_failed} with 131026, 131049 or 130472: the run's next step (SMS, push)
  *     is brought forward to now instead of waiting out the timer.</li>
  * </ul>
  */
 @Singleton
 public class WhatsAppSignals implements EventConsumer {
 
-    static final Set<String> ESCALATE = Set.of("131026", "131049");
+    static final Set<String> ESCALATE = Set.of("131026", "131049", "130472");
     /** ingest-api emits a button tap under its payload's name (MetaInboxHandler.QUICK_REPLIES). */
     static final Set<String> REPLIES = Set.of("wa_message_received", "wa_optin_yes", "ndr_reschedule", "fit_ok",
             "review_love", "review_help");

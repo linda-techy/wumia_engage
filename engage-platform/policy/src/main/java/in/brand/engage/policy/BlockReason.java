@@ -17,6 +17,7 @@ public enum BlockReason {
     HIGHER_PRIORITY_ACTIVE,
     // halt.marketing kill switch.
     MARKETING_HALTED,
-    // Meta throttled us (131049): no WhatsApp to this person until the backoff ends (P4).
+    // Meta's marketing limit (131049, 24 h) or marketing experiment (130472, 30 days): no marketing
+    // WhatsApp to this person until the backoff ends. Order updates and replies still go.
     WA_BACKOFF
 }

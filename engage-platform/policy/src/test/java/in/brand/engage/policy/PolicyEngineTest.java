@@ -160,6 +160,17 @@ class PolicyEngineTest {
         assertInstanceOf(Decision.Allow.class, decide(id, WHATSAPP, WA_UTIL));
     }
 
+    /** 131049 / 130472 back off marketing only: Anila's order updates must still reach her (2026-10-31). */
+    @Test void a_whatsapp_backoff_holds_marketing_but_not_order_updates() {
+        var id = waMarketingContact();
+        db.inTx(c -> in.brand.engage.persistence.Sql.update(c, """
+                INSERT INTO channel_capability (identity_id, channel, backoff_until) VALUES (?, 'whatsapp', ?)""",
+                id, clock.instant().plus(java.time.Duration.ofDays(30)).atOffset(java.time.ZoneOffset.UTC)));
+
+        assertBlocked(BlockReason.WA_BACKOFF, decide(id, WHATSAPP, WA_MKT));
+        assertInstanceOf(Decision.Allow.class, decide(id, WHATSAPP, WA_UTIL));
+    }
+
     @Test void whatsapp_marketing_with_a_transactional_only_grant_is_blocked() {
         var id = waContact();
         data.grant(id, WHATSAPP, "transactional", daysAgo(1));

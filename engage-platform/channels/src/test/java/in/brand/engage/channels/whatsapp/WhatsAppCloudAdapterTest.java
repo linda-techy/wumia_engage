@@ -110,6 +110,14 @@ class WhatsAppCloudAdapterTest {
         assertFalse(e.suppress());
     }
 
+    @Test void the_marketing_experiment_130472_escalates_too() {
+        replies.add(new Reply(400, error(130472)));
+        var e = assertThrows(ChannelException.Permanent.class, () -> adapter.send(template(), phone()));
+        assertEquals("wa_130472", e.code());
+        assertTrue(e.escalateImmediately());
+        assertFalse(e.suppress(), "the number is fine; only marketing is held");
+    }
+
     @Test void window_stop_and_template_errors_are_permanent_without_escalation_or_retry() {
         for (int code : new int[] {131047, 131050, 132001, 100}) {
             requests.clear();

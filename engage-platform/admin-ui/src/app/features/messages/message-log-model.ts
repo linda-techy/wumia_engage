@@ -87,6 +87,8 @@ const REASONS: Record<string, string> = {
   outside_service_window: 'outside the 24-hour WhatsApp window',
   no_phone: 'no Indian mobile number',
   wa_131026: 'number cannot receive WhatsApp',
+  wa_131049: "WhatsApp's limit on offers to this person (tried again after a day; order updates still go)",
+  wa_130472: "WhatsApp's test group: no offers reach this number for now (order updates still go)",
   wa_131030: 'not a test recipient (Meta test number)',
   wa_131047: '24-hour window had closed',
   wa_131050: 'customer stopped marketing on WhatsApp',

@@ -26,6 +26,9 @@ import java.util.UUID;
  * <li>131026 on an authentication template to a {@code 91…} number: ignored
  *     (an Indian regulatory block, nothing to do with the number).</li>
  * <li>131049: Meta throttled us. {@code backoff_until} only; the state is untouched.</li>
+ * <li>130472: the number is in Meta's marketing experiment. {@code backoff_until}
+ *     {@value #EXPERIMENT_BACKOFF_DAYS} days; the state is untouched. The backoff holds
+ *     marketing only (PolicyEngine): order updates still go.</li>
  * <li>131026 on a utility template: one strike per IST calendar day. Two
  *     strikes on different days: {@code INCAPABLE}, rechecked after
  *     {@value #RECHECK_DAYS} days ({@link #expireIncapable}).</li>
@@ -42,6 +45,9 @@ public class CapabilityService {
     public static final int STRIKES_TO_INCAPABLE = 2;
     public static final int RECHECK_DAYS = 120;
     public static final Duration BACKOFF_131049 = Duration.ofHours(24);
+    public static final int EXPERIMENT_BACKOFF_DAYS = 30;
+    public static final Duration BACKOFF_130472 = Duration.ofDays(EXPERIMENT_BACKOFF_DAYS);
+    static final int MARKETING_EXPERIMENT = 130472;
     static final int UNDELIVERABLE = 131026;
     static final int MARKETING_LIMIT = 131049;
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
@@ -59,6 +65,10 @@ public class CapabilityService {
                 }
                 if (code == MARKETING_LIMIT) {
                     backoff(c, identityId, channel, o.at().plus(BACKOFF_131049));
+                    return;
+                }
+                if (code == MARKETING_EXPERIMENT) {
+                    backoff(c, identityId, channel, o.at().plus(BACKOFF_130472));
                     return;
                 }
                 if (code == UNDELIVERABLE && o.category() == Category.UTILITY) {

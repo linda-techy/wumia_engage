@@ -5,6 +5,7 @@ import static in.brand.engage.core.messaging.Category.SERVICE;
 import static in.brand.engage.core.messaging.Channel.WHATSAPP;
 
 import in.brand.engage.core.messaging.Addresses;
+import in.brand.engage.core.messaging.Category;
 import in.brand.engage.core.messaging.Channel;
 import in.brand.engage.persistence.Db;
 import jakarta.inject.Singleton;
@@ -94,7 +95,7 @@ public class PolicyEngine {
         var addresses = new Addresses(
                 channel == Channel.PUSH ? subject.pushTargets(req.allowStaleDevices()) : List.of(),
                 subject.phone(), subject.email());
-        var unreachable = reachability(channel, subject, addresses, now, out);
+        var unreachable = reachability(channel, template.category(), subject, addresses, now, out);
         if (unreachable != null) return unreachable;
         var suppression = subject.suppressions().get(channel);
         if (suppression != null) return out.block(BlockReason.SUPPRESSED, Map.of("reason", suppression));
@@ -180,7 +181,8 @@ public class PolicyEngine {
         return new Decision.Allow(template, category, unit, freeWindow, addresses, subject.locale(), snapshot.id());
     }
 
-    private static Decision reachability(Channel channel, Subject subject, Addresses addresses, Instant now, Out out) {
+    private static Decision reachability(Channel channel, Category category, Subject subject, Addresses addresses, Instant now,
+                                         Out out) {
         return switch (channel) {
             // iOS web cannot receive push (CLAUDE.md §2): falling through to
             // WhatsApp beats counting a push that will never arrive.
@@ -191,7 +193,8 @@ public class PolicyEngine {
                 if (subject.phone() == null) yield out.block(BlockReason.UNREACHABLE, Map.of("phone", false));
                 if ("INCAPABLE".equals(subject.capabilityOf(WHATSAPP)))
                     yield out.block(BlockReason.UNREACHABLE, Map.of("capability", "INCAPABLE"));
-                if (subject.waBackedOff(now))
+                // Meta's marketing limit (131049) or experiment (130472): marketing only, order updates still go.
+                if (category == MARKETING && subject.waBackedOff(now))
                     yield out.block(BlockReason.WA_BACKOFF, Map.of("until", subject.waBackoffUntil().toString()));
                 yield null;
             }
