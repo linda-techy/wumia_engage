@@ -344,10 +344,12 @@ class PolicyEngineTest {
         assertBlocked(BlockReason.HOLDOUT_CONTROL, policy.decide(DecisionRequest.of(id, PUSH, PUSH_MKT).forJourney("winback")));
     }
 
-    @Test void marketing_journeys_hold_out_10_percent_by_default() {
+    /** V58 (owner, 2026-10-31): no control groups by default; an operator turns one on per journey when volume allows. */
+    @Test void no_holdout_by_default() {
         data.resetConfig();                                    // drops this class's 0% override
         config.invalidate();
-        assertEquals(0, new BigDecimal("10").compareTo(config.snapshot().decimalValue("holdout.journey_pct", "cart_recovery")));
+        assertEquals(0, BigDecimal.ZERO.compareTo(config.snapshot().decimalValue("holdout.journey_pct", "cart_recovery")));
+        assertEquals(0, BigDecimal.ZERO.compareTo(config.snapshot().decimalValue("holdout.global_pct", "*")));
     }
 
     @Test void holdout_bucket_is_stable_across_two_calls_and_a_pct_change() {

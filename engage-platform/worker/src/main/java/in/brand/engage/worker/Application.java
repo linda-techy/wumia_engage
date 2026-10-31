@@ -23,6 +23,10 @@ public final class Application {
             ProductImport.run(args);
             return;
         }
+        if (HeldRerun.handles(args)) {             // one-off: recovery journeys a holdout stopped, started again
+            HeldRerun.run(args);
+            return;
+        }
         Micronaut.run(Application.class, args);
     }
 }

@@ -35,6 +35,8 @@ class CheckoutAbandonTest {
     @Inject WorkerTestBeans.FakeWhatsApp wa;
     @Inject WorkerTestBeans.FakePush push;
     @Inject WorkerTestBeans.FakeDiscounts discounts;
+    @Inject in.brand.engage.policy.Holdouts holdouts;
+    @Inject in.brand.engage.persistence.EventWriter events;
 
     String cart;
     String checkout;
@@ -340,6 +342,53 @@ class CheckoutAbandonTest {
         assertEquals("cart_offer_v1", call.name(), attempts(cart));
         assertEquals(List.of("Priya", "Kundan Jhumka Earrings", "WUMIKA10", "10% off"), call.bodyParams());
         assertEquals(List.of("discount/WUMIKA10?redirect=%2Fcart"), call.urlButtonSuffixes());
+    }
+
+    /** Held out of the journey (owner, 2026-10-31): the holdout goes off, the journey starts again, once. */
+    @Test void a_checkout_held_out_is_reminded_once_the_holdout_is_off() {
+        db.inTx(c -> {
+            Sql.update(c, """
+                    INSERT INTO config_versions (key, selector, value, changed_by, reason)
+                    VALUES ('holdout.journey_pct', 'checkout_abandon', '50'::jsonb, ?, 'test')""", operator(c));
+            return null;
+        });
+        config.invalidate();
+        UUID who = null;
+        for (int i = 0; i < 40 && who == null; i++) {               // someone the 50% puts in the control group
+            var candidate = customer(true, false);
+            boolean control = db.inTx(c -> holdouts.bucket(c, candidate, "checkout_abandon", new java.math.BigDecimal("50"))
+                    == in.brand.engage.policy.Holdouts.Bucket.CONTROL);
+            if (control) who = candidate;
+        }
+        assertNotNull(who, "no one in control in 40 tries at 50%");
+        abandon(who, 1249900);
+        at("12:31");
+        at("16:32");
+        clock.setIst("2026-09-29T12:40:00");
+        orchestrator.tick(200);
+        assertTrue(wa.all.isEmpty(), attempts(checkout));
+        assertTrue(attempts(checkout).contains("HOLDOUT_CONTROL"), attempts(checkout));
+        assertTrue(run(checkout).startsWith("exhausted"), run(checkout));
+
+        var still = db.inTx(c -> in.brand.engage.worker.HeldRerun.rerun(c, events, config.snapshot(), true));
+        assertTrue(still.started().stream().noneMatch(h -> h.subject().equals(checkout)), "not while the holdout is on");
+
+        db.inTx(c -> Sql.update(c, """
+                INSERT INTO config_versions (key, selector, value, changed_by, reason)
+                VALUES ('holdout.journey_pct', 'checkout_abandon', '0'::jsonb, ?, 'test')""", operator(c)));
+        config.invalidate();
+        var r = db.inTx(c -> in.brand.engage.worker.HeldRerun.rerun(c, events, config.snapshot(), true));
+        assertEquals(1, r.started().stream().filter(h -> h.subject().equals(checkout)).count());
+        assertEquals(0, db.inTx(c -> in.brand.engage.worker.HeldRerun.rerun(c, events, config.snapshot(), true))
+                .started().stream().filter(h -> h.subject().equals(checkout)).count(), "a second pass starts nothing");
+
+        // The fresh event is stamped now (the database's clock); the journey runs the usual way from it.
+        db.inTx(c -> Sql.update(c, "UPDATE events SET occurred_at = ? WHERE dedupe_key LIKE 'rerun_held:%' AND dispatched_at IS NULL",
+                clock.instant().atOffset(ZoneOffset.UTC)));
+        dispatcher.dispatchOnce();
+        clock.setIst("2026-09-29T13:15:00");
+        orchestrator.tick(200);
+        assertEquals("checkout_reminder_v1", wa.all.getLast().whatsapp().name(), attempts(checkout));
     }
 
     /* -------------------------------- fixtures -------------------------------- */
