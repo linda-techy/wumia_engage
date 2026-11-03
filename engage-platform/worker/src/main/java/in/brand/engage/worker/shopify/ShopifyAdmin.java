@@ -92,7 +92,13 @@ public class ShopifyAdmin {
      *         reports some alongside data); a response with errors and no data throws
      */
     public Map<String, Object> graphql(String query, Map<String, Object> variables, Duration timeout) throws Failure {
-        var res = send(HttpRequest.newBuilder(URI.create(baseUrl + "/admin/api/" + apiVersion + "/graphql.json"))
+        return graphql(query, variables, timeout, apiVersion);
+    }
+
+    /** The same, on a given API version (a field that exists only in a newer one). */
+    public Map<String, Object> graphql(String query, Map<String, Object> variables, Duration timeout, String version)
+            throws Failure {
+        var res = send(HttpRequest.newBuilder(URI.create(baseUrl + "/admin/api/" + version + "/graphql.json"))
                 .timeout(timeout)
                 .header("Content-Type", "application/json")
                 .header("X-Shopify-Access-Token", accessToken())

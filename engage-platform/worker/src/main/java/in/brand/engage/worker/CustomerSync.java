@@ -42,6 +42,8 @@ final class CustomerSync {
     static final int PAGE = 100;
     static final int MAX_PAGES = 1000;
     static final Duration ORDERS_WINDOW = Duration.ofDays(60);
+    /** The first version with the WhatsApp setting (defaultPhoneNumber.whatsAppMarketingConsent). */
+    static final String API_VERSION = "2026-10";
 
     static final String QUERY = """
             query($after: String) {
@@ -99,7 +101,7 @@ final class CustomerSync {
         for (int page = 0; page < MAX_PAGES; page++) {
             var vars = new LinkedHashMap<String, Object>();
             vars.put("after", after);
-            var root = admin.graphql(QUERY, vars, Duration.ofSeconds(30));
+            var root = admin.graphql(QUERY, vars, Duration.ofSeconds(30), API_VERSION);
             if (root.get("errors") instanceof List<?> errors && !errors.isEmpty()) {
                 throw new ShopifyAdmin.Failure("Shopify reported: " + errors);
             }
