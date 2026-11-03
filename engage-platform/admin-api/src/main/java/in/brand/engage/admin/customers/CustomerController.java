@@ -21,8 +21,9 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Customer lookup and 360 view (Console v0). Exact match on a full email or a
- * phone only, so the customer base cannot be enumerated. Contact details are
+ * Customer lookup and 360 view (Console v0). Lookup is an exact match on a full
+ * email or a phone. The list ({@link CustomerList}) shows first names and masked
+ * phones only, so it cannot export contact details. Contact details are
  * masked; {@code reveal} unmasks one field (phone or email) for an ANALYST,
  * with a reason, writing {@code pii_unmask_log} and the audit row in the same
  * transaction as the read, within the shared 50-a-day limit ({@link PiiAccess}).
@@ -54,6 +55,32 @@ public class CustomerController {
         var key = CustomerQueries.normalise(q).orElseThrow(() -> Problems.notFound("no customer matches exactly"));
         var id = db.inTx(c -> queries.lookup(c, key)).orElseThrow(() -> Problems.notFound("no customer matches exactly"));
         return Map.of("identityId", id.toString());
+    }
+
+    /** How many customers Engage knows, how many it can reach, and how the Shopify sync went. */
+    @RequiresRole(Role.VIEWER)
+    @Get("/summary")
+    public Map<String, Object> summary() {
+        return db.inTx(CustomerList::summary);
+    }
+
+    /**
+     * The masked list, 50 a page: first name, masked phone, orders, WhatsApp
+     * permission. {@code filter}: all, buyers, whatsapp, reachable.
+     */
+    @RequiresRole(Role.ANALYST)
+    @Get("/list")
+    public Map<String, Object> list(@Nullable @QueryValue String filter, @Nullable @QueryValue Integer page) {
+        CustomerList.Filter f;
+        try {
+            f = filter == null || filter.isBlank() ? CustomerList.Filter.ALL
+                    : CustomerList.Filter.valueOf(filter.strip().toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            throw Problems.badRequest("filter is all, buyers, whatsapp or reachable");
+        }
+        int p = page == null ? 0 : page;
+        if (p < 0 || p > 10_000) throw Problems.badRequest("page is 0 or more");
+        return db.inTx(c -> CustomerList.page(c, f, p));
     }
 
     @RequiresRole(Role.VIEWER)
