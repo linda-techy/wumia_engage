@@ -154,6 +154,31 @@ class InboxTest {
         assertEquals("1", q("SELECT count(*) FROM pii_unmask_log WHERE field = 'whatsapp_start'"));
     }
 
+    /**
+     * An open chat refreshes every 5 s (owner, 2026-11-03: 50 lookups for 5 customers, then locked out):
+     * opening a customer who never wrote is one lookup per customer a day, however often it refreshes.
+     */
+    @Test void a_new_chat_left_open_is_one_lookup_per_customer_a_day() {
+        var analyst = data.loginAsAnalyst(client);
+        var operator = UUID.fromString(q("SELECT id FROM operators WHERE email = 'analyst@example.com'"));
+        var ravi = UUID.fromString(data.createIdentity("ravi@example.com", "919876543210"));
+        var asha = UUID.fromString(data.createIdentity("asha@example.com", "919876543211"));
+        for (int i = 0; i < 3; i++) client.toBlocking().retrieve(HttpRequest.GET("/api/inbox/" + ravi).bearerAuth(analyst), Map.class);
+        assertEquals("1", q("SELECT count(*) FROM pii_unmask_log WHERE field = 'whatsapp_start' AND identity_id = '" + ravi + "'"),
+                "three refreshes, one lookup");
+
+        // The day before this fix: 49 refreshes of Ravi already logged. They are one customer, so Asha still opens.
+        db.inTx(c -> {
+            for (int i = 0; i < 49; i++) {
+                Sql.update(c, "INSERT INTO pii_unmask_log (operator_id, identity_id, field, reason) VALUES (?, ?, 'whatsapp_start', 'WhatsApp inbox')",
+                        operator, ravi);
+            }
+            return null;
+        });
+        client.toBlocking().retrieve(HttpRequest.GET("/api/inbox/" + asha).bearerAuth(analyst), Map.class);
+        assertEquals("1", q("SELECT count(*) FROM pii_unmask_log WHERE field = 'whatsapp_start' AND identity_id = '" + asha + "'"));
+    }
+
     @Test void the_order_message_needs_a_whatsapp_opt_in_and_one_of_their_orders() {
         var ravi = UUID.fromString(data.createIdentity("ravi@example.com", "919876543210"));
         db.inTx(c -> {

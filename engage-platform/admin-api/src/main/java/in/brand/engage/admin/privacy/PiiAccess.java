@@ -19,6 +19,11 @@ import java.util.UUID;
  * lookup: it is logged once per operator, customer and field a day, however
  * often the open chat refreshes, and does not count toward the limit (staff
  * answering more than 50 customers a day is support, not harvesting).
+ *
+ * <p>Opening a chat with a customer who never wrote ({@code whatsapp_start}, "New
+ * chat") is a lookup, but one per operator and customer a day: the open chat
+ * refreshes every 5 s, and each refresh had counted (owner, 2026-11-03: 50
+ * lookups for 5 customers, then locked out of the console).
  */
 @Singleton
 public class PiiAccess {
@@ -27,6 +32,8 @@ public class PiiAccess {
     public static final int MIN_REASON = 5;
     /** Fields of customer-initiated conversations: audited, deduplicated per day, outside the lookup limit. */
     static final java.util.Set<String> CONVERSATION_FIELDS = java.util.Set.of("whatsapp_inbox", "whatsapp_reply");
+    /** Lookups counted once per operator and customer a day: the view refreshes itself. */
+    static final java.util.Set<String> DAILY_ONCE_FIELDS = java.util.Set.of("whatsapp_start");
 
     /** The reason, trimmed; 400 when missing or too long. */
     public static String reason(String reason) {
@@ -48,19 +55,23 @@ public class PiiAccess {
              var rs = ps.executeQuery()) {
             rs.next();
         }
-        if (CONVERSATION_FIELDS.contains(field)) {
+        if ((CONVERSATION_FIELDS.contains(field) || DAILY_ONCE_FIELDS.contains(field)) && identityId != null) {
             try (var ps = Sql.prepare(c, """
                     SELECT 1 FROM pii_unmask_log WHERE operator_id = ? AND identity_id = ? AND field = ?
                        AND at > now() - interval '24 hours'""", operatorId, identityId, field); var rs = ps.executeQuery()) {
-                if (rs.next()) return;               // already in today's audit trail
+                if (rs.next()) return;               // already in today's audit trail (and count)
             }
+        }
+        if (CONVERSATION_FIELDS.contains(field)) {
             Sql.update(c, "INSERT INTO pii_unmask_log (operator_id, identity_id, field, reason) VALUES (?, ?, ?, ?)",
                     operatorId, identityId, field, reason);
             return;
         }
+        // A daily-once field counts its customers, not its rows: refreshes logged before this rule count once.
         try (var ps = Sql.prepare(c, """
-                SELECT count(*) FROM pii_unmask_log WHERE operator_id = ? AND at > now() - interval '24 hours'
-                   AND field NOT IN ('whatsapp_inbox', 'whatsapp_reply')""", operatorId);
+                SELECT count(*) FILTER (WHERE field NOT IN ('whatsapp_inbox', 'whatsapp_reply', 'whatsapp_start'))
+                       + count(DISTINCT identity_id) FILTER (WHERE field = 'whatsapp_start')
+                  FROM pii_unmask_log WHERE operator_id = ? AND at > now() - interval '24 hours'""", operatorId);
              var rs = ps.executeQuery()) {
             rs.next();
             if (rs.getLong(1) >= DAILY_LIMIT) {
