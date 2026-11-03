@@ -54,6 +54,19 @@ public final class Predicates {
     private static final String OPEN_CART = """
             FROM carts c WHERE c.identity_id = i.id AND c.converted_at IS NULL AND c.item_count > 0
                AND c.updated_at > now() - interval '30 days'""";
+    /**
+     * Orders placed before Engage was installed: Shopify's lifetime figures on
+     * the profile (shopify-customers-sync). The larger of the two counts and the
+     * later of the two dates, so neither history is lost.
+     */
+    private static final String ORDERS_COUNT = """
+            GREATEST((SELECT count(*) %s),
+                     COALESCE((SELECT (pf.attrs->>'shopify_orders_count')::int FROM profiles pf
+                                WHERE pf.identity_id = i.id), 0))""".formatted(ORDERS);
+    private static final String LAST_ORDER_AT = """
+            GREATEST((SELECT max(o.created_at) %s),
+                     (SELECT (pf.attrs->>'shopify_last_order_at')::timestamptz FROM profiles pf
+                       WHERE pf.identity_id = i.id))""".formatted(ORDERS);
     private static final String PROFILE = "EXISTS (SELECT 1 FROM profiles pf WHERE pf.identity_id = i.id AND %s)";
 
     private static final UnaryOperator<String> LOWER = s -> s.toLowerCase(Locale.ROOT);
@@ -64,15 +77,12 @@ public final class Predicates {
     static {
         // ---- orders ----
         def("orders_count", "Orders placed", List.of("eq", "gte", "lte", "gt", "lt"), "integer",
-                (op, v) -> new Fragment("(SELECT count(*) " + ORDERS + ") " + comparison(op) + " ?",
-                        List.of(integer(v))));
+                (op, v) -> new Fragment(ORDERS_COUNT + " " + comparison(op) + " ?", List.of(integer(v))));
         def("last_order_at", "Last order", List.of("older_than", "within"), "period",
                 (op, v) -> {
                     var since = since(v);
-                    return op.equals("within")
-                            ? new Fragment("EXISTS (SELECT 1 " + ORDERS + " AND o.created_at >= ?)", List.of(since))
-                            : new Fragment("(EXISTS (SELECT 1 " + ORDERS + ") AND NOT EXISTS (SELECT 1 " + ORDERS
-                                    + " AND o.created_at >= ?))", List.of(since));
+                    // NULL (never ordered) matches neither: "older than" means they did buy, long ago.
+                    return new Fragment(LAST_ORDER_AT + (op.equals("within") ? " >= ?" : " < ?"), List.of(since));
                 });
         def("bought_product_type", "Bought product type", List.of("in"), "text_list",
                 (op, v) -> new Fragment(BOUGHT.formatted("p.product_type = ANY(?)"), param(texts(v, LOWER))));

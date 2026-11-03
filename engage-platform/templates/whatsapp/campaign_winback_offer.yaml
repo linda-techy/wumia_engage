@@ -1,0 +1,14 @@
+# Win-back campaign, second message (~4 days after the first, to the past
+# buyers who still have not ordered): the offer. {{name}} is filled per
+# recipient. STOP opts out. Marketing.
+key: campaign_winback_offer_v1
+channel: whatsapp
+category: marketing
+header_image: "{{image}}"
+locales:
+  en: { body: "Hi {{name}}, we would love to see you back at WUMIKA 💛\n\nHere is {{offer}} on your next order with code {{code}}, until {{ends}}. Tap below to shop.\n\nReply STOP to opt out of offers." }
+buttons:
+  - { text: "Shop now", url: "https://wumika.com/{{link_path}}" }
+  - { copy_code: "{{code}}" }
+vars: [name, offer, code, ends, link_path, image]
+samples: { name: "Priya", offer: "10% off", code: "BAG10", ends: "Sunday 15 Nov", link_path: "discount/BAG10?redirect=%2Fcollections%2Fnew-arrivals", image: "https://engage.wumika.com/media/product/8741079023804" }

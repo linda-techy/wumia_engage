@@ -98,6 +98,26 @@ class SegmentTest {
         assertEquals(1, preview(SOUTH_ETHNIC_LAPSED));
     }
 
+    /** Orders from before Engage: Shopify's lifetime figures on the profile (shopify-customers-sync, 2026-11-04). */
+    @Test void shopify_order_history_counts_for_last_order_and_orders_placed() {
+        var old = customer("KL");                            // bought in Shopify only, 120 days ago, twice
+        db.inTx(c -> Sql.update(c, """
+                UPDATE profiles SET attrs = attrs || jsonb_build_object('shopify_orders_count', 2,
+                       'shopify_last_order_at', now() - interval '120 days') WHERE identity_id = ?""", old));
+        var lately = customer("KL");                          // old in Shopify, but ordered since through Engage
+        db.inTx(c -> Sql.update(c, """
+                UPDATE profiles SET attrs = attrs || jsonb_build_object('shopify_orders_count', 1,
+                       'shopify_last_order_at', now() - interval '200 days') WHERE identity_id = ?""", lately));
+        order(lately, 5, "p-dress", "M", false);
+        customer("KL");                                      // never ordered anywhere
+
+        var lapsed = Map.of("field", "last_order_at", "op", "older_than", "value", "P60D");
+        assertEquals(List.of(old), members(lapsed));
+        assertEquals(List.of(lately), members(Map.of("field", "last_order_at", "op", "within", "value", "P30D")));
+        assertEquals(List.of(old), members(Map.of("field", "orders_count", "op", "gte", "value", 2)));
+        assertEquals(2, members(Map.of("field", "orders_count", "op", "gte", "value", 1)).size());
+    }
+
     @Test void size_consent_capability_and_carts_are_predicates_too() {
         var a = customer("KL");
         order(a, 5, "p-kurta", "M / Red", false);

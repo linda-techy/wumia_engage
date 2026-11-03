@@ -595,6 +595,7 @@ public class CampaignController {
                 var needed = rs.getArray(1) == null ? new String[0] : (String[]) rs.getArray(1).getArray();
                 for (var v : needed) {
                     if (channel.equals("push") && v.equals("image")) continue;
+                    if (v.equals("name")) continue;              // each recipient's first name, filled at send time
                     if (blank(vars.get(v))) {
                         throw Problems.badRequest(v.equals("image") ? "this WhatsApp template shows the poster: add one"
                                 : "the template needs a value for '" + v + "'");

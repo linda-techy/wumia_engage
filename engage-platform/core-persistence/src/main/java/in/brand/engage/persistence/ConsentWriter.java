@@ -185,6 +185,19 @@ public class ConsentWriter {
     }
 
     /**
+     * Shopify's own WhatsApp marketing setting on the customer's phone number
+     * (Admin API {@code defaultPhoneNumber.whatsAppMarketingConsent}): subscribed
+     * grants WhatsApp marketing, unsubscribed withdraws it. It names WhatsApp, so
+     * no label date applies. Who recorded it ({@code collectedFrom}: the shopper,
+     * or the store's staff in Shopify admin) goes into the evidence as Shopify
+     * states it.
+     */
+    public void syncShopifyWhatsAppConsent(Connection c, UUID identityId, String shopifyState, String ref,
+                                           OffsetDateTime statedAt, String collectedFrom) throws SQLException {
+        syncShopifyState(c, identityId, "whatsapp", shopifyState, ref, statedAt, null, "shopify_whatsapp", collectedFrom);
+    }
+
+    /**
      * Shopify's own marketing checkbox for the phone ("Text me with news and
      * offers"), relabelled to name WhatsApp and SMS. From the day the label
      * changed ({@code since}), ticking it grants WhatsApp and SMS marketing and
@@ -204,6 +217,12 @@ public class ConsentWriter {
 
     private void syncShopifyState(Connection c, UUID identityId, String channel, String shopifyState, String ref,
                                   OffsetDateTime statedAt, String copyVersion) throws SQLException {
+        syncShopifyState(c, identityId, channel, shopifyState, ref, statedAt, copyVersion, "shopify_checkout", null);
+    }
+
+    private void syncShopifyState(Connection c, UUID identityId, String channel, String shopifyState, String ref,
+                                  OffsetDateTime statedAt, String copyVersion, String source, String collectedFrom)
+            throws SQLException {
         String state = switch (shopifyState == null ? "" : shopifyState) {
             case "subscribed" -> "granted";
             case "unsubscribed", "redacted" -> "withdrawn";
@@ -213,8 +232,9 @@ public class ConsentWriter {
         var statementRef = ref + "@" + statedAt.toInstant();
         Sql.update(c, """
                 INSERT INTO consents (identity_id, channel, purpose, state, source, copy_version, evidence, occurred_at)
-                SELECT ?, CAST(? AS channel), 'marketing', ?::consent_state, 'shopify_checkout', ?,
-                       jsonb_build_object('shopify_state', ?::text, 'ref', ?::text), ?
+                SELECT ?, CAST(? AS channel), 'marketing', ?::consent_state, ?, ?,
+                       jsonb_strip_nulls(jsonb_build_object('shopify_state', ?::text, 'ref', ?::text,
+                                                            'collected_from', ?::text)), ?
                  WHERE NOT EXISTS (SELECT 1 FROM consents x
                                     WHERE x.identity_id = ? AND x.channel = CAST(? AS channel) AND x.purpose = 'marketing'
                                       AND x.evidence->>'ref' = ?::text)
@@ -223,7 +243,7 @@ public class ConsentWriter {
                            AND x.occurred_at <= ?
                          ORDER BY x.occurred_at DESC, x.id DESC LIMIT 1)
                        IS DISTINCT FROM ?::consent_state""",
-                identityId, channel, state, copyVersion, shopifyState, statementRef, statedAt,
+                identityId, channel, state, source, copyVersion, shopifyState, statementRef, collectedFrom, statedAt,
                 identityId, channel, statementRef,
                 identityId, channel, statedAt, state);
     }

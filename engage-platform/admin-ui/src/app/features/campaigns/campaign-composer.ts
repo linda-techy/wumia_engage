@@ -293,7 +293,8 @@ export default class CampaignComposerPage {
     this.templateKey.set(key);
     const t = (this.templates.value() ?? []).find((x) => x.key === key);
     const needed = (t?.vars ?? '').split(',').map((v) => v.trim()).filter(Boolean)
-      .filter((v) => v !== 'image' && !(key === CUSTOM_PUSH_TEMPLATE && (v === 'title' || v === 'body')))
+      // name: each recipient's first name, filled at send time.
+      .filter((v) => v !== 'image' && v !== 'name' && !(key === CUSTOM_PUSH_TEMPLATE && (v === 'title' || v === 'body')))
       .filter((v) => !(this.discountCode() && v === 'code'));
     this.vars.update((vs) => [...vs, ...needed.filter((v) => !vs.some((x) => x.key === v)).map((key) => ({ key, value: '' }))]);
   }

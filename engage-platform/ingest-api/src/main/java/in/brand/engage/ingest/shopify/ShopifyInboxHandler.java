@@ -433,15 +433,24 @@ public class ShopifyInboxHandler implements InboxHandler {
 
             Sql.update(c, """
                     UPDATE profiles
-                       SET attrs = attrs || jsonb_strip_nulls(jsonb_build_object('first_name', ?::text))
+                       SET attrs = attrs || jsonb_strip_nulls(jsonb_build_object(
+                                             'first_name', ?::text, 'city', ?::text, 'state', ?::text,
+                                             'shopify_orders_count', CAST(? AS int),
+                                             'shopify_last_order_at', CAST(? AS timestamptz),
+                                             'shopify_spent_paise', CAST(? AS bigint)))
                                          || jsonb_build_object('shopify_tags', to_jsonb(CAST(? AS text[]))),
                            updated_at = now()
-                     WHERE identity_id = ?""", rs.getString("first_name"), tags(rs.getString("tags")), identityId);
+                     WHERE identity_id = ?""", rs.getString("first_name"), rs.getString("city"),
+                    rs.getString("state_code"), Sql.nullableLong(rs, "orders_count"), Sql.timestamp(rs, "last_order_at"),
+                    Sql.nullableLong(rs, "total_spent_paise"), tags(rs.getString("tags")), identityId);
             consents.syncShopifyEmailConsent(c, identityId, rs.getString("email_consent_state"),
                     "customer:" + customerId, Sql.timestamp(rs, "email_consent_at"));
             if (phone != null) {
                 consents.syncShopifyPhoneMarketingConsent(c, identityId, rs.getString("sms_consent_state"),
                         "customer:" + customerId, Sql.timestamp(rs, "sms_consent_at"), phoneMarketingSince, PHONE_MARKETING_COPY);
+                consents.syncShopifyWhatsAppConsent(c, identityId, rs.getString("wa_consent_state"),
+                        "customer:" + customerId + ":whatsapp", Sql.timestamp(rs, "wa_consent_at"),
+                        rs.getString("wa_consent_collected_from"));
             }
             events.write(c, identityId, "customer_updated", "shopify", "shopify:" + item.deliveryId(),
                     Map.of("customer_id", customerId));

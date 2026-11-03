@@ -82,7 +82,28 @@ public class CampaignExecutor {
         return total;
     }
 
-    private record Batch(List<UUID> recipients, Map<String, String> vars) {}
+    private record Batch(List<UUID> recipients, Map<String, String> vars, Map<UUID, String> names) {}
+
+    /** The per-person value a campaign template may use: {@code name}, the first name, else "there". */
+    public static final String NAME_VAR = "name";
+
+    /** The campaign's vars plus this recipient's first name. */
+    public static Map<String, String> forRecipient(Map<String, String> vars, String firstName) {
+        var out = new HashMap<>(vars);
+        out.putIfAbsent(NAME_VAR, firstName == null || firstName.isBlank() ? "there" : firstName.strip());
+        return Map.copyOf(out);
+    }
+
+    /** First names from the profiles, for one batch. */
+    static Map<UUID, String> firstNames(Connection c, List<UUID> ids) throws SQLException {
+        var out = new HashMap<UUID, String>();
+        try (var ps = Sql.prepare(c, """
+                SELECT identity_id, attrs->>'first_name' FROM profiles WHERE identity_id = ANY(CAST(? AS uuid[]))""",
+                (Object) ids.stream().map(UUID::toString).toArray(String[]::new)); var rs = ps.executeQuery()) {
+            while (rs.next()) out.put(rs.getObject(1, UUID.class), rs.getString(2));
+        }
+        return out;
+    }
 
     /** One batch of one campaign. @return recipients dispatched */
     int runBatch(UUID campaignId) {
@@ -91,7 +112,8 @@ public class CampaignExecutor {
         var intentKey = CampaignCascades.intentKey(campaignId);
         for (var identity : batch.recipients()) {
             try {
-                var run = orchestrator.dispatch(new MessageIntent(identity, intentKey, identity.toString(), batch.vars(), null));
+                var vars = forRecipient(batch.vars(), batch.names().get(identity));
+                var run = orchestrator.dispatch(new MessageIntent(identity, intentKey, identity.toString(), vars, null));
                 db.inTx(c -> record(c, campaignId, identity, run.id()));
             } catch (RuntimeException e) {
                 LOG.warn("campaign {} recipient dispatch failed: {}", campaignId, e.toString());
@@ -195,7 +217,7 @@ public class CampaignExecutor {
             finishIfDone(c, id);
             return null;
         }
-        return new Batch(claimed, Map.copyOf(vars));
+        return new Batch(claimed, Map.copyOf(vars), firstNames(c, claimed));
     }
 
     /**

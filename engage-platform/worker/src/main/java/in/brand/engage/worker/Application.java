@@ -23,6 +23,14 @@ public final class Application {
             ProductImport.run(args);
             return;
         }
+        if (CustomerSync.handles(args)) {          // one-off, read-only towards Shopify: every customer into Engage
+            CustomerSync.run(args);
+            return;
+        }
+        if (CampaignTest.handles(args)) {          // one-off: one campaign message to one allowlisted tester
+            CampaignTest.run(args);
+            return;
+        }
         if (HeldRerun.handles(args)) {             // one-off: recovery journeys a holdout stopped, started again
             HeldRerun.run(args);
             return;

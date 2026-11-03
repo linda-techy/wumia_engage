@@ -1,0 +1,14 @@
+# Win-back campaign, first message (owner, 2026-11-04: what most Indian D2C
+# brands do for past buyers): a warm "what's new", no discount yet. Sent in
+# stages, most recent buyers first. {{name}} is each recipient's first name,
+# filled at send time. STOP opts out (MetaInboxHandler). Marketing.
+key: campaign_winback_v1
+channel: whatsapp
+category: marketing
+header_image: "{{image}}"
+locales:
+  en: { body: "Hi {{name}}, it has been a while ✨\n\nWe have added new pieces at WUMIKA since your last order, starting with {{collection}}. Tap below to take a look.\n\nReply STOP to opt out of offers." }
+buttons:
+  - { text: "See what's new", url: "https://wumika.com/{{link_path}}" }
+vars: [name, collection, link_path, image]
+samples: { name: "Priya", collection: "The Wedding Season Edit", link_path: "collections/new-arrivals", image: "https://engage.wumika.com/media/product/8741079023804" }
