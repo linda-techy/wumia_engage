@@ -52,8 +52,8 @@ function isoToIstInput(iso: string | null): string {
             </select></label>
           <label class="text-sm"><span class="mb-1 block font-medium">Template</span>
             <select class="input" [value]="templateKey()" (change)="pickTemplate(val($event))">
-              <option value="" disabled>Pick a template</option>
-              @for (t of templates.value() ?? []; track t.key) { <option [value]="t.key">{{ t.key === customKey ? 'Your own title and text (poster)' : t.key }}{{ t.headerImage ? ' · poster' : '' }}</option> }
+              <option value="" disabled [selected]="!templateKey()">Pick a template</option>
+              @for (t of templates.value() ?? []; track t.key) { <option [value]="t.key" [selected]="t.key === templateKey()">{{ t.key === customKey ? 'Your own title and text (poster)' : t.key }}{{ t.headerImage ? ' · poster' : '' }}</option> }
             </select>
             @if (templates.hasValue() && templates.value().length === 0) {
               <span class="mt-1 block text-xs text-amber-800">No {{ channel() }} template is eligible.{{ channel() === 'whatsapp' ? ' WhatsApp needs APPROVED marketing templates (Phase 4).' : '' }}</span>
@@ -61,8 +61,8 @@ function isoToIstInput(iso: string | null): string {
           </label>
           <label class="col-span-2 text-sm"><span class="mb-1 block font-medium">Segment</span>
             <select class="input" [value]="segmentId()" (change)="segmentId.set(val($event))">
-              <option value="" disabled>Pick a segment</option>
-              @for (s of segments.value() ?? []; track s.id) { <option [value]="s.id">{{ s.name }} ({{ s.lastSize ?? '?' }})</option> }
+              <option value="" disabled [selected]="!segmentId()">Pick a segment</option>
+              @for (s of segments.value() ?? []; track s.id) { <option [value]="s.id" [selected]="s.id === segmentId()">{{ s.name }} ({{ s.lastSize ?? '?' }})</option> }
             </select></label>
         </section>
 
@@ -169,7 +169,7 @@ function isoToIstInput(iso: string | null): string {
               <label class="text-sm"><span class="mb-1 block font-medium">{{ otherChannel() }} template</span>
                 <select class="input" [value]="followUpTemplate()" (change)="followUpTemplate.set(val($event))">
                   <option value="" disabled>Pick a template</option>
-                  @for (t of followUpTemplates.value() ?? []; track t.key) { <option [value]="t.key">{{ t.key }}</option> }
+                  @for (t of followUpTemplates.value() ?? []; track t.key) { <option [value]="t.key" [selected]="t.key === followUpTemplate()">{{ t.key }}</option> }
                 </select></label>
               <label class="text-sm"><span class="mb-1 block font-medium">After (hours, 1–72)</span>
                 <input class="input" inputmode="numeric" [value]="followUpHours()" (input)="followUpHours.set(val($event))" /></label>
