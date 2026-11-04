@@ -118,6 +118,24 @@ class SegmentTest {
         assertEquals(2, members(Map.of("field", "orders_count", "op", "gte", "value", 1)).size());
     }
 
+    /** Four fixed quarters of the audience: together everyone, apart nobody twice (2026-11-05). */
+    @Test void audience_slices_split_the_list_into_four_without_overlap() {
+        var all = new ArrayList<UUID>();
+        for (int i = 0; i < 40; i++) all.add(customer("KL"));
+        var seen = new java.util.HashSet<UUID>();
+        int total = 0;
+        for (var slice : List.of("1/4", "2/4", "3/4", "4/4")) {
+            var part = members(Map.of("field", "audience_slice", "op", "is", "value", slice));
+            assertTrue(part.size() > 0, slice + " is not empty");
+            assertTrue(seen.addAll(part), "no one is in two slices");
+            total += part.size();
+        }
+        assertEquals(40, total);
+        assertEquals(new java.util.HashSet<>(all), seen);
+        assertEquals(members(Map.of("field", "audience_slice", "op", "is", "value", "2/4")),
+                members(Map.of("field", "audience_slice", "op", "is", "value", "2/4")), "the same people every time");
+    }
+
     @Test void size_consent_capability_and_carts_are_predicates_too() {
         var a = customer("KL");
         order(a, 5, "p-kurta", "M / Red", false);

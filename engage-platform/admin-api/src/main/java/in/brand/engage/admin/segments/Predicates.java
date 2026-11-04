@@ -110,6 +110,16 @@ public final class Predicates {
         unavailable("city_tier", "City tier", List.of("in"), "text_list",
                 "Needs a city-to-tier mapping; use city or state meanwhile.");
 
+        // ---- batches ----
+        // A fixed quarter of the audience (owner, 2026-11-05): the same people every time, so a list too big
+        // for one day's WhatsApp limit goes out as four campaigns on four days, nobody twice.
+        def("audience_slice", "Audience slice (a fixed quarter)", List.of("is"), "enum:1/4,2/4,3/4,4/4",
+                (op, v) -> {
+                    var slice = oneOf(v, List.of("1/4", "2/4", "3/4", "4/4"));
+                    return new Fragment("(((hashtextextended(i.id::text, 0) % 4) + 4) % 4) = ?",
+                            List.of(Integer.parseInt(slice.substring(0, 1)) - 1));
+                });
+
         // ---- carts and waitlist ----
         def("has_open_cart", "Has an open cart", List.of("is"), "boolean",
                 (op, v) -> exists("EXISTS (SELECT 1 " + OPEN_CART + ")", bool(v)));
