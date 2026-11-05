@@ -18,8 +18,9 @@ import java.util.UUID;
  *     identity and campaign. Never messaged; measured against.</li>
  * <li>{@code excluded}: a campaign rule, not policy. Push: only stale tokens
  *     ({@code STALE_TOKENS}); they inflate the audience and deflate clicks.
- *     WhatsApp: capability {@code UNKNOWN} or {@code INCAPABLE}; campaigns do
- *     not pay to discover capability (phase-6 §4).</li>
+ *     WhatsApp: capability {@code INCAPABLE}, and {@code UNKNOWN} unless
+ *     {@code campaign.whatsapp.allow_unchecked} is on (V60, 2026-11-05: a new
+ *     number has almost no known capability, and the first send is how it is learnt).</li>
  * </ul>
  *
  * Everyone else goes to the policy engine: per identity in the dry run, per
@@ -34,18 +35,19 @@ final class CampaignAudience {
     static final String WA_INCAPABLE = "WA_INCAPABLE";
 
     /** {@code SELECT id, held, excluded FROM identities i WHERE <segment>}. */
-    static Fragment query(SegmentDsl segment, String channel, UUID campaignId, BigDecimal holdoutPct) {
+    static Fragment query(SegmentDsl segment, String channel, UUID campaignId, BigDecimal holdoutPct,
+                          boolean allowUncheckedWhatsApp) {
         var where = SegmentCompiler.where(segment);
         var params = new ArrayList<Object>();
         params.add(campaignId.toString());
         params.add(holdoutPct.movePointRight(2).intValue());          // basis points
         params.addAll(where.params());
         var sql = "SELECT i.id, (abs(hashtextextended(i.id::text || ?, 0)) % 10000) < ? AS held, "
-                + exclusion(channel) + " AS excluded FROM identities i WHERE " + where.sql();
+                + exclusion(channel, allowUncheckedWhatsApp) + " AS excluded FROM identities i WHERE " + where.sql();
         return new Fragment(sql, List.copyOf(params));
     }
 
-    private static String exclusion(String channel) {
+    private static String exclusion(String channel, boolean allowUncheckedWhatsApp) {
         return switch (channel) {
             case "push" -> """
                     CASE WHEN EXISTS (SELECT 1 FROM device_health d WHERE d.identity_id = i.id AND d.state = 'stale')
@@ -54,7 +56,8 @@ final class CampaignAudience {
             case "whatsapp" -> """
                     CASE COALESCE((SELECT cc.state FROM channel_capability cc
                                     WHERE cc.identity_id = i.id AND cc.channel = 'whatsapp'), 'UNKNOWN')
-                         WHEN 'UNKNOWN' THEN '%s' WHEN 'INCAPABLE' THEN '%s' END""".formatted(WA_UNKNOWN, WA_INCAPABLE);
+                         %s WHEN 'INCAPABLE' THEN '%s' END""".formatted(
+                    allowUncheckedWhatsApp ? "" : "WHEN 'UNKNOWN' THEN '" + WA_UNKNOWN + "'", WA_INCAPABLE);
             default -> throw new IllegalArgumentException("campaigns run on push or whatsapp, not " + channel);
         };
     }

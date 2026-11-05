@@ -144,6 +144,7 @@ class CampaignTest {
 
     @Test void with_four_eyes_on_a_whatsapp_campaign_needs_another_operators_approval_and_never_reaches_unknown_capability() {
         fourEyes(true);
+        allowUnchecked(false);
         var capable = person("KL");
         phone(capable);
         capability(capable, "CAPABLE");
@@ -329,6 +330,36 @@ class CampaignTest {
         assertEquals(400, status(() -> create("push", "push_campaign_custom_v1", "vars", Map.of(
                 "title", "Hi", "body", "Text", "url", "https://w.example/c", "image", "http://insecure.example/p.png"))),
                 "the poster must be https");
+    }
+
+    void allowUnchecked(boolean on) {
+        db.inTx(c -> Sql.update(c, """
+                INSERT INTO config_versions (key, selector, value, changed_by, reason)
+                SELECT 'campaign.whatsapp.allow_unchecked', '*', ?::jsonb, id, 'test' FROM operators WHERE email = 'owner@example.com'""",
+                Boolean.toString(on)));
+        config.invalidate();
+    }
+
+    @Test void a_whatsapp_campaign_reaches_numbers_not_yet_checked_unless_the_setting_is_off() {
+        var capable = person("KL");
+        phone(capable);
+        capability(capable, "CAPABLE");
+        grant(capable, "whatsapp");
+        var unknown = person("KL");
+        phone(unknown);
+        grant(unknown, "whatsapp");
+        var incapable = person("KL");
+        phone(incapable);
+        capability(incapable, "INCAPABLE");
+        grant(incapable, "whatsapp");
+
+        var id = create("whatsapp", WA_OK, "budgetCapPaise", 50000).get("id");
+        var est = act(lead, id, "estimate");
+        var excluded = num((Map<String, Object>) ((Map<String, Object>) est.get("estimate")).get("excluded"));
+        assertEquals(Map.of("WA_INCAPABLE", 1), excluded, "on by default: only the known-not-on-WhatsApp number is out");
+        act(lead, id, "approve");
+        act(lead, id, "start");
+        assertEquals(Set.of(capable, unknown), recipients(id));
     }
 
     void fourEyes(boolean on) {

@@ -44,14 +44,21 @@ public class DryRun {
 
     private final Db db;
     private final PolicyEngine policy;
+    private final in.brand.engage.policy.ConfigResolver config;
 
-    public DryRun(Db db, PolicyEngine policy) {
+    public DryRun(Db db, PolicyEngine policy, in.brand.engage.policy.ConfigResolver config) {
         this.db = db;
         this.policy = policy;
+        this.config = config;
+    }
+
+    /** V60: may a WhatsApp campaign go to numbers not yet confirmed as on WhatsApp? */
+    private boolean allowUnchecked() {
+        return config.snapshot().boolValue("campaign.whatsapp.allow_unchecked", "*");
     }
 
     public Estimate run(UUID campaignId, SegmentDsl segment, String channel, String templateKey, BigDecimal holdoutPct) {
-        var q = CampaignAudience.query(segment, channel, campaignId, holdoutPct);
+        var q = CampaignAudience.query(segment, channel, campaignId, holdoutPct, allowUnchecked());
         record Row(UUID id, boolean held, String excluded) {}
         var rows = db.inTx(c -> {
             Sql.update(c, "SET LOCAL statement_timeout = '" + QUERY_TIMEOUT + "'");
@@ -104,7 +111,7 @@ public class DryRun {
     /** Freeze the audience into campaign_recipients: treatment pending, holdout skipped, exclusions left out. */
     public int arm(java.sql.Connection c, UUID campaignId, SegmentDsl segment, String channel, BigDecimal holdoutPct)
             throws java.sql.SQLException {
-        var q = CampaignAudience.query(segment, channel, campaignId, holdoutPct);
+        var q = CampaignAudience.query(segment, channel, campaignId, holdoutPct, allowUnchecked());
         var params = new ArrayList<Object>(List.of(campaignId));
         params.addAll(q.params());
         Sql.update(c, "SET LOCAL statement_timeout = '" + QUERY_TIMEOUT + "'");
