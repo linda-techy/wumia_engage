@@ -119,7 +119,9 @@ public class MessageLogController {
                            COALESCE(NULLIF(p.attrs->>'first_name', ''), NULLIF(p.attrs->>'wa_name', '')) AS name,
                            (SELECT k.value FROM identity_keys k WHERE k.identity_id = s.identity_id AND k.kind = 'phone' LIMIT 1) AS phone,
                            (SELECT k.value FROM identity_keys k WHERE k.identity_id = s.identity_id AND k.kind = 'email' LIMIT 1) AS email,
-                           m.body AS text, t.title AS template_title, t.body AS template_body, cp.name AS campaign
+                           m.body AS text, t.title AS template_title, t.body AS template_body, cp.name AS campaign,
+                           t.header_image AS has_image, array_to_string(t.buttons, '|') AS buttons,
+                           cp.vars->>'image' AS image_url, cp.vars->>'code' AS code
                       FROM sends s
                       LEFT JOIN profiles p ON p.identity_id = s.identity_id
                       LEFT JOIN templates t ON t.key = s.template_key

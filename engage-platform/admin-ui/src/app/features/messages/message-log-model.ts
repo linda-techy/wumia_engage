@@ -23,6 +23,13 @@ export interface LogRow {
   templateTitle: string | null;
   templateBody: string | null;
   campaign: string | null;
+  /** The template carries a header photo; imageUrl is known for campaigns only. */
+  hasImage: boolean | null;
+  imageUrl: string | null;
+  /** Button labels, "|"-separated. */
+  buttons: string | null;
+  /** A campaign's offer code (shown on the copy-code button). */
+  code: string | null;
 }
 
 export interface LogPage {
@@ -65,6 +72,11 @@ export function journeyLabel(r: Pick<LogRow, 'intentKey' | 'campaign'>): string 
 export function messageText(r: Pick<LogRow, 'text' | 'templateTitle' | 'templateBody'>): string {
   if (r.text) return r.text;
   return [r.templateTitle, r.templateBody].filter((s) => !!s).join(' — ');
+}
+
+/** The labels of the buttons the customer saw; the copy-code button names the code when a campaign has one. */
+export function buttonLabels(r: Pick<LogRow, 'buttons' | 'code'>): string[] {
+  return (r.buttons ?? '').split('|').filter((b) => !!b).map((b) => (b === 'Copy code' && r.code ? 'Copy code ' + r.code : b));
 }
 
 const REASONS: Record<string, string> = {

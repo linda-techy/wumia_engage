@@ -103,19 +103,20 @@ public class TemplateRegistry implements TemplateCooldowns, ApplicationEventList
             int n = 0;
             for (var t : byKey.values()) {
                 n += Sql.update(c, """
-                        INSERT INTO templates (key, channel, category, vars, header_image, title, body)
-                        VALUES (?, CAST(? AS channel), CAST(? AS msg_category), ?, ?, ?, ?)
+                        INSERT INTO templates (key, channel, category, vars, header_image, title, body, buttons)
+                        VALUES (?, CAST(? AS channel), CAST(? AS msg_category), ?, ?, ?, ?, ?)
                         ON CONFLICT (key) DO UPDATE
                            SET channel = EXCLUDED.channel, category = EXCLUDED.category, vars = EXCLUDED.vars,
                                header_image = EXCLUDED.header_image, title = EXCLUDED.title, body = EXCLUDED.body,
-                               updated_at = now()
+                               buttons = EXCLUDED.buttons, updated_at = now()
                          WHERE (templates.channel, templates.category, templates.vars, templates.header_image,
-                                templates.title, templates.body)
+                                templates.title, templates.body, templates.buttons)
                                IS DISTINCT FROM (EXCLUDED.channel, EXCLUDED.category, EXCLUDED.vars, EXCLUDED.header_image,
-                                EXCLUDED.title, EXCLUDED.body)""",
+                                EXCLUDED.title, EXCLUDED.body, EXCLUDED.buttons)""",
                         t.key(), t.channel().dbName(), t.category().dbName(), t.vars().toArray(String[]::new),
                         t.headerImage() != null, copy(t) == null ? null : blankToNull(copy(t).title()),
-                        copy(t) == null ? null : copy(t).body());
+                        copy(t) == null ? null : copy(t).body(),
+                        t.buttons().stream().map(b -> b.copyCode() != null ? "Copy code" : b.text()).toArray(String[]::new));
             }
             return n;
         });

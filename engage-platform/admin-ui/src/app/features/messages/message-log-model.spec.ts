@@ -1,4 +1,4 @@
-import { journeyLabel, messageText, outcomeText, outcomeTone } from './message-log-model';
+import { buttonLabels, journeyLabel, messageText, outcomeText, outcomeTone } from './message-log-model';
 
 describe('message log wording', () => {
   it('names journeys and campaigns', () => {
@@ -22,5 +22,13 @@ describe('message log wording', () => {
     expect(outcomeText({ status: 'failed', failedReason: 'wa_131030', blockReason: null })).toBe('Failed: not a test recipient (Meta test number)');
     expect(outcomeTone('read')).toBe('good');
     expect(outcomeTone('blocked')).toBe('bad');
+  });
+});
+
+describe('buttonLabels', () => {
+  it('lists the buttons and names the code on the copy-code one', () => {
+    expect(buttonLabels({ buttons: 'Shop now|Copy code', code: 'COMEBACK10' })).toEqual(['Shop now', 'Copy code COMEBACK10']);
+    expect(buttonLabels({ buttons: 'Shop now', code: null })).toEqual(['Shop now']);
+    expect(buttonLabels({ buttons: null, code: null })).toEqual([]);
   });
 });

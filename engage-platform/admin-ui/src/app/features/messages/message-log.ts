@@ -4,7 +4,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { IstPipe, problemDetail } from '../../shared/format';
 import { ErrorState, LoadingState } from '../../shared/states';
-import { journeyLabel, LogPage, LogRow, messageText, outcomeText, outcomeTone } from './message-log-model';
+import { buttonLabels, journeyLabel, LogPage, LogRow, messageText, outcomeText, outcomeTone } from './message-log-model';
 
 /** "2026-10-28", the IST day n days before today. */
 function istDay(daysAgo = 0): string {
@@ -86,11 +86,20 @@ function istDay(daysAgo = 0): string {
                 <td><span class="rounded px-2 py-0.5 text-xs font-medium" [class]="channelClass(r.channel)">{{ channelName(r.channel) }}</span></td>
                 <td class="max-w-md">
                   <div class="text-xs text-slate-500">{{ label(r.intentKey, r.campaign) }} · {{ r.templateKey }}</div>
+                  @if (r.channel === 'whatsapp') {
+                    @if (r.imageUrl) { <img [src]="r.imageUrl" alt="Photo sent with the message" class="mb-1 h-20 w-20 rounded object-cover" loading="lazy" /> }
+                    @else if (r.hasImage) { <span class="mb-1 inline-block rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600">📷 photo</span> }
+                  }
                   @if (text(r); as t) {
                     <p class="whitespace-pre-wrap break-words text-sm" [class.line-clamp-3]="!open().has(r.id)">{{ t }}</p>
                     @if (t.length > 160) {
                       <button type="button" class="text-xs underline" (click)="toggle(r.id)">{{ open().has(r.id) ? 'Less' : 'More' }}</button>
                     }
+                  }
+                  @if (r.channel === 'whatsapp' && buttons(r).length) {
+                    <div class="mt-1 flex flex-wrap gap-1">
+                      @for (b of buttons(r); track b) { <span class="rounded border border-sky-200 px-2 py-0.5 text-xs text-sky-700">{{ b }}</span> }
+                    </div>
                   }
                 </td>
                 <td class="whitespace-nowrap">
@@ -217,6 +226,10 @@ export default class MessageLogPage {
 
   text(r: LogRow): string {
     return messageText(r);
+  }
+
+  buttons(r: LogRow): string[] {
+    return buttonLabels(r);
   }
 
   outcomeOf(r: LogRow): string {
