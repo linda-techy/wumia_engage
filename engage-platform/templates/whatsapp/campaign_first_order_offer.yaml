@@ -1,0 +1,15 @@
+# First-order offer, to customers who gave WhatsApp permission in Shopify but
+# have not bought yet (the "Never bought, WhatsApp" batches). The same offer
+# as campaign_winback_offer_v1, worded for someone who has not ordered. {{name}}
+# is filled per recipient. STOP opts out. Marketing.
+key: campaign_first_order_offer_v1
+channel: whatsapp
+category: marketing
+header_image: "{{image}}"
+locales:
+  en: { body: "Hi {{name}}, thank you for joining WUMIKA 💛\n\nHere is {{offer}} on your first order with code {{code}}, until {{ends}}. Tap below to shop.\n\nReply STOP to opt out of offers." }
+buttons:
+  - { text: "Shop now", url: "https://wumika.com/{{link_path}}" }
+  - { copy_code: "{{code}}" }
+vars: [name, offer, code, ends, link_path, image]
+samples: { name: "Priya", offer: "10% off", code: "COMEBACK10", ends: "Sunday 15 Nov", link_path: "discount/COMEBACK10?redirect=%2Fcollections%2Fnew-arrivals", image: "https://engage.wumika.com/media/product/8741079023804" }
