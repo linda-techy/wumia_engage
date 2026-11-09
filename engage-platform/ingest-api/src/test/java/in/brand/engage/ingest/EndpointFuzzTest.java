@@ -266,7 +266,8 @@ class EndpointFuzzTest {
     @Test
     void unsigned_provider_webhooks_are_refused_whatever_the_body() {
         var rnd = new Random(SEED + 4);
-        for (var path : List.of("/webhooks/shopify", "/webhooks/razorpay", "/meta/webhook", "/webhooks/sms", "/webhooks/courier", "/webhooks/ses")) {
+        for (var path : List.of("/webhooks/shopify", "/webhooks/razorpay", "/meta/webhook", "/webhooks/sms", "/webhooks/courier", "/webhooks/ses",
+                "/webhooks/magic/not-the-secret")) {
             for (int i = 0; i < ROUNDS / 4; i++) {
                 var body = rnd.nextBoolean() ? mutate(rnd, ORDER) : garbage(rnd, ORDER);
                 var req = post(path, body, rnd);

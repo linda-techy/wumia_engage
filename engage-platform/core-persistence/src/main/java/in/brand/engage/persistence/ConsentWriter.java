@@ -96,6 +96,38 @@ public class ConsentWriter {
         return grantFromNotice(c, identityId, "checkout_token", checkoutToken, phoneSource, checkoutAt, noticeVersion);
     }
 
+    /**
+     * WhatsApp from Razorpay Magic Checkout's consent checkbox
+     * ({@code whatsapp_sms_consent = Yes} on the order, V62). Granted only for
+     * a copy version registered with surface {@code magic_checkout}: the caller
+     * passes the configured version, and an unregistered one grants nothing.
+     * Whether the box is pre-ticked is not something the order tells us, so the
+     * evidence says so rather than claiming an affirmative action.
+     *
+     * <p>Per purpose, never over an existing WhatsApp record for that purpose:
+     * a STOP is not overridden by a later order, and a grant is not repeated.
+     *
+     * @return rows granted
+     */
+    public int grantWhatsAppFromMagicConsent(Connection c, UUID identityId, String refKey, String ref,
+                                             String phoneSource, OffsetDateTime at, String copyVersion)
+            throws SQLException {
+        return Sql.update(c, """
+                INSERT INTO consents (identity_id, channel, purpose, state, source, copy_version, evidence, occurred_at)
+                SELECT ?, 'whatsapp', pur, 'granted', 'magic_checkout', v.version,
+                       jsonb_build_object(?::text, ?::text, 'phone_source', ?::text, 'copy_text', v.text,
+                                          'basis', CASE pur WHEN 'transactional' THEN 'dpdp_s7a_order_updates'
+                                                            ELSE 'magic_checkbox' END,
+                                          'checkbox_value', 'yes', 'pre_ticked', 'unknown'),
+                       ?
+                  FROM consent_copy_versions v
+                 CROSS JOIN LATERAL unnest(v.purposes) AS pur
+                 WHERE v.version = ? AND v.channel = 'whatsapp' AND v.surface = 'magic_checkout'
+                   AND NOT EXISTS (SELECT 1 FROM consents x
+                                    WHERE x.identity_id = ? AND x.channel = 'whatsapp' AND x.purpose = pur)""",
+                identityId, refKey, ref, phoneSource, at, copyVersion, identityId);
+    }
+
     private int grantFromNotice(Connection c, UUID identityId, String refKey, String ref, String phoneSource,
                                 OffsetDateTime at, String noticeVersion) throws SQLException {
         return Sql.update(c, """

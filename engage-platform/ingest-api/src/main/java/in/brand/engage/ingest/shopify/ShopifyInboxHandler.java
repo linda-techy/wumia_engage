@@ -46,11 +46,18 @@ public class ShopifyInboxHandler implements InboxHandler {
     private final PriceHandler prices;
     private final int matchWindowMinutes;
     private final ComplianceHandler compliance;
+    private final String magicConsentCopy;            // null = Magic's checkbox is not a basis
+    private final OffsetDateTime magicConsentSince;
+    /** A Magic order closes that phone's open Magic checkout from up to this long before. */
+    static final int MAGIC_CHECKOUT_LOOKBACK_HOURS = 72;
 
     public ShopifyInboxHandler(IdentityResolver identities, ConsentWriter consents, EventWriter events,
                                InventoryHandler inventory, PriceHandler prices, FulfillmentHandler fulfillments,
                                EngageProperties.Razorpay razorpay, EngageProperties.Consent consent,
-                               ComplianceHandler compliance) {
+                               ComplianceHandler compliance, EngageProperties.Magic magic) {
+        this.magicConsentCopy = magic.consentCopyVersion() == null || magic.consentCopyVersion().isBlank()
+                ? null : magic.consentCopyVersion().strip();
+        this.magicConsentSince = noticeSince(magic.consentSince());
         this.compliance = compliance;
         this.fulfillments = fulfillments;
         this.identities = identities;
@@ -239,6 +246,8 @@ public class ShopifyInboxHandler implements InboxHandler {
             var total = Paise.ofRupees(rs.getString("total_price"));
             var createdAt = Sql.timestamp(rs, "created_at");
             var noteAttributes = rs.getString("note_attributes_json");
+            boolean magic = rs.getBoolean("magic");
+            var gatewayOrderId = rs.getString("gateway_order_id");
 
             var keys = new ArrayList<Key>();
             if (customerId != null) keys.add(Key.verified("shopify_customer", customerId));
@@ -272,6 +281,8 @@ public class ShopifyInboxHandler implements InboxHandler {
                         UPDATE carts SET converted_at = COALESCE(converted_at, ?), order_id = ?
                          WHERE cart_token = ?""", createdAt, orderId, cartToken);
             }
+            if (magic) closeMagicCheckouts(c, item, identityId, orderId, gatewayOrderId, cartToken, phone.value(),
+                    createdAt);
             if (identityId != null) {
                 Sql.update(c, """
                         INSERT INTO conversions (identity_id, order_id, value_paise, occurred_at)
@@ -294,8 +305,15 @@ public class ShopifyInboxHandler implements InboxHandler {
                     consents.grantWhatsAppFromOrderAttributes(c, identityId, orderId, phone.source(), noteAttributes,
                             createdAt);
                     consents.applyPendingOptIns(c, identityId, orderId);
-                    if (noticeSince != null && createdAt != null && !createdAt.isBefore(noticeSince)) {
+                    // A Magic buyer never saw Shopify's checkout or its phone-field notice:
+                    // recording that notice for them would be false evidence.
+                    if (!magic && noticeSince != null && createdAt != null && !createdAt.isBefore(noticeSince)) {
                         consents.grantWhatsAppFromCheckoutNotice(c, identityId, orderId, phone.source(), createdAt, noticeVersion);
+                    }
+                    if (magic && "yes".equals(rs.getString("magic_wa_consent")) && magicConsentCopy != null
+                            && magicConsentSince != null && createdAt != null && !createdAt.isBefore(magicConsentSince)) {
+                        consents.grantWhatsAppFromMagicConsent(c, identityId, "order_id", orderId, phone.source(),
+                                createdAt, magicConsentCopy);
                     }
                 }
                 consents.syncShopifyEmailConsent(c, identityId, rs.getString("email_consent_state"),
@@ -309,10 +327,45 @@ public class ShopifyInboxHandler implements InboxHandler {
                 events.write(c, identityId, "order_placed", "shopify", "shopify:" + item.deliveryId(),
                         Map.of("order_id", orderId, "total_paise", total.value(),
                                "cart_token", cartToken == null ? "" : cartToken,
-                               "checkout_token", checkoutToken == null ? "" : checkoutToken));
+                               "checkout_token", checkoutToken == null ? "" : checkoutToken,
+                               "gateway_order_id", gatewayOrderId == null ? "" : gatewayOrderId));
             }
             return new OrderRef(orderId, identityId, cartToken, checkoutToken, Sql.timestamp(rs, "cancelled_at"),
                     rs.getString("cancel_reason"), rs.getString("financial_status"));
+        }
+    }
+
+    /**
+     * A Magic Checkout order (V62) carries no checkout token, so it closes the
+     * buyer's open Magic checkouts itself: the same cart, else the same phone
+     * touched in the {@value #MAGIC_CHECKOUT_LOOKBACK_HOURS} h before the order.
+     * Each closed checkout gets a checkout_updated event, which is what makes
+     * checkout_abandon and payment_failed cancel. Replays close nothing new.
+     * The reverse order (order first) is handled by MagicCheckoutInboxHandler.
+     */
+    private void closeMagicCheckouts(Connection c, InboxRepository.Item item, UUID identityId, String orderId,
+                                     String gatewayOrderId, String cartToken, String phone, OffsetDateTime createdAt)
+            throws SQLException {
+        if (gatewayOrderId != null) {
+            Sql.update(c, "UPDATE orders SET gateway_order_id = ? WHERE id = ? AND gateway_order_id IS NULL",
+                    gatewayOrderId, orderId);
+        }
+        if (createdAt == null || (cartToken == null && phone == null)) return;
+        var closed = new ArrayList<String>();
+        try (var ps = Sql.prepare(c, """
+                UPDATE checkouts SET completed_at = ?, order_id = ?
+                 WHERE source = 'razorpay_magic' AND completed_at IS NULL AND order_id IS NULL
+                   AND (cart_token = ?::text
+                        OR (phone = ?::text AND updated_at BETWEEN ?::timestamptz - make_interval(hours => ?)
+                                                              AND ?::timestamptz + interval '2 hours'))
+                RETURNING token""", createdAt, orderId, cartToken, phone, createdAt,
+                MAGIC_CHECKOUT_LOOKBACK_HOURS, createdAt);
+             var rs = ps.executeQuery()) {
+            while (rs.next()) closed.add(rs.getString(1));
+        }
+        for (var token : closed) {
+            events.write(c, identityId, "checkout_updated", "shopify", "magic-closed:" + token,
+                    Map.of("checkout_token", token, "checkout_source", "razorpay_magic", "order_id", orderId));
         }
     }
 

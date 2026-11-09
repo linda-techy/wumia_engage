@@ -23,6 +23,7 @@ The revenue journeys run through the orchestrator: payment recovery (utility), c
 | P5-T07 | `ndr_rescue` + courier NDR reply | BE2 | 1.5 d | T01, ADR-005 |
 | P5-T08 | `winback` + nightly profile recompute | BE1 | 2 d | T01 |
 | P5-T09 | Holdouts on every journey | BE1 | 0.5 d | T02–T08 |
+| P5-T10 | Razorpay Magic Checkout as a checkout source | BE1 | 1 d | T02, T03 |
 
 ---
 
@@ -306,6 +307,42 @@ At most one win-back run per identity per `cooldown_days` (a guard reading `casc
 Each journey's key is its holdout experiment. Default control share 10% for marketing journeys, **0% for transactional ones** (`payment_failed`, `order_tracking`, `ndr_rescue`, `post_purchase_fit`): withholding a delivery update to measure it is not acceptable. The global holdout (V2 `holdout.global_pct`) applies to marketing only.
 
 **Done when:** after 7 days on staging traffic, `SELECT experiment, bucket, count(*) FROM holdouts GROUP BY 1,2` shows the configured split within ±1 point, and control identities have `HOLDOUT_CONTROL` rows in `sends`.
+
+---
+
+### ◐ P5-T10 — Razorpay Magic Checkout as a checkout source
+
+> **Built 2026-11-09.** The storefront moved to Razorpay Magic Checkout on 2026-11-07. Shopify's last `checkouts/*` webhook for a real shopper was 2026-11-07 08:27Z, so `checkout_abandon` had nothing to work on and Magic orders were getting a consent basis they never saw. This is ADR D3's "revisit" case, done as an adapter, not a rewrite. Unit tests and the SQL (V1–V62 on Postgres 16, natural and reversed order, replay) were checked; `MagicCheckoutFlowTest` (8), `MagicCheckoutParsingTest` (6) and `MagicCheckoutWebhookAuthTest` (1) pass. **Deployed to production 2026-11-09** (V62 applied, token set, a wrong token returns 404). Still open: the Razorpay webhook setup, the consent text, and the live check below.
+
+**What changed**
+- **`POST /webhooks/magic/{RAZORPAY_MAGIC_WEBHOOK_TOKEN}`** (`MagicCheckoutWebhookController`). Magic does not sign this webhook, so a secret path segment of at least 16 characters is required, compared in constant time. Blank or wrong secret: 404. The request is stored in the inbox as source `razorpay_magic`, deduped by body hash.
+- **`MagicCheckoutInboxHandler`** turns it into a `checkouts` row (`source = 'razorpay_magic'`) and the same `checkout_updated` event a Shopify checkout emits. `CheckoutAbandon` and `PaymentFailed` are unchanged.
+  - Identity: Magic's contact phone is BUYER trust, the shipping phone WEAK.
+  - Recovery link: `/cart/<variant>:<qty>,…?storefront=true` refills the cart on wumika.com, so the checkout button reopens Magic. Magic's own URL is used only when there are no variant ids.
+  - The cart's lines are recorded if we hold no cart, so the reminder can name the product.
+  - Amount: a decimal point means rupees. Otherwise a cart we already hold decides, and failing that `RAZORPAY_MAGIC_AMOUNT_UNIT` (default paise). Magic's docs do not say which.
+- **Magic orders** are recognised by note attributes (`razorpay_order_id`, `rzp_device_id`, "Paid via … Magic") or the `Magic` tag (`shopify_order.sql` column `magic`).
+  - `cart_token` is read from the note attribute when the top-level field is empty.
+  - `orders.gateway_order_id` is set from `razorpay_order_id`.
+  - Open Magic checkouts are closed: the same cart, else the same phone touched in the 72 h before the order. Each closed checkout gets a `checkout_updated` event (dedupe `magic-closed:<token>`), which makes the journeys cancel.
+  - If the order is stored first, the late webhook writes the checkout already completed.
+- **Consent (invariants 8 and 10).**
+  - Magic buyers **no longer get `checkout_notice_v2`**. They never saw Shopify's checkout or its phone-field label, so that would have been false evidence.
+  - Magic's `whatsapp_sms_consent = Yes` is a basis only once its exact text is registered in `consent_copy_versions` with surface `magic_checkout`, and `RAZORPAY_MAGIC_CONSENT_COPY_VERSION` / `_SINCE` are set. Evidence records `pre_ticked: unknown`.
+  - The abandoned payload carries no consent field (per the docs), so the webhook grants nothing. If Magic does send `whatsapp_sms_consent` there, it is used on the same terms.
+- **Payment failures under Magic.**
+  - A retry under the same Razorpay order inherits the checkout an earlier attempt was matched to (`match_method = 'gateway_order'`).
+  - `payment_captured` and `order_placed` carry `gateway_order_id`, and `PaymentFailed` cancels the `pay:<id>` runs of failed attempts on that order. Before this, a shopper whose UPI failed and who then paid on retry could still get "your payment failed".
+
+**Owner steps (not code)**
+1. Set `RAZORPAY_MAGIC_WEBHOOK_TOKEN` (`openssl rand -hex 24`) on the server and redeploy. V62 runs on start.
+2. Razorpay Dashboard → Magic Checkout → Setup & Settings → Checkout Setup → enable the abandoned webhook with `https://engage.wumika.com/webhooks/magic/<token>`. Make sure the reverse proxy does not write full request paths to its access log, or mask them.
+3. Copy the exact WhatsApp/SMS consent text Magic shows. Add it as a migration (`consent_copy_versions`, surface `magic_checkout`, purposes as the text names them), then set the two `RAZORPAY_MAGIC_CONSENT_*` values. Until then, new Magic shoppers can only get WhatsApp marketing from another basis (cart tick, Thank-you page, an earlier order), and the abandoned-checkout reminder goes by push for them.
+4. After the first live webhook, check `SELECT total_paise, recovery_url FROM checkouts WHERE source='razorpay_magic' ORDER BY created_at DESC LIMIT 5` against the session in Razorpay. Fix `RAZORPAY_MAGIC_AMOUNT_UNIT` if the totals are 100× off.
+
+**Known gap:** WhatsApp consent recorded from `checkout_notice_v2` for Magic orders between 2026-11-07 and this deploy rests on a notice those buyers did not see. Those orders also carry `whatsapp_sms_consent = Yes`. Once step 3 is done, the owner decides whether to add Magic-basis rows for them. The ledger is append-only, so nothing is rewritten.
+
+**Done when:** a Magic session abandoned on staging produces a `checkouts` row with `source = 'razorpay_magic'` and a `checkout_abandon` cascade. Paying for the same cart cancels it. `MagicCheckoutFlowTest` passes.
 
 ---
 

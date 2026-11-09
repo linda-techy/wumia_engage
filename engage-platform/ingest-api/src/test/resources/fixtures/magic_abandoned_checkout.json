@@ -1,0 +1,50 @@
+{
+  "utm_parameters": {
+    "fbclid": "",
+    "utm_campaign": "120254048737320782",
+    "utm_content": "120254234041160782",
+    "utm_medium": "paid",
+    "utm_source": "facebook"
+  },
+  "shop_id": "e4bac4-ef.myshopify.com",
+  "platform": "shopify",
+  "token": "mgc_Tz91QnRBv0aX2k",
+  "cart_token": "Z2NwLXVzLWVhc3QxOjAxSkY5?key=6f0c2a1b9e",
+  "email": "Priya.K@Example.com",
+  "phone": "+919876543210",
+  "abandoned_checkout_url": "https://e4bac4-ef.myshopify.com/?rzp_magic_session=mgc_Tz91QnRBv0aX2k",
+  "currency": "INR",
+  "line_items": [
+    {
+      "image_url": "https://cdn.shopify.com/s/files/1/0001/anklet.jpg",
+      "name": "Gold Snake Chain Anklet",
+      "price": 64900,
+      "product_id": "8801234500001",
+      "quantity": 2,
+      "sku": "WUM-ANK-01",
+      "tax_amount": 0,
+      "taxable": true,
+      "variant_price": 64900,
+      "variant_id": "44012345600011",
+      "variant_title": "Default Title",
+      "store_name": "Wumika",
+      "gram": 12,
+      "title": "Gold Snake Chain Anklet"
+    }
+  ],
+  "tax_details": { "taxes_included": true, "total_tax": 0 },
+  "line_items_total": "129800",
+  "promotions": [],
+  "customer": {
+    "email": "Priya.K@Example.com",
+    "first_name": "Priya",
+    "last_name": "K",
+    "created_at": "",
+    "Shipping_address": {
+      "First_name": "Priya", "Last_name": "K", "Address1": "12 MG Road", "Address2": "",
+      "City": "Kochi", "Province": "Kerala", "Country": "India", "Zip": "682016",
+      "Phone": "+919876543210", "Name": "Priya K", "Province_code": "KL",
+      "Country_code": "IN", "Country_name": "India"
+    }
+  }
+}

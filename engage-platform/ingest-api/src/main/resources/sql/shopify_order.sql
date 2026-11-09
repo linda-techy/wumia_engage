@@ -26,7 +26,30 @@ SELECT p->>'id'                                                         AS order
                         CASE WHEN jsonb_typeof(p->'payment_gateway_names') = 'array'
                              THEN p->'payment_gateway_names' ELSE '[]'::jsonb END)),
                 '{}')                                                   AS gateway_names,
-       NULLIF(p->>'cart_token', '')                                     AS cart_token,
+       -- Magic Checkout orders have no top-level cart_token; Magic copies it
+       -- into a note attribute (V62).
+       COALESCE(NULLIF(p->>'cart_token', ''),
+                (SELECT NULLIF(a->>'value', '') FROM jsonb_array_elements(
+                          CASE WHEN jsonb_typeof(p->'note_attributes') = 'array'
+                               THEN p->'note_attributes' ELSE '[]'::jsonb END) a
+                  WHERE a->>'name' = 'cart_token' LIMIT 1))             AS cart_token,
+       -- Placed through Razorpay Magic Checkout (V62): Shopify's checkout, and
+       -- so its phone-field notice, was never shown.
+       (EXISTS (SELECT 1 FROM jsonb_array_elements(
+                  CASE WHEN jsonb_typeof(p->'note_attributes') = 'array'
+                       THEN p->'note_attributes' ELSE '[]'::jsonb END) a
+                 WHERE a->>'name' IN ('razorpay_order_id', 'rzp_device_id')
+                    OR (a->>'name' = 'Paid via' AND a->>'value' ILIKE '%magic%'))
+        OR COALESCE(p->>'tags', '') ~* '(^|,\s*)magic(\s*,|$)')        AS magic,
+       (SELECT NULLIF(a->>'value', '') FROM jsonb_array_elements(
+                 CASE WHEN jsonb_typeof(p->'note_attributes') = 'array'
+                      THEN p->'note_attributes' ELSE '[]'::jsonb END) a
+         WHERE a->>'name' = 'razorpay_order_id' LIMIT 1)                AS gateway_order_id,
+       -- Magic's WhatsApp/SMS consent checkbox ("Yes"/"No").
+       (SELECT lower(NULLIF(a->>'value', '')) FROM jsonb_array_elements(
+                 CASE WHEN jsonb_typeof(p->'note_attributes') = 'array'
+                      THEN p->'note_attributes' ELSE '[]'::jsonb END) a
+         WHERE a->>'name' = 'whatsapp_sms_consent' LIMIT 1)             AS magic_wa_consent,
        NULLIF(p->>'checkout_token', '')                                 AS checkout_token,
        COALESCE((SELECT jsonb_object_agg(a->>'name', a->>'value')
                    FROM jsonb_array_elements(

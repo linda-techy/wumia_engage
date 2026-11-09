@@ -14,6 +14,24 @@ public final class EngageProperties {
     public record Razorpay(String webhookSecret, String mode, int matchWindowMinutes) {}
 
     /**
+     * Razorpay Magic Checkout (V62). Magic's abandoned-cart webhook is not
+     * signed, so its URL carries a secret: {PUBLIC_BASE_URL}/webhooks/magic/{webhookToken}.
+     * Blank token = the endpoint refuses everything.
+     *
+     * <p>{@code amountUnit}: how Magic sends line_items_total, "paise" or
+     * "rupees". The docs do not say; a value with a decimal point is always
+     * rupees, and a cart we already hold settles it when the two disagree.
+     *
+     * <p>{@code consentCopyVersion} / {@code consentSince}: the WhatsApp/SMS
+     * consent checkbox Magic shows, registered verbatim in
+     * consent_copy_versions (surface magic_checkout). Blank = Magic's
+     * whatsapp_sms_consent is not used as a basis, because recording copy
+     * nobody registered would be false evidence.
+     */
+    @ConfigurationProperties("engage.razorpay-magic")
+    public record Magic(String webhookToken, String amountUnit, String consentCopyVersion, String consentSince) {}
+
+    /**
      * When the checkout phone field started showing the WhatsApp/SMS order-update
      * notice ({@code checkout_notice_v1}): ISO date (IST midnight) or instant.
      * Blank = the notice is not live, so no order gets that basis. Recording a

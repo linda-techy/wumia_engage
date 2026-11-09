@@ -42,6 +42,17 @@ engage:
     webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:}
     mode: ${RAZORPAY_MODE:test}
     match-window-minutes: ${RAZORPAY_MATCH_WINDOW_MINUTES:30}
+  razorpay-magic:
+    # Secret path segment of Magic's abandoned-cart webhook URL:
+    # {PUBLIC_BASE_URL}/webhooks/magic/<this>. Generate with: openssl rand -hex 24.
+    # Empty = the endpoint answers 404 to everything.
+    webhook-token: ${RAZORPAY_MAGIC_WEBHOOK_TOKEN:}
+    # paise | rupees: how Magic sends line_items_total (undocumented).
+    amount-unit: ${RAZORPAY_MAGIC_AMOUNT_UNIT:paise}
+    # Registered copy of Magic's WhatsApp/SMS consent checkbox, and the date it
+    # went live. Empty = Magic's whatsapp_sms_consent is not used.
+    consent-copy-version: ${RAZORPAY_MAGIC_CONSENT_COPY_VERSION:}
+    consent-since: ${RAZORPAY_MAGIC_CONSENT_SINCE:}
   metrics:
     # Bearer token for /prometheus. Empty = the endpoint answers 404.
     token: ${METRICS_TOKEN:}

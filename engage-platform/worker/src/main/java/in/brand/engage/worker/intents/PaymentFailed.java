@@ -117,6 +117,14 @@ public class PaymentFailed implements EventConsumer {
         switch (e.name()) {
             case "payment_captured", "order_placed" -> {
                 if (token != null) orchestrator.cancel(c, INTENT, token, e.name());
+                // An unmatched failure runs as pay:<payment id>. Magic Checkout retries
+                // under the same Razorpay order, so a capture or order on that order ends it.
+                var gatewayOrder = blank(e.props().get("gateway_order_id"));
+                if (gatewayOrder != null) {
+                    for (var paymentId : failedPayments(c, gatewayOrder)) {
+                        orchestrator.cancel(c, INTENT, "pay:" + paymentId, e.name());
+                    }
+                }
                 return List.of();
             }
             case "checkout_updated" -> {
@@ -157,6 +165,17 @@ public class PaymentFailed implements EventConsumer {
         if (clock.instant().isAfter(e.occurredAt().plus(LATE))) vars.put("late", "1");
         var subject = token != null ? token : "pay:" + paymentId;
         return List.of(new MessageIntent(identity, INTENT, subject, Map.copyOf(vars), e.occurredAt().plus(delay)));
+    }
+
+    private static List<String> failedPayments(Connection c, String gatewayOrderId) throws SQLException {
+        var ids = new java.util.ArrayList<String>();
+        try (var ps = Sql.prepare(c, """
+                SELECT DISTINCT gateway_payment_id FROM payment_attempts
+                 WHERE gateway_order_id = ? AND status = 'failed'""", gatewayOrderId);
+             var rs = ps.executeQuery()) {
+            while (rs.next()) ids.add(rs.getString(1));
+        }
+        return ids;
     }
 
     private static boolean completed(Connection c, String token) throws SQLException {

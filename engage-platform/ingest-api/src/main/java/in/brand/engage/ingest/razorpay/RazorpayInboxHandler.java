@@ -83,6 +83,21 @@ public class RazorpayInboxHandler implements InboxHandler {
             }
         }
 
+        // Magic Checkout retries under one Razorpay order: a later attempt belongs
+        // to the checkout an earlier one was matched to.
+        if (checkoutToken == null && p.gatewayOrderId() != null) {
+            try (var ps = Sql.prepare(c, """
+                    SELECT checkout_token FROM payment_attempts
+                     WHERE gateway_order_id = ? AND checkout_token IS NOT NULL
+                     ORDER BY gateway_created_at DESC LIMIT 1""", p.gatewayOrderId());
+                 var rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    checkoutToken = rs.getString(1);
+                    matchMethod = "gateway_order";
+                }
+            }
+        }
+
         Sql.update(c, """
                 INSERT INTO payment_attempts
                   (gateway, gateway_payment_id, gateway_order_id, status, amount_paise, currency, method,
@@ -101,6 +116,7 @@ public class RazorpayInboxHandler implements InboxHandler {
         props.put("method", p.method());
         props.put("checkout_token", checkoutToken);
         props.put("match_method", matchMethod);
+        props.put("gateway_order_id", p.gatewayOrderId());
         if (item.topic().equals("payment.failed")) {
             props.put("failure_kind", FailureKind.classify(p.errorSource(), p.errorReason()).name());
             props.put("error_source", p.errorSource());
