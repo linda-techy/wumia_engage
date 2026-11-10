@@ -101,8 +101,8 @@ public class ConsentWriter {
      * ({@code whatsapp_sms_consent = Yes} on the order, V62). Granted only for
      * a copy version registered with surface {@code magic_checkout}: the caller
      * passes the configured version, and an unregistered one grants nothing.
-     * Whether the box is pre-ticked is not something the order tells us, so the
-     * evidence says so rather than claiming an affirmative action.
+     * The box is pre-ticked (read from the live checkout, 2026-11-10), so the
+     * evidence says so and claims no affirmative action.
      *
      * <p>Per purpose, never over an existing WhatsApp record for that purpose:
      * a STOP is not overridden by a later order, and a grant is not repeated.
@@ -118,7 +118,7 @@ public class ConsentWriter {
                        jsonb_build_object(?::text, ?::text, 'phone_source', ?::text, 'copy_text', v.text,
                                           'basis', CASE pur WHEN 'transactional' THEN 'dpdp_s7a_order_updates'
                                                             ELSE 'magic_checkbox' END,
-                                          'checkbox_value', 'yes', 'pre_ticked', 'unknown'),
+                                          'checkbox_value', 'yes', 'pre_ticked', true),
                        ?
                   FROM consent_copy_versions v
                  CROSS JOIN LATERAL unnest(v.purposes) AS pur

@@ -132,11 +132,19 @@ class MagicCheckoutFlowTest {
         magicOrder();
 
         assertEquals("0", q("SELECT count(*) FROM consents WHERE source = 'checkout_notice'"));
-        assertEquals("marketing|magic_wa_test_v1|magic_checkbox|unknown,"
-                + "transactional|magic_wa_test_v1|dpdp_s7a_order_updates|unknown", q("""
+        assertEquals("marketing|magic_wa_test_v1|magic_checkbox|true,"
+                + "transactional|magic_wa_test_v1|dpdp_s7a_order_updates|true", q("""
                 SELECT string_agg(concat_ws('|', purpose, copy_version, evidence->>'basis', evidence->>'pre_ticked'),
                                   ',' ORDER BY purpose DESC)
                   FROM consents WHERE source = 'magic_checkout'"""));
+    }
+
+    @Test
+    void the_real_magic_checkbox_copy_covers_order_updates_only() throws Exception {
+        // V63: the live box is pre-ticked and names no channel, so it never counts as WhatsApp offers consent.
+        assertEquals("Send me offers and order updates|{transactional}|magic_checkout", q("""
+                SELECT concat_ws('|', text, purposes::text, surface)
+                  FROM consent_copy_versions WHERE version = 'magic_checkbox_v1'"""));
     }
 
     @Test

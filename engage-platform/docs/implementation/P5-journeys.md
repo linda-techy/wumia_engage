@@ -328,7 +328,7 @@ Each journey's key is its holdout experiment. Default control share 10% for mark
   - If the order is stored first, the late webhook writes the checkout already completed.
 - **Consent (invariants 8 and 10).**
   - Magic buyers **no longer get `checkout_notice_v2`**. They never saw Shopify's checkout or its phone-field label, so that would have been false evidence.
-  - Magic's `whatsapp_sms_consent = Yes` is a basis only once its exact text is registered in `consent_copy_versions` with surface `magic_checkout`, and `RAZORPAY_MAGIC_CONSENT_COPY_VERSION` / `_SINCE` are set. Evidence records `pre_ticked: unknown`.
+  - Magic's `whatsapp_sms_consent = Yes` is a basis only once its exact text is registered in `consent_copy_versions` with surface `magic_checkout`, and `RAZORPAY_MAGIC_CONSENT_COPY_VERSION` / `_SINCE` are set. The live box (read 2026-11-10) is pre-ticked and says only "Send me offers and order updates", naming no channel, so V63 registers it as `magic_checkbox_v1` for **order updates only** (`{transactional}`): a Magic buyer who left it ticked gets WhatsApp order confirmation and shipping news, never offers. Evidence records `pre_ticked: true`.
   - The abandoned payload carries no consent field (per the docs), so the webhook grants nothing. If Magic does send `whatsapp_sms_consent` there, it is used on the same terms.
 - **Payment failures under Magic.**
   - A retry under the same Razorpay order inherits the checkout an earlier attempt was matched to (`match_method = 'gateway_order'`).
@@ -337,7 +337,7 @@ Each journey's key is its holdout experiment. Default control share 10% for mark
 **Owner steps (not code)**
 1. Set `RAZORPAY_MAGIC_WEBHOOK_TOKEN` (`openssl rand -hex 24`) on the server and redeploy. V62 runs on start.
 2. Razorpay Dashboard → Magic Checkout → Setup & Settings → Checkout Setup → enable the abandoned webhook with `https://engage.wumika.com/webhooks/magic/<token>`. Make sure the reverse proxy does not write full request paths to its access log, or mask them.
-3. Copy the exact WhatsApp/SMS consent text Magic shows. Add it as a migration (`consent_copy_versions`, surface `magic_checkout`, purposes as the text names them), then set the two `RAZORPAY_MAGIC_CONSENT_*` values. Until then, new Magic shoppers can only get WhatsApp marketing from another basis (cart tick, Thank-you page, an earlier order), and the abandoned-checkout reminder goes by push for them.
+3. **Done 2026-11-10 (V63, `magic_checkbox_v1`, order updates only).** Set `RAZORPAY_MAGIC_CONSENT_COPY_VERSION=magic_checkbox_v1` and `RAZORPAY_MAGIC_CONSENT_SINCE=2026-11-07` on the server. Magic buyers get WhatsApp order and shipping updates; WhatsApp offers and the abandoned-checkout reminder still need another basis (cart tick, Thank-you page, an earlier order), else the reminder goes by push. If Razorpay lets the checkbox name WhatsApp, register a new version for it.
 4. After the first live webhook, check `SELECT total_paise, recovery_url FROM checkouts WHERE source='razorpay_magic' ORDER BY created_at DESC LIMIT 5` against the session in Razorpay. Fix `RAZORPAY_MAGIC_AMOUNT_UNIT` if the totals are 100× off.
 
 **Known gap:** WhatsApp consent recorded from `checkout_notice_v2` for Magic orders between 2026-11-07 and this deploy rests on a notice those buyers did not see. Those orders also carry `whatsapp_sms_consent = Yes`. Once step 3 is done, the owner decides whether to add Magic-basis rows for them. The ledger is append-only, so nothing is rewritten.
