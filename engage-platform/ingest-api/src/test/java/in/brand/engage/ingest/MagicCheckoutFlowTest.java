@@ -148,6 +148,14 @@ class MagicCheckoutFlowTest {
     }
 
     @Test
+    void the_v2_magic_checkbox_copy_covers_offers_too() throws Exception {
+        // V64 (owner's decision, 2026-11-10): same words, offers included.
+        assertEquals("Send me offers and order updates|{transactional,marketing}|magic_checkout", q("""
+                SELECT concat_ws('|', text, purposes::text, surface)
+                  FROM consent_copy_versions WHERE version = 'magic_checkbox_v2'"""));
+    }
+
+    @Test
     void a_magic_no_records_nothing() throws Exception {
         magicOrder(json -> json.replace("\"whatsapp_sms_consent\", \"value\": \"Yes\"",
                 "\"whatsapp_sms_consent\", \"value\": \"No\""));
